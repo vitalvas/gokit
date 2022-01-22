@@ -46,40 +46,45 @@ func PublicRSAKeyToBytes(pub *rsa.PublicKey) ([]byte, error) {
 
 func BytesToPrivateRSAKey(priv []byte) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode(priv)
-	enc := x509.IsEncryptedPEMBlock(block)
 	b := block.Bytes
 	var err error
-	if enc {
+
+	if x509.IsEncryptedPEMBlock(block) {
 		b, err = x509.DecryptPEMBlock(block, nil)
 		if err != nil {
 			return nil, err
 		}
 	}
+
 	key, err := x509.ParsePKCS1PrivateKey(b)
 	if err != nil {
 		return nil, err
 	}
+
 	return key, nil
 }
 
 func BytesToPublicRSAKey(pub []byte) (*rsa.PublicKey, error) {
 	block, _ := pem.Decode(pub)
-	enc := x509.IsEncryptedPEMBlock(block)
 	b := block.Bytes
 	var err error
-	if enc {
+
+	if x509.IsEncryptedPEMBlock(block) {
 		b, err = x509.DecryptPEMBlock(block, nil)
 		if err != nil {
 			return nil, err
 		}
 	}
+
 	ifc, err := x509.ParsePKIXPublicKey(b)
 	if err != nil {
 		return nil, err
 	}
+
 	key, ok := ifc.(*rsa.PublicKey)
 	if !ok {
 		return nil, errors.New("Can not decode RSA public key")
 	}
+
 	return key, nil
 }
