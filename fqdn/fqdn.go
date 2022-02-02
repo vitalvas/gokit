@@ -2,11 +2,11 @@ package fqdn
 
 import "strings"
 
-func GetDomainFromHostname(name string) string {
+func GetDomainFromHostname(name string) *string {
 	elems := strings.SplitN(name, ".", 2)
 	if len(elems) != 2 {
-		return ""
+		return nil
 	}
 
-	return elems[1]
+	return &elems[1]
 }
