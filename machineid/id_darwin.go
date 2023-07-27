@@ -6,18 +6,24 @@ package machineid
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 )
 
 func machineID() (string, error) {
-	buf := &bytes.Buffer{}
-	err := run(buf, os.Stderr, "ioreg", "-rd1", "-c", "IOPlatformExpertDevice")
-	if err != nil {
-		return "", err
+	c := exec.Command("ioreg", "-rd1", "-c", "IOPlatformExpertDevice")
+	var stdout, stdin bytes.Buffer
+	c.Stdin = &stdin
+	c.Stdout = &stdout
+	c.Stderr = os.Stderr
+
+	if err := c.Run(); err != nil {
+		return "", fmt.Errorf("failed to request ioreg: %w", err)
 	}
 
-	id, err := extractID(buf.String())
+	id, err := extractID(stdout.String())
 	if err != nil {
 		return "", err
 	}
@@ -36,4 +42,8 @@ func extractID(lines string) (string, error) {
 	}
 
 	return "", errors.New("failed to extract 'IOPlatformUUID' value from `ioreg` output")
+}
+
+func trim(s string) string {
+	return strings.TrimSpace(strings.Trim(s, "\n"))
 }

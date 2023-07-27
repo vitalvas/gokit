@@ -3,22 +3,30 @@
 
 package machineid
 
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"os/exec"
+)
+
 const hostidPath = "/etc/hostid"
 
 func machineID() (string, error) {
-	id, err := readHostid()
+	id, err := readHostID()
 	if err != nil {
 		// try fallback
 		id, err = readKenv()
+		if err != nil {
+			return "", err
+		}
 	}
-	if err != nil {
-		return "", err
-	}
+
 	return id, nil
 }
 
-func readHostid() (string, error) {
-	buf, err := readFile(hostidPath)
+func readHostID() (string, error) {
+	buf, err := os.ReadFile(hostidPath)
 	if err != nil {
 		return "", err
 	}
@@ -26,10 +34,19 @@ func readHostid() (string, error) {
 }
 
 func readKenv() (string, error) {
-	buf := &bytes.Buffer{}
-	err := run(buf, os.Stderr, "kenv", "-q", "smbios.system.uuid")
-	if err != nil {
-		return "", err
+	c := exec.Command("kenv", "-q", "smbios.system.uuid")
+	var stdout, stdin bytes.Buffer
+	c.Stdin = &stdin
+	c.Stdout = &stdout
+	c.Stderr = os.Stderr
+
+	if err := c.Run(); err != nil {
+		return "", fmt.Errorf("failed to request kenv: %w", err)
 	}
-	return trim(buf.String()), nil
+
+	return trim(stdout.String()), nil
+}
+
+func trim(s string) string {
+	return strings.TrimSpace(strings.Trim(s, "\n"))
 }
