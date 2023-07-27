@@ -1,2 +1,3 @@
-# gokit
-Go TooKit
+# ToolKit for Go
+
+Cemetery of libraries

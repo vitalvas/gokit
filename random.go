@@ -5,10 +5,8 @@ import (
 	"time"
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 func RandInt(min, max int) int {
-	return rand.Intn(max-min) + min
+	randSource := rand.NewSource(time.Now().UnixNano())
+	r := rand.New(randSource)
+	return r.Intn(max-min) + min
 }
