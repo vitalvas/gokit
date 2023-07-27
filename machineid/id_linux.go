@@ -3,6 +3,10 @@
 
 package machineid
 
+import (
+	"os"
+)
+
 const (
 	dbusPath    = "/var/lib/dbus/machine-id"
 	dbusPathEtc = "/etc/machine-id"
