@@ -5,7 +5,7 @@ package machineid
 
 import (
 	"os"
-	"string"
+	"strings"
 )
 
 const (
