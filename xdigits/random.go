@@ -1,4 +1,4 @@
-package gokit
+package xdigits
 
 import (
 	"math/rand"

@@ -1,6 +1,6 @@
-package gokit
+package xstrings
 
-func SliceContainString(elems []string, key string) bool {
+func SliceContain(elems []string, key string) bool {
 	for _, s := range elems {
 		if s == key {
 			return true

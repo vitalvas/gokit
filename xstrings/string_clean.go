@@ -1,4 +1,4 @@
-package gokit
+package xstrings
 
 import (
 	"strings"

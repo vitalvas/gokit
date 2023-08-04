@@ -1,4 +1,4 @@
-package gokit
+package xstrings
 
 import (
 	"fmt"
@@ -12,5 +12,5 @@ func GetConsumerTag() (string, error) {
 		return "unknown", err
 	}
 
-	return fmt.Sprintf("%s-%d", hostname, time.Now().UnixNano()), nil
+	return fmt.Sprintf("%s-%x", hostname, time.Now().UnixNano()), nil
 }
