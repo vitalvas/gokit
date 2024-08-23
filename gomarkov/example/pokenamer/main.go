@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 
@@ -60,7 +58,7 @@ func getDataset(fileName string) []string {
 
 func saveModel(chain *libmarkov.Chain) {
 	jsonObj, _ := json.Marshal(chain)
-	err := ioutil.WriteFile("model.json", jsonObj, 0644)
+	err := os.WriteFile("model.json", jsonObj, 0644)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -68,7 +66,7 @@ func saveModel(chain *libmarkov.Chain) {
 
 func loadModel() (*libmarkov.Chain, error) {
 	var chain libmarkov.Chain
-	data, err := ioutil.ReadFile("model.json")
+	data, err := os.ReadFile("model.json")
 	if err != nil {
 		return &chain, err
 	}
@@ -93,22 +91,4 @@ func generatePokemon(chain *libmarkov.Chain) string {
 	}
 
 	return strings.Join(tokens[order:len(tokens)-1], "")
-}
-
-func newAppendModel(name string) {
-	f, err := os.OpenFile("names_auto.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-
-	_, err = f.WriteString(name)
-	if err != nil {
-		log.Println(err.Error())
-	}
-
-	_, err = f.WriteString("\n")
-	if err != nil {
-		log.Println(err.Error())
-	}
 }

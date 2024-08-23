@@ -7,7 +7,6 @@ import (
 	"math/rand"
 	"strings"
 	"sync"
-	"time"
 )
 
 // StartToken godoc
@@ -29,10 +28,6 @@ type ChainJSON struct {
 	Order    int                 `json:"int"`
 	SpoolMap map[string]int      `json:"spool_map"`
 	FreqMat  map[int]sparseArray `json:"freq_mat"`
-}
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 // MarshalJSON godoc
@@ -117,7 +112,7 @@ func (chain *Chain) Add(input []string) {
 // TransitionProbability godoc
 func (chain *Chain) TransitionProbability(next string, current NGram) (float64, error) {
 	if len(current) != chain.Order {
-		return 0, errors.New("N-gram length does not match chain order")
+		return 0, errors.New("n-gram length does not match chain order")
 	}
 
 	currentIndex, currentExists := chain.statePool.get(current.key())
@@ -136,12 +131,12 @@ func (chain *Chain) TransitionProbability(next string, current NGram) (float64, 
 // Generate godoc
 func (chain *Chain) Generate(current NGram) (string, error) {
 	if len(current) != chain.Order {
-		return "", errors.New("N-gram length does not match chain order")
+		return "", errors.New("n-gram length does not match chain order")
 	}
 
 	currentIndex, currentExists := chain.statePool.get(current.key())
 	if !currentExists {
-		return "", fmt.Errorf("Unknown ngram %v", current)
+		return "", fmt.Errorf("unknown ngram %v", current)
 	}
 
 	arr := chain.frequencyMat[currentIndex]

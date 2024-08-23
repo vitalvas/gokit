@@ -13,10 +13,6 @@ type ID struct {
 
 const encodeDict = "0123456789abcdefghjkmnopqrstuvwxyz"
 
-func init() {
-	rand.Seed(time.Now().UTC().UnixNano())
-}
-
 func New() ID {
 	return NewWithTime(time.Now())
 }
@@ -33,14 +29,14 @@ func (id ID) String() string {
 }
 
 func encode(n int64) string {
-	var chars = make([]string, 12, 12)
+	var chars = make([]string, 12)
 
 	encodeDictSize := int64(len(encodeDict))
 
 	for i := len(chars) - 1; i >= 0; i-- {
 		index := n % encodeDictSize
 		chars[i] = string(encodeDict[index])
-		n = n / encodeDictSize
+		n /= encodeDictSize
 	}
 
 	return strings.Join(chars, "")

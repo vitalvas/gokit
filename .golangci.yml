@@ -1,30 +1,25 @@
 linters:
   enable:
-    - megacheck
-    - revive
-    - govet
-    - unconvert
-    - megacheck
-    - gas
-    - gocyclo
+    - dogsled
     - dupl
-    - misspell
-    - typecheck
-    - ineffassign
-    - stylecheck
     - exportloopref
     - gocritic
-    - nakedret
+    - gocyclo
     - gosimple
+    - govet
+    - ineffassign
+    - misspell
+    - nakedret
     - prealloc
+    - revive
     - staticcheck
+    - stylecheck
+    - typecheck
+    - unconvert
     - unused
-    - dogsled
   fast: false
   disable-all: true
-
 linters-settings:
   gosec:
     excludes:
       - G402
-      - G404

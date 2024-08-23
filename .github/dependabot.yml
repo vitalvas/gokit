@@ -1,12 +1,22 @@
 version: 2
 updates:
-  - package-ecosystem: gomod
-    directory: "/"
-    commit-message:
-      prefix: "ci:"
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
       interval: monthly
     reviewers:
-      - "vitalvas"
+      - vitalvas
     assignees:
-      - "vitalvas"
+      - vitalvas
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: monthly
+    reviewers:
+      - vitalvas
+    assignees:
+      - vitalvas
+    groups:
+      dependencies:
+        patterns:
+          - '*'
