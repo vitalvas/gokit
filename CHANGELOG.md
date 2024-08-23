@@ -1,0 +1,23 @@
+# Changelog
+
+## [0.9.0](https://github.com/vitalvas/gokit/compare/v0.8.0...v0.9.0) (2024-08-23)
+
+
+### Features
+
+* add ci release-please ([e9172bb](https://github.com/vitalvas/gokit/commit/e9172bb473af00c32a39ed26774fd3f8a15d39dc))
+* add ci release-please ([83d85e6](https://github.com/vitalvas/gokit/commit/83d85e6c044b0d1d664dbf4f2ccbc266525e6593))
+* add tests for SortMap ([68fba7d](https://github.com/vitalvas/gokit/commit/68fba7d1157dc1be0a25de35ebfa173a89a3ab2f))
+* move gomarkov ([c844fc7](https://github.com/vitalvas/gokit/commit/c844fc773ab051ac84aecb076e3cba816cc3fb64))
+* move uxid ([65298b4](https://github.com/vitalvas/gokit/commit/65298b431fe0fc8aa399e7fc9b44bffe2652ab5d))
+* update deps ([9a3571c](https://github.com/vitalvas/gokit/commit/9a3571c26299cae18119bf46c55107a330ce5754))
+
+
+### Bug Fixes
+
+* issue with release-please ([cfde00f](https://github.com/vitalvas/gokit/commit/cfde00fa4ade4bb331a6f66cac97fc2dc948dcda))
+* issue with release-please ([c5c38e9](https://github.com/vitalvas/gokit/commit/c5c38e9b44e7913b4ac6f9158e3fd2cc5cf6063e))
+* issue with release-please ([bdd5140](https://github.com/vitalvas/gokit/commit/bdd514000d18e0bf06d5fb4c42a001b8c019466d))
+* issue with release-please ([14b80d6](https://github.com/vitalvas/gokit/commit/14b80d6f2bd2eccad6c7c36ede6457eb6dfb46bb))
+* issue with release-please ([eae6c4c](https://github.com/vitalvas/gokit/commit/eae6c4c5ea22c5465e30cd419ef2c502d5a38b46))
+* linter errors ([ef219c8](https://github.com/vitalvas/gokit/commit/ef219c86e52d2d7ffe4385d4f6adcc94a3c16067))
