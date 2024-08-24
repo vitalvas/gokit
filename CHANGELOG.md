@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/vitalvas/gokit/compare/v0.9.0...v0.10.0) (2024-08-24)
+
+
+### Features
+
+* create xstrings simple template ([d917b5a](https://github.com/vitalvas/gokit/commit/d917b5a8c58a2405eb74a3495a0e64b6623b4f01))
+
 ## [0.9.0](https://github.com/vitalvas/gokit/compare/v0.8.0...v0.9.0) (2024-08-23)
 
 
