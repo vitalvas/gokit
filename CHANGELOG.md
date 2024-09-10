@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/vitalvas/gokit/compare/v0.10.0...v0.11.0) (2024-09-10)
+
+
+### Features
+
+* add xnet strip address ([1bab313](https://github.com/vitalvas/gokit/commit/1bab313fae2562b25e8cc12d42fabd792c21f3d1))
+
 ## [0.10.0](https://github.com/vitalvas/gokit/compare/v0.9.0...v0.10.0) (2024-08-24)
 
 
