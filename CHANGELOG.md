@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/vitalvas/gokit/compare/v0.11.0...v0.12.0) (2024-09-10)
+
+
+### Features
+
+* add xnet cidr contains ([93a9d9d](https://github.com/vitalvas/gokit/commit/93a9d9d57bc5e12fe27f8a33b6b5d37dc8abad8c))
+
 ## [0.11.0](https://github.com/vitalvas/gokit/compare/v0.10.0...v0.11.0) (2024-09-10)
 
 
