@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/vitalvas/gokit/compare/v0.12.0...v0.13.0) (2024-09-30)
+
+
+### Features
+
+* add xlogger ([eecec7d](https://github.com/vitalvas/gokit/commit/eecec7d4790b7c53b74dc14da95e52bcc982644b))
+
 ## [0.12.0](https://github.com/vitalvas/gokit/compare/v0.11.0...v0.12.0) (2024-09-10)
 
 
