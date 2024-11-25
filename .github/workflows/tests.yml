@@ -24,7 +24,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
 
-      - name: go tests race
+      - name: go tests
         run: go test -cover ./...
 
       - name: go tests race

@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-func RandInt(min, max int) int {
+func RandInt(minValue, maxValue int) int {
 	randSource := rand.NewSource(time.Now().UnixNano())
 	r := rand.New(randSource)
-	return r.Intn(max-min) + min
+	return r.Intn(maxValue-minValue) + minValue
 }

@@ -1,8 +1,8 @@
 linters:
   enable:
+    - copyloopvar
     - dogsled
     - dupl
-    - exportloopref
     - gocritic
     - gocyclo
     - gosimple
