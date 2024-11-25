@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/vitalvas/gokit/compare/v0.13.0...v0.13.1) (2024-11-25)
+
+
+### Bug Fixes
+
+* built-in functions ([bdcbe92](https://github.com/vitalvas/gokit/commit/bdcbe92aba8865ae295010bf2628a09c84e7bec0))
+
 ## [0.13.0](https://github.com/vitalvas/gokit/compare/v0.12.0...v0.13.0) (2024-09-30)
 
 
