@@ -1,6 +1,9 @@
 package xstrings
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 func SortMap(data map[string]string) map[string]string {
 	keys := make([]string, 0, len(data))
@@ -17,4 +20,12 @@ func SortMap(data map[string]string) map[string]string {
 	}
 
 	return out
+}
+
+func ReplaceMap(payload string, data map[string]string) string {
+	for k, v := range data {
+		payload = strings.Replace(payload, k, v, -1)
+	}
+
+	return payload
 }
