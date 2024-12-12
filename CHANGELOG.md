@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.14.0](https://github.com/vitalvas/gokit/compare/v0.13.1...v0.14.0) (2024-12-12)
+
+
+### Features
+
+* add replacemap ([07eebbb](https://github.com/vitalvas/gokit/commit/07eebbbd3146bee6b165abc59d6d53b81cae1277))
+
+
+### Bug Fixes
+
+* replacemap ([a720370](https://github.com/vitalvas/gokit/commit/a7203708340b4d09ce4883cf852a9fca84df8267))
+* run test for sortmap ([29813f5](https://github.com/vitalvas/gokit/commit/29813f5f4c8aef5fb3ece57f4ae6094c7aee1538))
+
 ## [0.13.1](https://github.com/vitalvas/gokit/compare/v0.13.0...v0.13.1) (2024-11-25)
 
 
