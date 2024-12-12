@@ -1,7 +1,6 @@
 package xstrings
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,9 +20,7 @@ func TestSortMap(t *testing.T) {
 
 	sorted := SortMap(data)
 
-	if !reflect.DeepEqual(sorted, correctData) {
-		t.Error("wrong sort map")
-	}
+	assert.Equal(t, sorted, correctData)
 }
 
 func TestReplaceMap(t *testing.T) {
