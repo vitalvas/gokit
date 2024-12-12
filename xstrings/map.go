@@ -24,7 +24,7 @@ func SortMap(data map[string]string) map[string]string {
 
 func ReplaceMap(payload string, data map[string]string) string {
 	for k, v := range data {
-		payload = strings.Replace(payload, k, v, -1)
+		payload = strings.ReplaceAll(payload, k, v)
 	}
 
 	return payload
