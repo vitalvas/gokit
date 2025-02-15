@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.15.0](https://github.com/vitalvas/gokit/compare/v0.14.0...v0.15.0) (2025-02-15)
+
+
+### Features
+
+* create xconvert ([6e6fbe6](https://github.com/vitalvas/gokit/commit/6e6fbe6913cde3b808015885e01f696ecffbec44))
+
+
+### Bug Fixes
+
+* tests for xconvert ([c77838f](https://github.com/vitalvas/gokit/commit/c77838f66b52c455c8b0e41179e41dc3ed1077fd))
+
 ## [0.14.0](https://github.com/vitalvas/gokit/compare/v0.13.1...v0.14.0) (2024-12-12)
 
 
