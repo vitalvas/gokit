@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/vitalvas/gokit/compare/v0.15.0...v0.16.0) (2025-03-07)
+
+
+### Features
+
+* create bloomfilter ([024ef71](https://github.com/vitalvas/gokit/commit/024ef71d72023c8a284a5325d4565a0cfbb23e68))
+
 ## [0.15.0](https://github.com/vitalvas/gokit/compare/v0.14.0...v0.15.0) (2025-02-15)
 
 
