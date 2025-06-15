@@ -1,11 +1,12 @@
 module github.com/vitalvas/gokit
 
-go 1.23
+go 1.23.0
+
 toolchain go1.24.1
 
 require (
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/sys v0.32.0
+	golang.org/x/sys v0.33.0
 )
 
 require (
