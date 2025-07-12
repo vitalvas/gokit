@@ -281,21 +281,22 @@ Environment variable keys are built using this pattern: `PREFIX_FIELD_SUBFIELD_.
 The library checks tags in this order:
 1. `yaml` tag (first choice)
 2. `json` tag (if no yaml tag)
-3. Struct field name (if no tags)
+3. Struct field name converted from camelCase to snake_case (if no tags)
 
 ### Examples
 
 ```go
 type Config struct {
-    Logger LoggerConfig      `yaml:"logger" json:"log"`
-    Health HealthConfig      `yaml:"health"`
-    DB     DatabaseConfig   `json:"database"`
-    Cache  CacheConfig      // no tags - uses field name
+    Logger    LoggerConfig      `yaml:"logger" json:"log"`
+    Health    HealthConfig      `yaml:"health"`
+    DB        DatabaseConfig   `json:"database"`
+    CachePool CacheConfig      // no tags - uses camelCase conversion
 }
 
 type LoggerConfig struct {
-    Level string `yaml:"level" json:"lvl"`
-    File  string `yaml:"file"`
+    Level        string `yaml:"level" json:"lvl"`
+    File         string `yaml:"file"`
+    TheLongKey   string // no tags - converts to "the_long_key"
 }
 
 type HealthConfig struct {
@@ -315,11 +316,26 @@ type AuthConfig struct {
 |------------|---------------|-----------------|---------------|
 | `Logger.Level` | ✓ | `APP_LOGGER_LEVEL` | `debug` |
 | `Logger.File` | ✓ | `APP_LOGGER_FILE` | `/var/log/app.log` |
+| `Logger.TheLongKey` | ✗ (camelCase) | `APP_LOGGER_THE_LONG_KEY` | `my-value` |
 | `Health.Address` | ✓ | `APP_HEALTH_ADDRESS` | `:8080` |
 | `Health.Auth.Enabled` | ✓ | `APP_HEALTH_AUTH_ENABLED` | `true` |
 | `Health.Auth.Secret` | ✓ | `APP_HEALTH_AUTH_SECRET` | `mysecret` |
 | `DB` (json tag) | ✗ (uses json) | `APP_DATABASE_*` | |
-| `Cache` (no tags) | ✗ (uses field name) | `APP_CACHE_*` | |
+| `CachePool` (no tags) | ✗ (camelCase) | `APP_CACHE_POOL_*` | |
+
+### CamelCase to snake_case Conversion
+
+When struct fields have no yaml or json tags, field names are automatically converted from camelCase to snake_case for environment variable names:
+
+| Field Name | Converted Name | Environment Key (prefix "APP") |
+|------------|----------------|--------------------------------|
+| `TheLongKey` | `the_long_key` | `APP_THE_LONG_KEY` |
+| `XMLParser` | `xml_parser` | `APP_XML_PARSER` |
+| `HTTPClient` | `http_client` | `APP_HTTP_CLIENT` |
+| `UserID` | `user_id` | `APP_USER_ID` |
+| `APIKey` | `api_key` | `APP_API_KEY` |
+
+The conversion handles acronyms intelligently, keeping consecutive uppercase letters together as a single word.
 
 ### Special Cases
 

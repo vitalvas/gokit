@@ -2004,7 +2004,7 @@ func TestLoad_TagPriority(t *testing.T) {
 		"TEST_YAML_FIELD":       "yaml-value",
 		"TEST_JSON_FIELD":       "json-value",
 		"TEST_YAML_NAME":        "yaml-priority-value",
-		"TEST_NOTAGS":           "field-name-value",
+		"TEST_NO_TAGS":          "field-name-value",
 		"TEST_JSON_NOT_IGNORED": "json-not-ignored-value",
 		"TEST_YAML_NOT_IGNORED": "yaml-not-ignored-value",
 	}
@@ -2029,6 +2029,70 @@ func TestLoad_TagPriority(t *testing.T) {
 	assert.Equal(t, "field-name-value", cfg.NoTags)           // Uses lowercase field name
 	assert.Equal(t, "json-not-ignored-value", cfg.YamlIgnore) // yaml:"-" ignores yaml tag, uses json tag
 	assert.Equal(t, "yaml-not-ignored-value", cfg.JSONIgnore) // yaml takes priority over json:"-"
+}
+
+func TestLoad_CamelCaseFieldNames(t *testing.T) {
+	type CamelCaseConfig struct {
+		TheLongKey   string
+		AnotherField string
+		XMLParser    string
+		HTTPClient   string
+	}
+
+	envVars := map[string]string{
+		"TEST_THE_LONG_KEY":  "long-key-value",
+		"TEST_ANOTHER_FIELD": "another-field-value", 
+		"TEST_XML_PARSER":    "xml-parser-value",  // XMLParser -> xml_parser
+		"TEST_HTTP_CLIENT":   "http-client-value", // HTTPClient -> http_client
+	}
+
+	for key, value := range envVars {
+		require.NoError(t, os.Setenv(key, value))
+	}
+	defer func() {
+		for key := range envVars {
+			_ = os.Unsetenv(key)
+		}
+	}()
+
+	var cfg CamelCaseConfig
+
+	err := Load(&cfg, WithEnv("TEST"))
+	require.NoError(t, err)
+
+	// Verify camelCase to snake_case conversion works correctly
+	assert.Equal(t, "long-key-value", cfg.TheLongKey)     // TheLongKey -> the_long_key
+	assert.Equal(t, "another-field-value", cfg.AnotherField) // AnotherField -> another_field
+	assert.Equal(t, "xml-parser-value", cfg.XMLParser)    // XMLParser -> xml_parser (acronym)
+	assert.Equal(t, "http-client-value", cfg.HTTPClient)  // HTTPClient -> http_client (acronym)
+}
+
+func TestCamelToSnake(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"TheLongKey", "the_long_key"},
+		{"AnotherField", "another_field"},
+		{"XMLParser", "xml_parser"},
+		{"HTTPClient", "http_client"},
+		{"ID", "id"},
+		{"UserID", "user_id"},
+		{"HTMLParser", "html_parser"},
+		{"APIKey", "api_key"},
+		{"SimpleField", "simple_field"},
+		{"A", "a"},
+		{"AB", "ab"},
+		{"ABC", "abc"},
+		{"ABCDef", "abc_def"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := camelToSnake(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestLoad_UnsignedIntegerTypes(t *testing.T) {

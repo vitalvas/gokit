@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
 )
@@ -293,6 +294,27 @@ func loadFromFile(config interface{}, filename string) error {
 	}
 }
 
+func camelToSnake(s string) string {
+	var result strings.Builder
+	runes := []rune(s)
+	
+	for i, r := range runes {
+		if i > 0 && unicode.IsUpper(r) {
+			// Add underscore before uppercase letters, except when:
+			// 1. Previous character is also uppercase (part of acronym)
+			// 2. Next character is lowercase (end of acronym)
+			prevUpper := i > 0 && unicode.IsUpper(runes[i-1])
+			nextLower := i < len(runes)-1 && unicode.IsLower(runes[i+1])
+			
+			if !prevUpper || nextLower {
+				result.WriteByte('_')
+			}
+		}
+		result.WriteRune(unicode.ToLower(r))
+	}
+	return result.String()
+}
+
 func getFieldTagName(fieldType reflect.StructField) string {
 	yamlTag := fieldType.Tag.Get("yaml")
 	if yamlTag != "" && yamlTag != "-" {
@@ -304,8 +326,8 @@ func getFieldTagName(fieldType reflect.StructField) string {
 		return strings.Split(jsonTag, ",")[0]
 	}
 
-	// Use field name if no tags are present
-	return strings.ToLower(fieldType.Name)
+	// Use field name converted to snake_case if no tags are present
+	return camelToSnake(fieldType.Name)
 }
 
 func loadFromFiles(config interface{}, filenames []string) error {
