@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.17.0](https://github.com/vitalvas/gokit/compare/v0.16.0...v0.17.0) (2025-07-12)
+
+
+### Features
+
+* add read dir ([4fd1490](https://github.com/vitalvas/gokit/commit/4fd1490e24ba7b73db44c6f94922c4b872b44aa2))
+* add xconfig ([b400d07](https://github.com/vitalvas/gokit/commit/b400d079ea1bc982ffabbb6c7dab983154aca204))
+* refactor bloomfilter ([c195a6e](https://github.com/vitalvas/gokit/commit/c195a6e0edafe4a7910750c989e022daccfc56c0))
+
+
+### Bug Fixes
+
+* camelCase format ([a162042](https://github.com/vitalvas/gokit/commit/a16204255d5217cca7132786b2507176afce863b))
+
 ## [0.16.0](https://github.com/vitalvas/gokit/compare/v0.15.0...v0.16.0) (2025-03-07)
 
 
