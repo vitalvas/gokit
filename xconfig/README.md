@@ -58,7 +58,7 @@ func main() {
     var cfg Config
     
     err := xconfig.Load(&cfg,
-        xconfig.WithFile("config.yaml"),
+        xconfig.WithFiles("config.yaml"),
         xconfig.WithEnv("APP"),
     )
     if err != nil {
@@ -178,6 +178,41 @@ err := xconfig.Load(&cfg,
 )
 ```
 
+### Loading from Directories
+```go
+// Load all config files from a directory
+err := xconfig.Load(&cfg,
+    xconfig.WithDirs("/etc/myapp/config"),
+    xconfig.WithEnv("APP"),
+)
+
+// Load from multiple directories
+err := xconfig.Load(&cfg,
+    xconfig.WithDirs("/etc/myapp/config", "/usr/local/etc/myapp"),
+    xconfig.WithEnv("APP"),
+)
+
+// Combine directories and specific files
+err := xconfig.Load(&cfg,
+    xconfig.WithDirs("/etc/myapp/config"),        // Load all config files from directory
+    xconfig.WithFiles("/etc/myapp/override.yaml"), // Load specific override file
+    xconfig.WithEnv("APP"),
+)
+```
+
+**Directory Loading Rules:**
+- Only files with extensions `.json`, `.yaml`, `.yml` are loaded (case-insensitive)
+- Files are loaded in **ascending alphabetical order** within each directory
+- Subdirectories are ignored
+- Non-existent directories are silently skipped
+- Files from later directories override files from earlier directories
+
+**File Loading Order Example:**
+```
+Directory contents: zebra.yaml, alpha.json, config.yml
+Loading order:     1. alpha.json → 2. config.yml → 3. zebra.yaml
+```
+
 ### Slices and Maps
 ```go
 type Config struct {
@@ -197,11 +232,14 @@ type Config struct {
 Configuration values are resolved in this order (later sources override earlier ones):
 
 ```
-1. Struct Defaults → 2. Custom Defaults → 3. Files (+Macros) → 4. Environment Variables
-   (lowest priority)                                               (highest priority)
+1. Struct Defaults → 2. Custom Defaults → 3. Directories → 4. Files → 5. Environment Variables
+   (lowest priority)                                                         (highest priority)
 ```
 
-**Note**: Macro expansion happens after files are loaded but before environment variables are processed, ensuring that environment variables always have the highest precedence.
+**Note**: 
+- Directories are processed before individual files
+- Macro expansion happens after all files/directories are loaded but before environment variables are processed
+- Environment variables always have the highest precedence
 
 ### Detailed Priority Chain
 
@@ -209,9 +247,10 @@ Configuration values are resolved in this order (later sources override earlier 
 |----------|--------|--------|-------------------|
 | 1 (Lowest) | **Struct Defaults** | `Default()` methods | Sets initial values |
 | 2 | **Custom Defaults** | `WithDefault(config)` | Overrides struct defaults |
-| 3 | **Configuration Files** | `WithFile()`, `WithFiles()` | Overrides custom defaults |
-| 3.5 | **Macro Expansion** | `${env:VAR}` in files | Expands macros in loaded config |
-| 4 (Highest) | **Environment Variables** | `WithEnv(prefix)` | Overrides everything |
+| 3 | **Directory Files** | `WithDirs()` | Overrides custom defaults |
+| 4 | **Configuration Files** | `WithFiles()` | Overrides directory files |
+| 4.5 | **Macro Expansion** | `${env:VAR}` in files | Expands macros in loaded config |
+| 5 (Highest) | **Environment Variables** | `WithEnv(prefix)` | Overrides everything |
 
 ### Example Priority Resolution
 
@@ -252,8 +291,8 @@ Each subsequent file can override values from previous files.
 
 | Option | Description | Example |
 |--------|-------------|---------|
-| `WithFile(filename)` | Load single file | `WithFile("config.yaml")` |
-| `WithFiles(files...)` | Load multiple files | `WithFiles("base.yaml", "prod.json")` |
+| `WithFiles(files...)` | Load single/multiple files | `WithFiles("config.yaml")` or `WithFiles("base.yaml", "prod.json")` |
+| `WithDirs(dirs...)` | Load from single/multiple directories | `WithDirs("/etc/myapp")` or `WithDirs("/etc/myapp", "/usr/local/etc/myapp")` |
 | `WithEnv(prefix)` | Load environment variables | `WithEnv("APP")` |
 | `WithDefault(config)` | Set custom defaults | `WithDefault(myDefaults)` |
 

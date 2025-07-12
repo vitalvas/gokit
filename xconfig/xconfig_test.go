@@ -3,6 +3,7 @@ package xconfig
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -93,7 +94,7 @@ func TestLoad_DefaultsOnly(t *testing.T) {
 	assert.False(t, cfg.DB.SSL)
 }
 
-func TestLoad_WithFile(t *testing.T) {
+func TestLoad_WithFiles(t *testing.T) {
 	yamlContent := `logger:
   level: debug
 health:
@@ -118,7 +119,7 @@ db:
 
 	var cfg TestConfig
 
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	assertExpectedTestConfig(t, cfg)
@@ -196,7 +197,7 @@ db:
 
 	var cfg TestConfig
 
-	err = Load(&cfg, WithFile(tmpFile.Name()), WithEnv("TEST"))
+	err = Load(&cfg, WithFiles(tmpFile.Name()), WithEnv("TEST"))
 	require.NoError(t, err)
 
 	assert.Equal(t, "warn", cfg.Logger.Level)
@@ -212,7 +213,7 @@ db:
 func TestLoad_NonExistentFile(t *testing.T) {
 	var cfg TestConfig
 
-	err := Load(&cfg, WithFile("non-existent-file.yaml"))
+	err := Load(&cfg, WithFiles("non-existent-file.yaml"))
 	require.NoError(t, err)
 
 	assert.Equal(t, "info", cfg.Logger.Level)
@@ -247,7 +248,7 @@ health:
 
 	var cfg TestConfig
 
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to load from file")
 }
@@ -308,7 +309,7 @@ func TestLoad_PartialConfig(t *testing.T) {
 
 	var cfg TestConfig
 
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	assert.Equal(t, "debug", cfg.Logger.Level)
@@ -385,7 +386,7 @@ func TestLoad_WithJSONFile(t *testing.T) {
 
 	var cfg TestConfig
 
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	assertExpectedTestConfig(t, cfg)
@@ -412,7 +413,7 @@ func TestLoad_InvalidJSONFile(t *testing.T) {
 
 	var cfg TestConfig
 
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to load from file")
 }
@@ -438,7 +439,7 @@ func TestLoad_JSONTagsOnly(t *testing.T) {
 
 	var cfg JSONOnlyConfig
 
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	assert.Equal(t, "test", cfg.Name)
@@ -526,7 +527,7 @@ func TestLoad_FileExtensionDetection(t *testing.T) {
 
 			var cfg TestConfig
 
-			err = Load(&cfg, WithFile(tmpFile.Name()))
+			err = Load(&cfg, WithFiles(tmpFile.Name()))
 			if tc.expectErr {
 				assert.Error(t, err)
 			} else {
@@ -577,7 +578,7 @@ db:
 
 	var cfg TestConfig
 
-	err = Load(&cfg, WithFile(baseFile.Name()), WithFile(overrideFile.Name()))
+	err = Load(&cfg, WithFiles(baseFile.Name()), WithFiles(overrideFile.Name()))
 	require.NoError(t, err)
 
 	assert.Equal(t, "debug", cfg.Logger.Level)
@@ -955,7 +956,7 @@ tags:
 
 	var cfg SliceConfig
 
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"server1.example.com", "server2.example.com", "server3.example.com"}, cfg.Hosts)
@@ -984,7 +985,7 @@ func TestLoad_SlicesFromJSON(t *testing.T) {
 
 	var cfg SliceConfig
 
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"api.example.com", "db.example.com"}, cfg.Hosts)
@@ -1026,7 +1027,7 @@ ports:
 
 	var cfg SliceConfig
 
-	err = Load(&cfg, WithFile(tmpFile.Name()), WithEnv("TEST"))
+	err = Load(&cfg, WithFiles(tmpFile.Name()), WithEnv("TEST"))
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"env-host1", "env-host2", "env-host3"}, cfg.Hosts)
@@ -1256,7 +1257,7 @@ metadata:
 
 	var cfg MapConfig
 
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	expectedLabels := map[string]string{"env": "production", "region": "us-west", "service": "api"}
@@ -1306,7 +1307,7 @@ func TestLoad_MapsFromJSON(t *testing.T) {
 
 	var cfg MapConfig
 
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	expectedLabels := map[string]string{"env": "staging", "team": "backend"}
@@ -1354,7 +1355,7 @@ ports:
 
 	var cfg MapConfig
 
-	err = Load(&cfg, WithFile(tmpFile.Name()), WithEnv("TEST"))
+	err = Load(&cfg, WithFiles(tmpFile.Name()), WithEnv("TEST"))
 	require.NoError(t, err)
 
 	expectedLabels := map[string]string{"env": "env-override", "region": "us-west"}
@@ -1543,7 +1544,7 @@ db:
 
 	var cfg TestConfig
 
-	err = Load(&cfg, WithDefault(customDefault), WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithDefault(customDefault), WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	assert.Equal(t, "debug", cfg.Logger.Level)
@@ -1626,7 +1627,7 @@ db:
 
 	var cfg TestConfig
 
-	err = Load(&cfg, WithDefault(customDefault), WithFile(tmpFile.Name()), WithEnv("TEST"))
+	err = Load(&cfg, WithDefault(customDefault), WithFiles(tmpFile.Name()), WithEnv("TEST"))
 	require.NoError(t, err)
 
 	assert.Equal(t, "error", cfg.Logger.Level)
@@ -1916,7 +1917,7 @@ services:
 
 	var cfg ComplexConfig
 
-	err = Load(&cfg, WithFile(tmpFile.Name()), WithEnv("TEST"))
+	err = Load(&cfg, WithFiles(tmpFile.Name()), WithEnv("TEST"))
 	require.NoError(t, err)
 
 	// Test overridden values
@@ -1970,7 +1971,7 @@ func TestLoad_ErrorConditions(t *testing.T) {
 		{
 			name:          "directory not file",
 			config:        &TestConfig{},
-			options:       []Option{WithFile("/tmp")},
+			options:       []Option{WithFiles("/tmp")},
 			expectedError: "failed to load from files",
 		},
 		{
@@ -2092,6 +2093,323 @@ func TestCamelToSnake(t *testing.T) {
 			result := camelToSnake(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
+	}
+}
+
+func TestLoad_WithDirs(t *testing.T) {
+	// Create a temporary directory
+	tmpDir, err := os.MkdirTemp("", "xconfig-test-*")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create config files in the directory
+	yamlContent := `logger:
+  level: debug
+health:
+  address: ":8080"`
+
+	jsonContent := `{
+  "db": {
+    "host": "remote-host",
+    "port": 3306
+  }
+}`
+
+	ymlContent := `db:
+  username: "admin"
+  ssl: true`
+
+	// Write config files
+	yamlFile := filepath.Join(tmpDir, "app.yaml")
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
+
+	jsonFile := filepath.Join(tmpDir, "database.json")
+	require.NoError(t, os.WriteFile(jsonFile, []byte(jsonContent), 0644))
+
+	ymlFile := filepath.Join(tmpDir, "override.yml")
+	require.NoError(t, os.WriteFile(ymlFile, []byte(ymlContent), 0644))
+
+	// Create a non-config file that should be ignored
+	txtFile := filepath.Join(tmpDir, "readme.txt")
+	require.NoError(t, os.WriteFile(txtFile, []byte("This should be ignored"), 0644))
+
+	var cfg TestConfig
+
+	err = Load(&cfg, WithDirs(tmpDir))
+	require.NoError(t, err)
+
+	// Files should be loaded in alphabetical order: app.yaml, database.json, override.yml
+	assert.Equal(t, "debug", cfg.Logger.Level)     // from app.yaml
+	assert.Equal(t, ":8080", cfg.Health.Address)  // from app.yaml
+	assert.Equal(t, "remote-host", cfg.DB.Host)   // from database.json
+	assert.Equal(t, 3306, cfg.DB.Port)            // from database.json
+	assert.Equal(t, "admin", cfg.DB.Username)     // from override.yml
+	assert.True(t, cfg.DB.SSL)                    // from override.yml
+}
+
+func TestLoad_WithMultipleDirs(t *testing.T) {
+	// Create two temporary directories
+	tmpDir1, err := os.MkdirTemp("", "xconfig-test1-*")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tmpDir1) }()
+
+	tmpDir2, err := os.MkdirTemp("", "xconfig-test2-*")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tmpDir2) }()
+
+	// Files in first directory
+	yamlContent1 := `logger:
+  level: info
+health:
+  address: ":9090"`
+
+	yamlFile1 := filepath.Join(tmpDir1, "base.yaml")
+	require.NoError(t, os.WriteFile(yamlFile1, []byte(yamlContent1), 0644))
+
+	// Files in second directory (should override first)
+	yamlContent2 := `logger:
+  level: warn
+db:
+  host: "override-host"`
+
+	yamlFile2 := filepath.Join(tmpDir2, "override.yaml")
+	require.NoError(t, os.WriteFile(yamlFile2, []byte(yamlContent2), 0644))
+
+	var cfg TestConfig
+
+	err = Load(&cfg, WithDirs(tmpDir1, tmpDir2))
+	require.NoError(t, err)
+
+	// Values from second directory should override first
+	assert.Equal(t, "warn", cfg.Logger.Level)        // overridden by second dir
+	assert.Equal(t, ":9090", cfg.Health.Address)    // from first dir
+	assert.Equal(t, "override-host", cfg.DB.Host)   // from second dir
+}
+
+func TestLoad_WithDirsAndFiles(t *testing.T) {
+	// Create a temporary directory
+	tmpDir, err := os.MkdirTemp("", "xconfig-test-*")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create config file in directory
+	dirYamlContent := `logger:
+  level: debug`
+
+	dirYamlFile := filepath.Join(tmpDir, "dir.yaml")
+	require.NoError(t, os.WriteFile(dirYamlFile, []byte(dirYamlContent), 0644))
+
+	// Create separate config file
+	fileYamlContent := `logger:
+  level: error
+health:
+  address: ":7070"`
+
+	tmpFile, err := os.CreateTemp("", "config-*.yaml")
+	require.NoError(t, err)
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+	_, err = tmpFile.WriteString(fileYamlContent)
+	require.NoError(t, err)
+	require.NoError(t, tmpFile.Close())
+
+	var cfg TestConfig
+
+	// Directories are loaded first, then files (files should override dirs)
+	err = Load(&cfg, WithDirs(tmpDir), WithFiles(tmpFile.Name()))
+	require.NoError(t, err)
+
+	assert.Equal(t, "error", cfg.Logger.Level)     // overridden by file
+	assert.Equal(t, ":7070", cfg.Health.Address)  // from file
+}
+
+func TestLoad_WithDirNonExistent(t *testing.T) {
+	var cfg TestConfig
+
+	// Non-existent directory should not cause error
+	err := Load(&cfg, WithDirs("/non/existent/directory"))
+	require.NoError(t, err)
+
+	// Should use defaults
+	assert.Equal(t, "info", cfg.Logger.Level)
+	assert.Equal(t, ":9999", cfg.Health.Address)
+}
+
+func TestLoad_WithDirPermissionDenied(t *testing.T) {
+	// Create a directory we can't read (this test might be skipped on some systems)
+	tmpDir, err := os.MkdirTemp("", "xconfig-test-*")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Remove read permission (might not work on all systems)
+	err = os.Chmod(tmpDir, 0000)
+	if err != nil {
+		t.Skip("Cannot remove directory permissions on this system")
+	}
+	defer func() { _ = os.Chmod(tmpDir, 0755) }() // Restore for cleanup
+
+	var cfg TestConfig
+
+	err = Load(&cfg, WithDirs(tmpDir))
+	// Should return an error for permission denied
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to load from directories")
+}
+
+func TestScanDirectory(t *testing.T) {
+	// Create a temporary directory
+	tmpDir, err := os.MkdirTemp("", "scan-test-*")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create various files
+	files := map[string]string{
+		"config.yaml": "test: yaml",
+		"app.json":    `{"test": "json"}`,
+		"override.yml": "test: yml",
+		"readme.txt":   "not a config file",
+		"script.sh":    "#!/bin/bash",
+	}
+
+	for filename, content := range files {
+		filePath := filepath.Join(tmpDir, filename)
+		require.NoError(t, os.WriteFile(filePath, []byte(content), 0644))
+	}
+
+	// Create a subdirectory (should be ignored)
+	subDir := filepath.Join(tmpDir, "subdir")
+	require.NoError(t, os.Mkdir(subDir, 0755))
+
+	configFiles, err := scanDirectory(tmpDir)
+	require.NoError(t, err)
+
+	// Should only include config files, sorted alphabetically
+	expected := []string{
+		filepath.Join(tmpDir, "app.json"),
+		filepath.Join(tmpDir, "config.yaml"),
+		filepath.Join(tmpDir, "override.yml"),
+	}
+
+	assert.Equal(t, expected, configFiles)
+}
+
+func TestIsConfigFile(t *testing.T) {
+	tests := []struct {
+		filename string
+		expected bool
+	}{
+		{"config.yaml", true},
+		{"config.yml", true},
+		{"config.json", true},
+		{"CONFIG.YAML", true}, // case insensitive
+		{"config.txt", false},
+		{"config", false},
+		{"readme.md", false},
+		{"script.sh", false},
+		{".yaml", true}, // edge case
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			result := isConfigFile(tt.filename)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestLoad_WithDirsAndMacros(t *testing.T) {
+	// Set environment variables for macro expansion
+	require.NoError(t, os.Setenv("TEST_HOST", "macro-host"))
+	require.NoError(t, os.Setenv("TEST_PORT", "9999"))
+	defer func() {
+		_ = os.Unsetenv("TEST_HOST")
+		_ = os.Unsetenv("TEST_PORT")
+	}()
+
+	// Create a temporary directory
+	tmpDir, err := os.MkdirTemp("", "xconfig-macro-test-*")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create config file with macros (only for string fields)
+	yamlContent := `db:
+  host: "${env:TEST_HOST}"
+  username: "user-${env:TEST_HOST}"`
+
+	yamlFile := filepath.Join(tmpDir, "config.yaml")
+	require.NoError(t, os.WriteFile(yamlFile, []byte(yamlContent), 0644))
+
+	var cfg TestConfig
+
+	err = Load(&cfg, WithDirs(tmpDir))
+	require.NoError(t, err)
+
+	// Macros should be expanded in string fields
+	assert.Equal(t, "macro-host", cfg.DB.Host)
+	assert.Equal(t, "user-macro-host", cfg.DB.Username)
+}
+
+func TestLoad_WithDirsFileOrderAscending(t *testing.T) {
+	// Create a temporary directory
+	tmpDir, err := os.MkdirTemp("", "xconfig-order-test-*")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create files with names that would NOT be in alphabetical order if unsorted
+	// But the content shows the loading order when sorted alphabetically
+	files := map[string]string{
+		"z_last.yaml":   `logger: {level: "from-z-last"}`,   // This should load LAST alphabetically
+		"a_first.yaml":  `logger: {level: "from-a-first"}`,  // This should load FIRST alphabetically  
+		"m_middle.yaml": `logger: {level: "from-m-middle"}`, // This should load in MIDDLE alphabetically
+	}
+
+	for filename, content := range files {
+		filePath := filepath.Join(tmpDir, filename)
+		require.NoError(t, os.WriteFile(filePath, []byte(content), 0644))
+	}
+
+	var cfg TestConfig
+	err = Load(&cfg, WithDirs(tmpDir))
+	require.NoError(t, err)
+
+	// The final value should be from z_last.yaml since it loads last (ascending order)
+	// a_first.yaml loads first, m_middle.yaml loads second, z_last.yaml loads last and wins
+	assert.Equal(t, "from-z-last", cfg.Logger.Level)
+}
+
+func TestScanDirectoryAscendingOrder(t *testing.T) {
+	// Create a temporary directory
+	tmpDir, err := os.MkdirTemp("", "scan-order-test-*")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create files in non-alphabetical order in the filesystem
+	filenames := []string{"zebra.yaml", "alpha.json", "beta.yml", "gamma.yaml"}
+	
+	for _, filename := range filenames {
+		filePath := filepath.Join(tmpDir, filename)
+		require.NoError(t, os.WriteFile(filePath, []byte("test"), 0644))
+	}
+
+	configFiles, err := scanDirectory(tmpDir)
+	require.NoError(t, err)
+
+	// Should return files in ascending alphabetical order
+	expected := []string{
+		filepath.Join(tmpDir, "alpha.json"),
+		filepath.Join(tmpDir, "beta.yml"),
+		filepath.Join(tmpDir, "gamma.yaml"),
+		filepath.Join(tmpDir, "zebra.yaml"),
+	}
+
+	assert.Equal(t, expected, configFiles)
+	
+	// Verify that they are indeed sorted in ascending order
+	for i := 1; i < len(configFiles); i++ {
+		prevFile := filepath.Base(configFiles[i-1])
+		currFile := filepath.Base(configFiles[i])
+		assert.True(t, prevFile < currFile, 
+			"Files should be in ascending order: %s should come before %s", prevFile, currFile)
 	}
 }
 
@@ -2330,7 +2648,7 @@ func TestLoad_LargeConfigurationFile(t *testing.T) {
 	var cfg LargeConfig
 
 	start := time.Now()
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	duration := time.Since(start)
 
 	require.NoError(t, err)
@@ -2380,7 +2698,7 @@ no_macro: "plain string without macros"`
 	require.NoError(t, tmpFile.Close())
 
 	var cfg MacroTestConfig
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	assert.Equal(t, "Server running on localhost:5432", cfg.BasicString)
@@ -2409,7 +2727,7 @@ func TestExpandMacros_NestedStructs(t *testing.T) {
 	require.NoError(t, tmpFile.Close())
 
 	var cfg MacroTestConfig
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	assert.Equal(t, "db.example.com", cfg.NestedConfig.Host)
@@ -2438,7 +2756,7 @@ func TestExpandMacros_StringSlices(t *testing.T) {
 	require.NoError(t, tmpFile.Close())
 
 	var cfg MacroTestConfig
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	expected := []string{"web1.example.com", "web2.example.com", "static.example.com"}
@@ -2467,7 +2785,7 @@ func TestExpandMacros_StringMaps(t *testing.T) {
 	require.NoError(t, tmpFile.Close())
 
 	var cfg MacroTestConfig
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	expected := map[string]string{
@@ -2493,7 +2811,7 @@ func TestExpandMacros_UndefinedEnvVar(t *testing.T) {
 	require.NoError(t, tmpFile.Close())
 
 	var cfg MacroTestConfig
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	// Should remain unchanged when env var is not set
@@ -2515,7 +2833,7 @@ func TestExpandMacros_EmptyEnvVar(t *testing.T) {
 	require.NoError(t, tmpFile.Close())
 
 	var cfg MacroTestConfig
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	// Should remain unchanged when env var is empty
@@ -2543,7 +2861,7 @@ func TestExpandMacros_MultipleMacrosInOneString(t *testing.T) {
 	require.NoError(t, tmpFile.Close())
 
 	var cfg MacroTestConfig
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	assert.Equal(t, "https://example.com:8080/api/v1", cfg.BasicString)
@@ -2574,7 +2892,7 @@ func TestExpandMacros_JSONFormat(t *testing.T) {
 	require.NoError(t, tmpFile.Close())
 
 	var cfg MacroTestConfig
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	assert.Equal(t, "Server at json.example.com:9000", cfg.BasicString)
@@ -2602,7 +2920,7 @@ func TestExpandMacros_MacroWithEnvOverride(t *testing.T) {
 	require.NoError(t, tmpFile.Close())
 
 	var cfg MacroTestConfig
-	err = Load(&cfg, WithFile(tmpFile.Name()), WithEnv("TEST"))
+	err = Load(&cfg, WithFiles(tmpFile.Name()), WithEnv("TEST"))
 	require.NoError(t, err)
 
 	// Environment variable should override the macro-expanded value
@@ -2621,7 +2939,7 @@ func TestExpandMacros_InvalidMacroSyntax(t *testing.T) {
 	require.NoError(t, tmpFile.Close())
 
 	var cfg MacroTestConfig
-	err = Load(&cfg, WithFile(tmpFile.Name()))
+	err = Load(&cfg, WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
 	// Invalid syntax should remain unchanged

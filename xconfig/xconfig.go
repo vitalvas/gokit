@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -20,21 +21,22 @@ var (
 
 type Options struct {
 	files         []string
+	dirs          []string
 	envPrefix     string
 	customDefault interface{}
 }
 
 type Option func(*Options)
 
-func WithFile(filename string) Option {
-	return func(o *Options) {
-		o.files = append(o.files, filename)
-	}
-}
-
 func WithFiles(filenames ...string) Option {
 	return func(o *Options) {
 		o.files = append(o.files, filenames...)
+	}
+}
+
+func WithDirs(dirnames ...string) Option {
+	return func(o *Options) {
+		o.dirs = append(o.dirs, dirnames...)
 	}
 }
 
@@ -66,12 +68,21 @@ func Load(config interface{}, options ...Option) error {
 		}
 	}
 
+	// Load from directories first, then files
+	if len(opts.dirs) > 0 {
+		if err := loadFromDirs(config, opts.dirs); err != nil {
+			return fmt.Errorf("failed to load from directories: %w", err)
+		}
+	}
+
 	if len(opts.files) > 0 {
 		if err := loadFromFiles(config, opts.files); err != nil {
 			return fmt.Errorf("failed to load from files: %w", err)
 		}
+	}
 
-		// Expand macros in loaded configuration
+	// Expand macros in loaded configuration (if any files were loaded)
+	if len(opts.dirs) > 0 || len(opts.files) > 0 {
 		configValue := reflect.ValueOf(config).Elem()
 		expandMacrosInValue(configValue)
 	}
@@ -328,6 +339,53 @@ func getFieldTagName(fieldType reflect.StructField) string {
 
 	// Use field name converted to snake_case if no tags are present
 	return camelToSnake(fieldType.Name)
+}
+
+func isConfigFile(filename string) bool {
+	ext := strings.ToLower(filepath.Ext(filename))
+	return ext == ".json" || ext == ".yaml" || ext == ".yml"
+}
+
+func scanDirectory(dirname string) ([]string, error) {
+	var configFiles []string
+	
+	entries, err := os.ReadDir(dirname)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil // Directory doesn't exist, return empty list
+		}
+		return nil, fmt.Errorf("failed to read directory %s: %w", dirname, err)
+	}
+	
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue // Skip subdirectories
+		}
+		
+		filename := entry.Name()
+		if isConfigFile(filename) {
+			fullPath := filepath.Join(dirname, filename)
+			configFiles = append(configFiles, fullPath)
+		}
+	}
+	
+	// Sort files for deterministic loading order
+	sort.Strings(configFiles)
+	return configFiles, nil
+}
+
+func loadFromDirs(config interface{}, dirnames []string) error {
+	var allFiles []string
+	
+	for _, dirname := range dirnames {
+		files, err := scanDirectory(dirname)
+		if err != nil {
+			return fmt.Errorf("failed to scan directory %s: %w", dirname, err)
+		}
+		allFiles = append(allFiles, files...)
+	}
+	
+	return loadFromFiles(config, allFiles)
 }
 
 func loadFromFiles(config interface{}, filenames []string) error {
