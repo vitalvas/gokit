@@ -101,7 +101,7 @@ func TestGetStripedAddress(t *testing.T) {
 				t.Errorf("GetStripedAddress() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			if !got.Equal(tt.want) && !(got == nil && tt.want == nil) {
+			if !got.Equal(tt.want) && (got != nil || tt.want != nil) {
 				t.Errorf("GetStripedAddress() = %v, want %v", got, tt.want)
 			}
 		})
