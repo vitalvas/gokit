@@ -10,16 +10,16 @@ import (
 
 func TestNewBloomFilter(t *testing.T) {
 	tests := []struct {
-		n         uint
-		p         float64
+		n          uint
+		p          float64
 		expectMinM uint64 // Minimum expected size due to power-of-2 rounding
-		expectK   uint32
+		expectK    uint32
 	}{
-		{500, 0.01, 8192, 7},     // Will be rounded up to next power of 2
+		{500, 0.01, 8192, 7}, // Will be rounded up to next power of 2
 		{500, 0.001, 8192, 10},
 		{1000, 0.01, 16384, 7},
 		{1000, 0.001, 16384, 10},
-		{1_000_000, 0.01, 16777216, 7}, // 2^24
+		{1_000_000, 0.01, 16777216, 7},   // 2^24
 		{10_000_000, 0.01, 134217728, 7}, // 2^27
 	}
 
@@ -27,11 +27,11 @@ func TestNewBloomFilter(t *testing.T) {
 		bf := NewBloomFilter(test.n, test.p)
 		assert.GreaterOrEqual(t, bf.Size(), test.expectMinM, "NewBloomFilter(%d, %f) size should be at least %d", test.n, test.p, test.expectMinM)
 		assert.Equal(t, test.expectK, bf.K(), "NewBloomFilter(%d, %f) K", test.n, test.p)
-		
+
 		// Verify size is power of 2
 		size := bf.Size()
 		assert.Equal(t, uint64(0), size&(size-1), "Size should be power of 2")
-		
+
 		// Verify size is divisible by 64
 		assert.Equal(t, uint64(0), size%64, "Size should be divisible by 64")
 	}
@@ -83,22 +83,22 @@ func TestBloomFilter_AddBytes(t *testing.T) {
 
 func TestBloomFilter_StringVsBytes(t *testing.T) {
 	bf := NewBloomFilter(1000, 0.01)
-	
+
 	testStr := "hello world"
 	testBytes := []byte(testStr)
-	
+
 	// Add as string
 	bf.Add(testStr)
-	
+
 	// Should be found as both string and bytes
 	assert.True(t, bf.Contains(testStr), "Should contain string")
 	assert.True(t, bf.ContainsBytes(testBytes), "Should contain equivalent bytes")
-	
+
 	bf.Clear()
-	
+
 	// Add as bytes
 	bf.AddBytes(testBytes)
-	
+
 	// Should be found as both string and bytes
 	assert.True(t, bf.Contains(testStr), "Should contain equivalent string")
 	assert.True(t, bf.ContainsBytes(testBytes), "Should contain bytes")
@@ -166,21 +166,21 @@ func TestBloomFilter_ExportImport(t *testing.T) {
 
 func TestBloomFilter_EstimatedCount(t *testing.T) {
 	bf := NewBloomFilter(1000, 0.01)
-	
+
 	// Empty filter
 	assert.Equal(t, uint64(0), bf.EstimatedCount(), "Empty filter should have count 0")
-	
+
 	// Add some elements
 	elements := []string{"a", "b", "c", "d", "e"}
 	for _, elem := range elements {
 		bf.Add(elem)
 	}
-	
+
 	count := bf.EstimatedCount()
 	// Should be roughly close to the number of elements added
 	assert.Greater(t, count, uint64(0), "Should have non-zero count")
 	assert.Less(t, count, uint64(100), "Should not be too large")
-	
+
 	// Clear and verify
 	bf.Clear()
 	assert.Equal(t, uint64(0), bf.EstimatedCount(), "Cleared filter should have count 0")
@@ -188,13 +188,13 @@ func TestBloomFilter_EstimatedCount(t *testing.T) {
 
 func TestBloomFilter_Clear(t *testing.T) {
 	bf := NewBloomFilter(1000, 0.01)
-	
+
 	// Add elements
 	bf.Add("test1")
 	bf.Add("test2")
 	assert.True(t, bf.Contains("test1"))
 	assert.True(t, bf.Contains("test2"))
-	
+
 	// Clear
 	bf.Clear()
 	assert.False(t, bf.Contains("test1"))
@@ -220,7 +220,7 @@ func TestNextPowerOf2(t *testing.T) {
 		{1024, 1024},
 		{1025, 2048},
 	}
-	
+
 	for _, test := range tests {
 		result := nextPowerOf2(test.input)
 		assert.Equal(t, test.expected, result, "nextPowerOf2(%d)", test.input)
@@ -230,7 +230,7 @@ func TestNextPowerOf2(t *testing.T) {
 func TestBloomFilter_FalsePositiveRate(t *testing.T) {
 	// Test with a small filter to get measurable false positive rate
 	bf := NewBloomFilter(100, 0.1) // 10% false positive rate
-	
+
 	// Add 100 elements
 	added := make(map[string]bool)
 	for i := 0; i < 100; i++ {
@@ -238,20 +238,20 @@ func TestBloomFilter_FalsePositiveRate(t *testing.T) {
 		bf.Add(elem)
 		added[elem] = true
 	}
-	
+
 	// Test 1000 random elements not in the set
 	falsePositives := 0
 	total := 1000
-	
+
 	for i := 100; i < 100+total; i++ {
 		elem := fmt.Sprintf("element-%d", i)
 		if bf.Contains(elem) {
 			falsePositives++
 		}
 	}
-	
+
 	falsePositiveRate := float64(falsePositives) / float64(total)
-	
+
 	// Should be roughly around 10% but allow some variance
 	assert.Less(t, falsePositiveRate, 0.2, "False positive rate should be less than 20%")
 	t.Logf("False positive rate: %.2f%% (expected ~10%%)", falsePositiveRate*100)
@@ -267,13 +267,13 @@ func BenchmarkBloomFilter_Add(b *testing.B) {
 		{"10M", 10_000_000},
 		{"50M", 50_000_000},
 	}
-	
+
 	for _, bm := range benchmarks {
 		b.Run(bm.name, func(b *testing.B) {
 			bf := NewBloomFilter(bm.n, 0.01)
 			b.ReportAllocs()
 			b.ResetTimer()
-			
+
 			for i := 0; i < b.N; i++ {
 				bf.Add(fmt.Sprintf("test-%d", i))
 			}
@@ -284,10 +284,10 @@ func BenchmarkBloomFilter_Add(b *testing.B) {
 func BenchmarkBloomFilter_AddBytes(b *testing.B) {
 	bf := NewBloomFilter(1_000_000, 0.01)
 	data := []byte("benchmark-test-data")
-	
+
 	b.ReportAllocs()
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		bf.AddBytes(data)
 	}
@@ -301,19 +301,19 @@ func BenchmarkBloomFilter_Contains(b *testing.B) {
 		{"1M", 1_000_000},
 		{"10M", 10_000_000},
 	}
-	
+
 	for _, bm := range benchmarks {
 		b.Run(bm.name, func(b *testing.B) {
 			bf := NewBloomFilter(bm.n, 0.01)
-			
+
 			// Pre-populate
 			for i := 0; i < int(bm.n); i++ {
 				bf.Add(fmt.Sprintf("test-%d", i))
 			}
-			
+
 			b.ReportAllocs()
 			b.ResetTimer()
-			
+
 			for i := 0; i < b.N; i++ {
 				bf.Contains(fmt.Sprintf("test-%d", i%int(bm.n)))
 			}
@@ -325,10 +325,10 @@ func BenchmarkBloomFilter_ContainsBytes(b *testing.B) {
 	bf := NewBloomFilter(1_000_000, 0.01)
 	data := []byte("benchmark-test-data")
 	bf.AddBytes(data)
-	
+
 	b.ReportAllocs()
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		bf.ContainsBytes(data)
 	}
@@ -337,10 +337,10 @@ func BenchmarkBloomFilter_ContainsBytes(b *testing.B) {
 func BenchmarkHash(b *testing.B) {
 	bf := NewBloomFilter(1000, 0.01)
 	testStr := "benchmark test string for hashing performance"
-	
+
 	b.ReportAllocs()
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		bf.hash(testStr)
 	}
@@ -349,10 +349,10 @@ func BenchmarkHash(b *testing.B) {
 func BenchmarkHashBytes(b *testing.B) {
 	bf := NewBloomFilter(1000, 0.01)
 	testData := []byte("benchmark test string for hashing performance")
-	
+
 	b.ReportAllocs()
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		bf.hashBytes(testData)
 	}

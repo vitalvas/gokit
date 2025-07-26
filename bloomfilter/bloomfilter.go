@@ -19,15 +19,15 @@ type BloomFilter struct {
 func NewBloomFilter(n uint, p float64) *BloomFilter {
 	optM := optimalM(n, p)
 	k := optimalK(n, optM)
-	
+
 	// Round up to next power of 2 for faster modulo operations
 	m := nextPowerOf2(optM)
-	
+
 	// Ensure m is divisible by 64 for efficient bit operations
 	if m%64 != 0 {
 		m = ((m / 64) + 1) * 64
 	}
-	
+
 	return &BloomFilter{
 		bitset: make([]uint64, m/64),
 		m:      m,
@@ -39,15 +39,15 @@ func NewBloomFilter(n uint, p float64) *BloomFilter {
 // Add element to the bloom filter using double hashing technique
 func (bf *BloomFilter) Add(element string) {
 	h1, h2 := bf.hash(element)
-	
+
 	for i := uint32(0); i < bf.k; i++ {
 		// Double hashing: hash = h1 + i*h2
 		hash := (h1 + uint64(i)*h2) & bf.mask
-		
+
 		// Calculate word and bit position
 		wordIdx := hash >> 6 // Divide by 64
 		bitIdx := hash & 63  // Modulo 64
-		
+
 		// Set bit using atomic OR operation
 		bf.bitset[wordIdx] |= 1 << bitIdx
 	}
@@ -56,15 +56,15 @@ func (bf *BloomFilter) Add(element string) {
 // Contains checks if element might be in the set
 func (bf *BloomFilter) Contains(element string) bool {
 	h1, h2 := bf.hash(element)
-	
+
 	for i := uint32(0); i < bf.k; i++ {
 		// Double hashing: hash = h1 + i*h2
 		hash := (h1 + uint64(i)*h2) & bf.mask
-		
+
 		// Calculate word and bit position
 		wordIdx := hash >> 6 // Divide by 64
 		bitIdx := hash & 63  // Modulo 64
-		
+
 		// Check bit
 		if (bf.bitset[wordIdx] & (1 << bitIdx)) == 0 {
 			return false
@@ -76,7 +76,7 @@ func (bf *BloomFilter) Contains(element string) bool {
 // AddBytes adds raw bytes to the bloom filter (zero-allocation version)
 func (bf *BloomFilter) AddBytes(data []byte) {
 	h1, h2 := bf.hashBytes(data)
-	
+
 	for i := uint32(0); i < bf.k; i++ {
 		hash := (h1 + uint64(i)*h2) & bf.mask
 		wordIdx := hash >> 6
@@ -88,7 +88,7 @@ func (bf *BloomFilter) AddBytes(data []byte) {
 // ContainsBytes checks if raw bytes might be in the set (zero-allocation version)
 func (bf *BloomFilter) ContainsBytes(data []byte) bool {
 	h1, h2 := bf.hashBytes(data)
-	
+
 	for i := uint32(0); i < bf.k; i++ {
 		hash := (h1 + uint64(i)*h2) & bf.mask
 		wordIdx := hash >> 6
@@ -115,42 +115,42 @@ func (bf *BloomFilter) hashBytes(data []byte) (uint64, uint64) {
 		prime3 = 0x165667B19E3779F9
 		prime4 = 0x85EBCA77C2B2AE63
 	)
-	
+
 	h1 := uint64(len(data)) * prime1
 	h2 := uint64(len(data)) * prime2
-	
+
 	// Process 8-byte chunks
 	for len(data) >= 8 {
 		k := *(*uint64)(unsafe.Pointer(&data[0]))
 		h1 ^= (k * prime3)
 		h1 = rotateLeft64(h1, 27) * prime1
-		
+
 		h2 ^= (k * prime4)
 		h2 = rotateLeft64(h2, 31) * prime2
-		
+
 		data = data[8:]
 	}
-	
+
 	// Process remaining bytes
 	for len(data) > 0 {
 		h1 ^= uint64(data[0]) * prime1
 		h1 = rotateLeft64(h1, 11) * prime2
-		
+
 		h2 ^= uint64(data[0]) * prime2
 		h2 = rotateLeft64(h2, 13) * prime1
-		
+
 		data = data[1:]
 	}
-	
+
 	// Final mixing
 	h1 ^= h1 >> 33
 	h1 *= prime3
 	h1 ^= h1 >> 33
-	
+
 	h2 ^= h2 >> 33
 	h2 *= prime4
 	h2 ^= h2 >> 33
-	
+
 	return h1, h2
 }
 
@@ -178,7 +178,7 @@ func nextPowerOf2(n uint) uint64 {
 func (bf *BloomFilter) Export() ([]byte, error) {
 	var buf bytes.Buffer
 	encoder := gob.NewEncoder(&buf)
-	
+
 	exportData := struct {
 		Bitset []uint64
 		M      uint64
@@ -188,7 +188,7 @@ func (bf *BloomFilter) Export() ([]byte, error) {
 		M:      bf.m,
 		K:      bf.k,
 	}
-	
+
 	if err := encoder.Encode(exportData); err != nil {
 		return nil, err
 	}
@@ -202,13 +202,13 @@ func ImportBloomFilter(data []byte) (*BloomFilter, error) {
 		M      uint64
 		K      uint32
 	}
-	
+
 	buf := bytes.NewBuffer(data)
 	decoder := gob.NewDecoder(buf)
 	if err := decoder.Decode(&exportData); err != nil {
 		return nil, err
 	}
-	
+
 	return &BloomFilter{
 		bitset: exportData.Bitset,
 		m:      exportData.M,
@@ -233,22 +233,22 @@ func (bf *BloomFilter) EstimatedCount() uint64 {
 	for _, word := range bf.bitset {
 		setBits += uint64(popcount(word))
 	}
-	
+
 	if setBits == 0 {
 		return 0
 	}
-	
+
 	// Using the formula: n ≈ -(m/k) * ln(1 - X/m) where X is number of set bits
 	ratio := float64(setBits) / float64(bf.m)
 	if ratio >= 1.0 {
 		return math.MaxUint64 // Filter is full
 	}
-	
+
 	estimated := -float64(bf.m) / float64(bf.k) * math.Log(1.0-ratio)
 	if estimated < 0 {
 		return 0
 	}
-	
+
 	return uint64(estimated)
 }
 

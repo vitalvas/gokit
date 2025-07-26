@@ -94,6 +94,120 @@ func TestLoad_DefaultsOnly(t *testing.T) {
 	assert.False(t, cfg.DB.SSL)
 }
 
+type MultiLevelConfig struct {
+	Name  string         `yaml:"name" json:"name"`
+	Level LevelOneConfig `yaml:"level" json:"level"`
+}
+
+func (c *MultiLevelConfig) Default() {
+	*c = MultiLevelConfig{
+		Name: "multi-level",
+	}
+}
+
+type LevelOneConfig struct {
+	Value string         `yaml:"value" json:"value"`
+	Level LevelTwoConfig `yaml:"level" json:"level"`
+}
+
+func (c *LevelOneConfig) Default() {
+	*c = LevelOneConfig{
+		Value: "level-one",
+	}
+}
+
+type LevelTwoConfig struct {
+	Setting string `yaml:"setting" json:"setting"`
+}
+
+func (c *LevelTwoConfig) Default() {
+	*c = LevelTwoConfig{
+		Setting: "level-two",
+	}
+}
+
+func TestLoad_MultiLevelDefaultsWithCustomDefault(t *testing.T) {
+	customDefault := MultiLevelConfig{
+		Name: "custom-name",
+		Level: LevelOneConfig{
+			Value: "custom-level-one",
+		},
+	}
+
+	var cfg MultiLevelConfig
+
+	err := Load(&cfg, WithDefault(customDefault))
+	require.NoError(t, err)
+
+	assert.Equal(t, "custom-name", cfg.Name)
+	assert.Equal(t, "custom-level-one", cfg.Level.Value)
+	assert.Equal(t, "", cfg.Level.Level.Setting)
+}
+
+func TestLoad_MultiLevelPriorityChain(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "xconfig-test-*")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	dirConfigContent := `name: "dir-config"
+level:
+  value: "dir-level-one"
+  level:
+    setting: "dir-level-two"`
+
+	dirConfigFile := filepath.Join(tmpDir, "config.yaml")
+	require.NoError(t, os.WriteFile(dirConfigFile, []byte(dirConfigContent), 0644))
+
+	fileConfigContent := `name: "file-config"
+level:
+  value: "file-level-one"`
+
+	tmpFile, err := os.CreateTemp("", "explicit-config-*.yaml")
+	require.NoError(t, err)
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+	_, err = tmpFile.WriteString(fileConfigContent)
+	require.NoError(t, err)
+	require.NoError(t, tmpFile.Close())
+
+	envVars := map[string]string{
+		"TEST_NAME":                "env-config",
+		"TEST_LEVEL_LEVEL_SETTING": "env-level-two",
+	}
+
+	for key, value := range envVars {
+		require.NoError(t, os.Setenv(key, value))
+	}
+	defer func() {
+		for key := range envVars {
+			_ = os.Unsetenv(key)
+		}
+	}()
+
+	customDefault := MultiLevelConfig{
+		Name: "custom-default",
+		Level: LevelOneConfig{
+			Value: "custom-level-one",
+			Level: LevelTwoConfig{
+				Setting: "custom-level-two",
+			},
+		},
+	}
+
+	var cfg MultiLevelConfig
+
+	err = Load(&cfg,
+		WithDefault(customDefault),
+		WithDirs(tmpDir),
+		WithFiles(tmpFile.Name()),
+		WithEnv("TEST"))
+	require.NoError(t, err)
+
+	assert.Equal(t, "env-config", cfg.Name)
+	assert.Equal(t, "file-level-one", cfg.Level.Value)
+	assert.Equal(t, "env-level-two", cfg.Level.Level.Setting)
+}
+
 func TestLoad_WithFiles(t *testing.T) {
 	yamlContent := `logger:
   level: debug
@@ -2042,7 +2156,7 @@ func TestLoad_CamelCaseFieldNames(t *testing.T) {
 
 	envVars := map[string]string{
 		"TEST_THE_LONG_KEY":  "long-key-value",
-		"TEST_ANOTHER_FIELD": "another-field-value", 
+		"TEST_ANOTHER_FIELD": "another-field-value",
 		"TEST_XML_PARSER":    "xml-parser-value",  // XMLParser -> xml_parser
 		"TEST_HTTP_CLIENT":   "http-client-value", // HTTPClient -> http_client
 	}
@@ -2062,10 +2176,10 @@ func TestLoad_CamelCaseFieldNames(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify camelCase to snake_case conversion works correctly
-	assert.Equal(t, "long-key-value", cfg.TheLongKey)     // TheLongKey -> the_long_key
+	assert.Equal(t, "long-key-value", cfg.TheLongKey)        // TheLongKey -> the_long_key
 	assert.Equal(t, "another-field-value", cfg.AnotherField) // AnotherField -> another_field
-	assert.Equal(t, "xml-parser-value", cfg.XMLParser)    // XMLParser -> xml_parser (acronym)
-	assert.Equal(t, "http-client-value", cfg.HTTPClient)  // HTTPClient -> http_client (acronym)
+	assert.Equal(t, "xml-parser-value", cfg.XMLParser)       // XMLParser -> xml_parser (acronym)
+	assert.Equal(t, "http-client-value", cfg.HTTPClient)     // HTTPClient -> http_client (acronym)
 }
 
 func TestCamelToSnake(t *testing.T) {
@@ -2139,12 +2253,12 @@ health:
 	require.NoError(t, err)
 
 	// Files should be loaded in alphabetical order: app.yaml, database.json, override.yml
-	assert.Equal(t, "debug", cfg.Logger.Level)     // from app.yaml
-	assert.Equal(t, ":8080", cfg.Health.Address)  // from app.yaml
-	assert.Equal(t, "remote-host", cfg.DB.Host)   // from database.json
-	assert.Equal(t, 3306, cfg.DB.Port)            // from database.json
-	assert.Equal(t, "admin", cfg.DB.Username)     // from override.yml
-	assert.True(t, cfg.DB.SSL)                    // from override.yml
+	assert.Equal(t, "debug", cfg.Logger.Level)   // from app.yaml
+	assert.Equal(t, ":8080", cfg.Health.Address) // from app.yaml
+	assert.Equal(t, "remote-host", cfg.DB.Host)  // from database.json
+	assert.Equal(t, 3306, cfg.DB.Port)           // from database.json
+	assert.Equal(t, "admin", cfg.DB.Username)    // from override.yml
+	assert.True(t, cfg.DB.SSL)                   // from override.yml
 }
 
 func TestLoad_WithMultipleDirs(t *testing.T) {
@@ -2181,9 +2295,9 @@ db:
 	require.NoError(t, err)
 
 	// Values from second directory should override first
-	assert.Equal(t, "warn", cfg.Logger.Level)        // overridden by second dir
-	assert.Equal(t, ":9090", cfg.Health.Address)    // from first dir
-	assert.Equal(t, "override-host", cfg.DB.Host)   // from second dir
+	assert.Equal(t, "warn", cfg.Logger.Level)     // overridden by second dir
+	assert.Equal(t, ":9090", cfg.Health.Address)  // from first dir
+	assert.Equal(t, "override-host", cfg.DB.Host) // from second dir
 }
 
 func TestLoad_WithDirsAndFiles(t *testing.T) {
@@ -2219,8 +2333,8 @@ health:
 	err = Load(&cfg, WithDirs(tmpDir), WithFiles(tmpFile.Name()))
 	require.NoError(t, err)
 
-	assert.Equal(t, "error", cfg.Logger.Level)     // overridden by file
-	assert.Equal(t, ":7070", cfg.Health.Address)  // from file
+	assert.Equal(t, "error", cfg.Logger.Level)   // overridden by file
+	assert.Equal(t, ":7070", cfg.Health.Address) // from file
 }
 
 func TestLoad_WithDirNonExistent(t *testing.T) {
@@ -2264,8 +2378,8 @@ func TestScanDirectory(t *testing.T) {
 
 	// Create various files
 	files := map[string]string{
-		"config.yaml": "test: yaml",
-		"app.json":    `{"test": "json"}`,
+		"config.yaml":  "test: yaml",
+		"app.json":     `{"test": "json"}`,
 		"override.yml": "test: yml",
 		"readme.txt":   "not a config file",
 		"script.sh":    "#!/bin/bash",
@@ -2359,7 +2473,7 @@ func TestLoad_WithDirsFileOrderAscending(t *testing.T) {
 	// But the content shows the loading order when sorted alphabetically
 	files := map[string]string{
 		"z_last.yaml":   `logger: {level: "from-z-last"}`,   // This should load LAST alphabetically
-		"a_first.yaml":  `logger: {level: "from-a-first"}`,  // This should load FIRST alphabetically  
+		"a_first.yaml":  `logger: {level: "from-a-first"}`,  // This should load FIRST alphabetically
 		"m_middle.yaml": `logger: {level: "from-m-middle"}`, // This should load in MIDDLE alphabetically
 	}
 
@@ -2385,7 +2499,7 @@ func TestScanDirectoryAscendingOrder(t *testing.T) {
 
 	// Create files in non-alphabetical order in the filesystem
 	filenames := []string{"zebra.yaml", "alpha.json", "beta.yml", "gamma.yaml"}
-	
+
 	for _, filename := range filenames {
 		filePath := filepath.Join(tmpDir, filename)
 		require.NoError(t, os.WriteFile(filePath, []byte("test"), 0644))
@@ -2403,12 +2517,12 @@ func TestScanDirectoryAscendingOrder(t *testing.T) {
 	}
 
 	assert.Equal(t, expected, configFiles)
-	
+
 	// Verify that they are indeed sorted in ascending order
 	for i := 1; i < len(configFiles); i++ {
 		prevFile := filepath.Base(configFiles[i-1])
 		currFile := filepath.Base(configFiles[i])
-		assert.True(t, prevFile < currFile, 
+		assert.True(t, prevFile < currFile,
 			"Files should be in ascending order: %s should come before %s", prevFile, currFile)
 	}
 }

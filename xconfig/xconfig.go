@@ -255,9 +255,10 @@ func callDefaultsRecursive(v reflect.Value, path string) error {
 		return nil
 	}
 
+	// Call Default method if it exists
 	if method := v.Addr().MethodByName("Default"); method.IsValid() {
 		method.Call(nil)
-		return nil
+		// Continue to process nested fields after calling Default()
 	}
 
 	switch v.Kind() {
@@ -308,7 +309,7 @@ func loadFromFile(config interface{}, filename string) error {
 func camelToSnake(s string) string {
 	var result strings.Builder
 	runes := []rune(s)
-	
+
 	for i, r := range runes {
 		if i > 0 && unicode.IsUpper(r) {
 			// Add underscore before uppercase letters, except when:
@@ -316,7 +317,7 @@ func camelToSnake(s string) string {
 			// 2. Next character is lowercase (end of acronym)
 			prevUpper := i > 0 && unicode.IsUpper(runes[i-1])
 			nextLower := i < len(runes)-1 && unicode.IsLower(runes[i+1])
-			
+
 			if !prevUpper || nextLower {
 				result.WriteByte('_')
 			}
@@ -348,7 +349,7 @@ func isConfigFile(filename string) bool {
 
 func scanDirectory(dirname string) ([]string, error) {
 	var configFiles []string
-	
+
 	entries, err := os.ReadDir(dirname)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -356,19 +357,19 @@ func scanDirectory(dirname string) ([]string, error) {
 		}
 		return nil, fmt.Errorf("failed to read directory %s: %w", dirname, err)
 	}
-	
+
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue // Skip subdirectories
 		}
-		
+
 		filename := entry.Name()
 		if isConfigFile(filename) {
 			fullPath := filepath.Join(dirname, filename)
 			configFiles = append(configFiles, fullPath)
 		}
 	}
-	
+
 	// Sort files for deterministic loading order
 	sort.Strings(configFiles)
 	return configFiles, nil
@@ -376,7 +377,7 @@ func scanDirectory(dirname string) ([]string, error) {
 
 func loadFromDirs(config interface{}, dirnames []string) error {
 	var allFiles []string
-	
+
 	for _, dirname := range dirnames {
 		files, err := scanDirectory(dirname)
 		if err != nil {
@@ -384,7 +385,7 @@ func loadFromDirs(config interface{}, dirnames []string) error {
 		}
 		allFiles = append(allFiles, files...)
 	}
-	
+
 	return loadFromFiles(config, allFiles)
 }
 
