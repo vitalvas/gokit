@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.1](https://github.com/vitalvas/gokit/compare/v0.17.0...v0.17.1) (2025-07-26)
+
+
+### Bug Fixes
+
+* **xconfig:** merge keys by priority ([4e8890d](https://github.com/vitalvas/gokit/commit/4e8890d446fdaefa3120d2cf206c80b86cfa075f))
+
 ## [0.17.0](https://github.com/vitalvas/gokit/compare/v0.16.0...v0.17.0) (2025-07-12)
 
 
