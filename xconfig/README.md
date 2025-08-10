@@ -7,6 +7,7 @@ A flexible Go configuration library that supports loading from multiple sources 
 - **Multiple file formats**: YAML, JSON, YML
 - **Environment variables**: with prefix support
 - **Multiple files**: load and merge from multiple configuration files
+- **Default tags**: set default values using struct tags (`default:"value"`)
 - **Custom defaults**: override struct defaults programmatically
 - **Macro expansion**: `${env:VAR_NAME}` syntax for environment variable substitution
 - **Data types**: strings, numbers, booleans, slices, maps
@@ -35,23 +36,12 @@ type Config struct {
 }
 
 type LoggerConfig struct {
-    Level string `yaml:"level" json:"level"`
-}
-
-func (c *LoggerConfig) Default() {
-    *c = LoggerConfig{Level: "info"}
+    Level string `yaml:"level" json:"level" default:"info"`
 }
 
 type HealthConfig struct {
-    Address string `yaml:"address" json:"address"`
-    Enabled bool   `yaml:"enabled" json:"enabled"`
-}
-
-func (c *HealthConfig) Default() {
-    *c = HealthConfig{
-        Address: ":8080",
-        Enabled: true,
-    }
+    Address string `yaml:"address" json:"address" default:":8080"`
+    Enabled bool   `yaml:"enabled" json:"enabled" default:"true"`
 }
 
 func main() {
@@ -72,7 +62,21 @@ func main() {
 
 ## Configuration Sources
 
-### 1. Struct Defaults
+### 1. Default Tags (Recommended)
+Set default values directly in struct tags:
+```go
+type Config struct {
+    Host    string `yaml:"host" default:"localhost"`
+    Port    int    `yaml:"port" default:"8080"`
+    Enabled bool   `yaml:"enabled" default:"true"`
+    Timeout float64 `yaml:"timeout" default:"30.5"`
+    Debug   bool   `yaml:"debug" default:"false"`
+}
+```
+
+**Supported types**: `string`, `int`, `int8`, `int16`, `int32`, `int64`, `uint`, `uint8`, `uint16`, `uint32`, `uint64`, `bool`, `float32`, `float64`, and pointer types.
+
+### 2. Struct Defaults (Legacy)
 ```go
 func (c *Config) Default() {
     *c = Config{
@@ -82,7 +86,9 @@ func (c *Config) Default() {
 }
 ```
 
-### 2. Custom Defaults
+**Note**: `Default()` methods take precedence over `default` tags.
+
+### 3. Custom Defaults
 ```go
 customDefaults := Config{
     Logger: LoggerConfig{Level: "debug"},
@@ -91,7 +97,7 @@ customDefaults := Config{
 err := xconfig.Load(&cfg, xconfig.WithDefault(customDefaults))
 ```
 
-### 3. Configuration Files
+### 4. Configuration Files
 
 **YAML** (`config.yaml`):
 ```yaml
@@ -115,14 +121,14 @@ health:
 }
 ```
 
-### 4. Environment Variables
+### 5. Environment Variables
 ```bash
 APP_LOGGER_LEVEL=error
 APP_HEALTH_ADDRESS=:3000
 APP_HEALTH_ENABLED=false
 ```
 
-### 5. Macro Expansion
+### 6. Macro Expansion
 
 Configuration files support `${env:VAR_NAME}` macro syntax for environment variable substitution:
 
@@ -166,6 +172,85 @@ servers:
   - "web1.example.com"
   - "web2.example.com"
   - "static.example.com"
+```
+
+## Default Tag Reference
+
+### Supported Types and Examples
+
+```go
+type Config struct {
+    // String values
+    Name        string `yaml:"name" default:"myapp"`
+    Environment string `yaml:"env" default:"production"`
+    
+    // Integer types
+    Port        int    `yaml:"port" default:"8080"`
+    Workers     int32  `yaml:"workers" default:"4"`
+    MaxConns    int64  `yaml:"max_conns" default:"1000"`
+    
+    // Unsigned integer types  
+    BufferSize  uint   `yaml:"buffer_size" default:"1024"`
+    Timeout     uint32 `yaml:"timeout" default:"30"`
+    
+    // Boolean values
+    Enabled     bool   `yaml:"enabled" default:"true"`
+    Debug       bool   `yaml:"debug" default:"false"`
+    
+    // Float types
+    Ratio       float32 `yaml:"ratio" default:"0.75"`
+    Threshold   float64 `yaml:"threshold" default:"99.5"`
+    
+    // Pointer types (automatically initialized)
+    OptionalHost *string `yaml:"optional_host" default:"localhost"`
+    OptionalPort *int    `yaml:"optional_port" default:"3000"`
+}
+```
+
+### Default Tag Rules
+
+1. **Zero Value Check**: Default tags are only applied to fields with zero values
+2. **Type Validation**: Values are parsed and validated according to the field type
+3. **Overflow Protection**: Integer values are checked for overflow
+4. **Error Handling**: Invalid default values cause load errors with descriptive messages
+
+### Nested Structs with Default Tags
+
+```go
+type ServerConfig struct {
+    HTTP HTTPConfig `yaml:"http"`
+    DB   DBConfig   `yaml:"database"`
+}
+
+type HTTPConfig struct {
+    Host        string `yaml:"host" default:"0.0.0.0"`
+    Port        int    `yaml:"port" default:"8080"`
+    ReadTimeout int    `yaml:"read_timeout" default:"30"`
+}
+
+type DBConfig struct {
+    Host     string `yaml:"host" default:"localhost"`
+    Port     int    `yaml:"port" default:"5432"`
+    Database string `yaml:"database" default:"myapp"`
+    SSL      bool   `yaml:"ssl" default:"true"`
+}
+```
+
+### Combining Default Tags with Default Methods
+
+```go
+type LoggerConfig struct {
+    Level  string `yaml:"level" default:"info"`  // Tag default
+    Format string `yaml:"format" default:"json"` // Tag default
+    File   string `yaml:"file"`                  // No default tag
+}
+
+// Default method overrides tag defaults
+func (c *LoggerConfig) Default() {
+    c.Level = "warn"  // Overrides tag default "info" → "warn"
+    c.File = "/var/log/app.log"  // Sets value for field without tag
+    // c.Format remains "json" from tag since not overridden
+}
 ```
 
 ## Advanced Features
@@ -232,11 +317,12 @@ type Config struct {
 Configuration values are resolved in this order (later sources override earlier ones):
 
 ```
-1. Struct Defaults → 2. Custom Defaults → 3. Directories → 4. Files → 5. Environment Variables
-   (lowest priority)                                                         (highest priority)
+1. Default Tags → 2. Default() Methods → 3. Custom Defaults → 4. Directories → 5. Files → 6. Environment Variables
+   (lowest priority)                                                                                (highest priority)
 ```
 
 **Note**: 
+- Default tags are applied first, then `Default()` methods override them
 - Directories are processed before individual files
 - Macro expansion happens after all files/directories are loaded but before environment variables are processed
 - Environment variables always have the highest precedence
@@ -245,34 +331,40 @@ Configuration values are resolved in this order (later sources override earlier 
 
 | Priority | Source | Method | Override Behavior |
 |----------|--------|--------|-------------------|
-| 1 (Lowest) | **Struct Defaults** | `Default()` methods | Sets initial values |
-| 2 | **Custom Defaults** | `WithDefault(config)` | Overrides struct defaults |
-| 3 | **Directory Files** | `WithDirs()` | Overrides custom defaults |
-| 4 | **Configuration Files** | `WithFiles()` | Overrides directory files |
-| 4.5 | **Macro Expansion** | `${env:VAR}` in files | Expands macros in loaded config |
-| 5 (Highest) | **Environment Variables** | `WithEnv(prefix)` | Overrides everything |
+| 1 (Lowest) | **Default Tags** | `default:"value"` tags | Sets initial values from struct tags |
+| 2 | **Default Methods** | `Default()` methods | Overrides default tags |
+| 3 | **Custom Defaults** | `WithDefault(config)` | Overrides default methods |
+| 4 | **Directory Files** | `WithDirs()` | Overrides custom defaults |
+| 5 | **Configuration Files** | `WithFiles()` | Overrides directory files |
+| 5.5 | **Macro Expansion** | `${env:VAR}` in files | Expands macros in loaded config |
+| 6 (Highest) | **Environment Variables** | `WithEnv(prefix)` | Overrides everything |
 
 ### Example Priority Resolution
 
 ```go
-// 1. Struct Default
+// 1. Default Tag
+type LoggerConfig struct {
+    Level string `yaml:"level" default:"info"`  // Initial value
+}
+
+// 2. Default Method (overrides tag)
 func (c *LoggerConfig) Default() {
-    c.Level = "info"  // Initial value
+    c.Level = "debug"  // Overrides "info" → "debug"
 }
 
-// 2. Custom Default
+// 3. Custom Default
 customDefaults := Config{
-    Logger: LoggerConfig{Level: "debug"},  // Overrides "info" → "debug"
+    Logger: LoggerConfig{Level: "warn"},  // Overrides "debug" → "warn"
 }
 
-// 3. Configuration File (config.yaml)
+// 4. Configuration File (config.yaml)
 logger:
-  level: "warn"  # Overrides "debug" → "warn"
+  level: "error"  # Overrides "warn" → "error"
 
-// 4. Environment Variable
-APP_LOGGER_LEVEL=error  # Overrides "warn" → "error" (final value)
+// 5. Environment Variable
+APP_LOGGER_LEVEL=fatal  # Overrides "error" → "fatal" (final value)
 
-// Result: cfg.Logger.Level = "error"
+// Result: cfg.Logger.Level = "fatal"
 ```
 
 ### Multiple Files Priority
@@ -298,11 +390,20 @@ Each subsequent file can override values from previous files.
 
 ## Supported Types
 
+### For Configuration Fields
 - **Primitives**: `string`, `int`, `bool`, `float64`, etc.
 - **Slices**: `[]string`, `[]int`, `[]bool`, `[]float64`
 - **Maps**: `map[string]string`, `map[string]int`, etc.
 - **Structs**: Nested configuration structures
 - **Pointers**: `*Config`, `*string`, etc.
+
+### For Default Tags
+- **Strings**: `string`
+- **Integers**: `int`, `int8`, `int16`, `int32`, `int64`
+- **Unsigned Integers**: `uint`, `uint8`, `uint16`, `uint32`, `uint64`
+- **Booleans**: `bool` (accepts: `"true"`, `"false"`, `"1"`, `"0"`)
+- **Floats**: `float32`, `float64`
+- **Pointers**: `*string`, `*int`, etc. (automatically initialized)
 
 ## Environment Variable Key Construction
 

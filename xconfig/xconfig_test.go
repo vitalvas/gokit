@@ -3059,3 +3059,274 @@ func TestExpandMacros_InvalidMacroSyntax(t *testing.T) {
 	// Invalid syntax should remain unchanged
 	assert.Equal(t, "Invalid syntax ${env:} and ${env:MISSING_CLOSING", cfg.BasicString)
 }
+
+type DefaultTagConfig struct {
+	StringField  string  `yaml:"string_field" default:"default_string"`
+	IntField     int     `yaml:"int_field" default:"42"`
+	BoolField    bool    `yaml:"bool_field" default:"true"`
+	FloatField   float64 `yaml:"float_field" default:"3.14"`
+	UintField    uint    `yaml:"uint_field" default:"100"`
+	NoDefaultTag string  `yaml:"no_default"`
+	EmptyDefault string  `yaml:"empty_default" default:""`
+}
+
+type DefaultTagWithMethodConfig struct {
+	StringField string `yaml:"string_field" default:"tag_default"`
+	IntField    int    `yaml:"int_field" default:"10"`
+}
+
+func (c *DefaultTagWithMethodConfig) Default() {
+	c.StringField = "method_default"
+	c.IntField = 99
+}
+
+type NestedDefaultTagConfig struct {
+	Parent ParentConfig `yaml:"parent"`
+	Value  string       `yaml:"value" default:"root_default"`
+}
+
+type ParentConfig struct {
+	Child ChildConfig `yaml:"child"`
+	Name  string      `yaml:"name" default:"parent_default"`
+}
+
+type ChildConfig struct {
+	Setting string `yaml:"setting" default:"child_default"`
+	Count   int    `yaml:"count" default:"5"`
+}
+
+type PointerDefaultTagConfig struct {
+	StringPtr *string `yaml:"string_ptr" default:"pointer_default"`
+	IntPtr    *int    `yaml:"int_ptr" default:"123"`
+}
+
+type DefaultTagPriorityConfig struct {
+	StringField string `yaml:"string_field" default:"tag_default"`
+	IntField    int    `yaml:"int_field" default:"42"`
+}
+
+type UnsupportedTypeConfig struct {
+	SliceField []string `yaml:"slice_field" default:"unsupported"`
+}
+
+func TestDefaultTag(t *testing.T) {
+	t.Run("basic types", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			config   DefaultTagConfig
+			expected DefaultTagConfig
+		}{
+			{
+				name:   "all fields use default tags",
+				config: DefaultTagConfig{},
+				expected: DefaultTagConfig{
+					StringField:  "default_string",
+					IntField:     42,
+					BoolField:    true,
+					FloatField:   3.14,
+					UintField:    100,
+					NoDefaultTag: "",
+					EmptyDefault: "",
+				},
+			},
+			{
+				name: "some fields already set",
+				config: DefaultTagConfig{
+					StringField: "existing_value",
+					IntField:    99,
+				},
+				expected: DefaultTagConfig{
+					StringField:  "existing_value",
+					IntField:     99,
+					BoolField:    true,
+					FloatField:   3.14,
+					UintField:    100,
+					NoDefaultTag: "",
+					EmptyDefault: "",
+				},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				cfg := tt.config
+				err := Load(&cfg)
+				require.NoError(t, err)
+
+				assert.Equal(t, tt.expected.StringField, cfg.StringField)
+				assert.Equal(t, tt.expected.IntField, cfg.IntField)
+				assert.Equal(t, tt.expected.BoolField, cfg.BoolField)
+				assert.Equal(t, tt.expected.FloatField, cfg.FloatField)
+				assert.Equal(t, tt.expected.UintField, cfg.UintField)
+				assert.Equal(t, tt.expected.NoDefaultTag, cfg.NoDefaultTag)
+				assert.Equal(t, tt.expected.EmptyDefault, cfg.EmptyDefault)
+			})
+		}
+	})
+
+	t.Run("with default method", func(t *testing.T) {
+		t.Run("default method overrides default tags", func(t *testing.T) {
+			var cfg DefaultTagWithMethodConfig
+			err := Load(&cfg)
+			require.NoError(t, err)
+
+			// Default method should override tag defaults
+			assert.Equal(t, "method_default", cfg.StringField)
+			assert.Equal(t, 99, cfg.IntField)
+		})
+	})
+
+	t.Run("nested structs", func(t *testing.T) {
+		t.Run("nested structs with default tags", func(t *testing.T) {
+			var cfg NestedDefaultTagConfig
+			err := Load(&cfg)
+			require.NoError(t, err)
+
+			assert.Equal(t, "root_default", cfg.Value)
+			assert.Equal(t, "parent_default", cfg.Parent.Name)
+			assert.Equal(t, "child_default", cfg.Parent.Child.Setting)
+			assert.Equal(t, 5, cfg.Parent.Child.Count)
+		})
+	})
+
+	t.Run("pointers", func(t *testing.T) {
+		t.Run("pointer fields with default tags", func(t *testing.T) {
+			var cfg PointerDefaultTagConfig
+			err := Load(&cfg)
+			require.NoError(t, err)
+
+			require.NotNil(t, cfg.StringPtr)
+			assert.Equal(t, "pointer_default", *cfg.StringPtr)
+
+			require.NotNil(t, cfg.IntPtr)
+			assert.Equal(t, 123, *cfg.IntPtr)
+		})
+
+		t.Run("already initialized pointer fields", func(t *testing.T) {
+			existingStr := "existing"
+			existingInt := 999
+			cfg := PointerDefaultTagConfig{
+				StringPtr: &existingStr,
+				IntPtr:    &existingInt,
+			}
+
+			err := Load(&cfg)
+			require.NoError(t, err)
+
+			// Should keep existing values, not apply defaults
+			require.NotNil(t, cfg.StringPtr)
+			assert.Equal(t, "existing", *cfg.StringPtr)
+
+			require.NotNil(t, cfg.IntPtr)
+			assert.Equal(t, 999, *cfg.IntPtr)
+		})
+	})
+
+	t.Run("invalid values", func(t *testing.T) {
+		tests := []struct {
+			name   string
+			config interface{}
+			errMsg string
+		}{
+			{
+				name: "invalid boolean",
+				config: &struct {
+					Field bool `default:"not_a_bool"`
+				}{},
+				errMsg: "invalid boolean default value",
+			},
+			{
+				name: "invalid integer",
+				config: &struct {
+					Field int `default:"not_an_int"`
+				}{},
+				errMsg: "invalid integer default value",
+			},
+			{
+				name: "invalid float",
+				config: &struct {
+					Field float64 `default:"not_a_float"`
+				}{},
+				errMsg: "invalid float default value",
+			},
+			{
+				name: "invalid uint",
+				config: &struct {
+					Field uint `default:"not_a_uint"`
+				}{},
+				errMsg: "invalid unsigned integer default value",
+			},
+			{
+				name: "integer overflow",
+				config: &struct {
+					Field int8 `default:"999"`
+				}{},
+				errMsg: "integer default value \"999\" overflows field",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := Load(tt.config)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			})
+		}
+	})
+
+	t.Run("priority", func(t *testing.T) {
+		t.Run("files override default tags", func(t *testing.T) {
+			tmpFile, err := os.CreateTemp("", "default-priority-*.yaml")
+			require.NoError(t, err)
+			defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+			content := `string_field: "file_value"
+int_field: 999`
+
+			_, err = tmpFile.WriteString(content)
+			require.NoError(t, err)
+			require.NoError(t, tmpFile.Close())
+
+			var cfg DefaultTagPriorityConfig
+			err = Load(&cfg, WithFiles(tmpFile.Name()))
+			require.NoError(t, err)
+
+			// File values should override tag defaults
+			assert.Equal(t, "file_value", cfg.StringField)
+			assert.Equal(t, 999, cfg.IntField)
+		})
+
+		t.Run("environment variables override default tags", func(t *testing.T) {
+			envVars := map[string]string{
+				"TEST_STRING_FIELD": "env_value",
+				"TEST_INT_FIELD":    "777",
+			}
+
+			for key, value := range envVars {
+				require.NoError(t, os.Setenv(key, value))
+			}
+			defer func() {
+				for key := range envVars {
+					_ = os.Unsetenv(key)
+				}
+			}()
+
+			var cfg DefaultTagPriorityConfig
+			err := Load(&cfg, WithEnv("TEST"))
+			require.NoError(t, err)
+
+			// Environment values should override tag defaults
+			assert.Equal(t, "env_value", cfg.StringField)
+			assert.Equal(t, 777, cfg.IntField)
+		})
+	})
+
+	t.Run("unsupported type", func(t *testing.T) {
+		t.Run("unsupported field type for default tag", func(t *testing.T) {
+			var cfg UnsupportedTypeConfig
+			err := Load(&cfg)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "unsupported field type slice for default tag")
+		})
+	})
+}

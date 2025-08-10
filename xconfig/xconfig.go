@@ -255,15 +255,31 @@ func callDefaultsRecursive(v reflect.Value, path string) error {
 		return nil
 	}
 
-	// Call Default method if it exists
-	if method := v.Addr().MethodByName("Default"); method.IsValid() {
-		method.Call(nil)
-		// Continue to process nested fields after calling Default()
-	}
-
 	switch v.Kind() {
 	case reflect.Struct:
 		t := v.Type()
+
+		// First, apply default tag values to struct fields
+		for i := 0; i < v.NumField(); i++ {
+			field := v.Field(i)
+			fieldType := t.Field(i)
+
+			if !field.CanSet() {
+				continue
+			}
+
+			if err := applyDefaultTag(field, fieldType); err != nil {
+				return fmt.Errorf("failed to apply default tag to field %s: %w", fieldType.Name, err)
+			}
+		}
+
+		// Then call Default method if it exists (takes precedence over tags)
+		if method := v.Addr().MethodByName("Default"); method.IsValid() {
+			method.Call(nil)
+			// Continue to process nested fields after calling Default()
+		}
+
+		// Finally, process nested fields recursively
 		for i := 0; i < v.NumField(); i++ {
 			field := v.Field(i)
 			if !field.CanSet() {
@@ -281,6 +297,65 @@ func callDefaultsRecursive(v reflect.Value, path string) error {
 		if !v.IsNil() {
 			return callDefaultsRecursive(v.Elem(), path)
 		}
+	}
+
+	return nil
+}
+
+func applyDefaultTag(field reflect.Value, fieldType reflect.StructField) error {
+	defaultValue := fieldType.Tag.Get("default")
+	if defaultValue == "" {
+		return nil
+	}
+
+	// Only apply default if field is zero value
+	if !field.IsZero() {
+		return nil
+	}
+
+	switch field.Kind() {
+	case reflect.String:
+		field.SetString(defaultValue)
+	case reflect.Bool:
+		val, err := strconv.ParseBool(defaultValue)
+		if err != nil {
+			return fmt.Errorf("invalid boolean default value %q for field %s", defaultValue, fieldType.Name)
+		}
+		field.SetBool(val)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		val, err := strconv.ParseInt(defaultValue, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid integer default value %q for field %s", defaultValue, fieldType.Name)
+		}
+		if field.OverflowInt(val) {
+			return fmt.Errorf("integer default value %q overflows field %s of type %s", defaultValue, fieldType.Name, field.Type())
+		}
+		field.SetInt(val)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		val, err := strconv.ParseUint(defaultValue, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid unsigned integer default value %q for field %s", defaultValue, fieldType.Name)
+		}
+		if field.OverflowUint(val) {
+			return fmt.Errorf("unsigned integer default value %q overflows field %s of type %s", defaultValue, fieldType.Name, field.Type())
+		}
+		field.SetUint(val)
+	case reflect.Float32, reflect.Float64:
+		val, err := strconv.ParseFloat(defaultValue, 64)
+		if err != nil {
+			return fmt.Errorf("invalid float default value %q for field %s", defaultValue, fieldType.Name)
+		}
+		if field.OverflowFloat(val) {
+			return fmt.Errorf("float default value %q overflows field %s of type %s", defaultValue, fieldType.Name, field.Type())
+		}
+		field.SetFloat(val)
+	case reflect.Ptr:
+		if field.IsNil() {
+			field.Set(reflect.New(field.Type().Elem()))
+		}
+		return applyDefaultTag(field.Elem(), fieldType)
+	default:
+		return fmt.Errorf("unsupported field type %s for default tag on field %s", field.Kind(), fieldType.Name)
 	}
 
 	return nil
