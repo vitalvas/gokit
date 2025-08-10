@@ -62,7 +62,7 @@ func main() {
 
 ## Configuration Sources
 
-### 1. Default Tags (Recommended)
+### 1. Default Tags
 Set default values directly in struct tags:
 ```go
 type Config struct {
@@ -74,9 +74,9 @@ type Config struct {
 }
 ```
 
-**Supported types**: `string`, `int`, `int8`, `int16`, `int32`, `int64`, `uint`, `uint8`, `uint16`, `uint32`, `uint64`, `bool`, `float32`, `float64`, and pointer types.
+**Supported types**: `string`, `int`, `int8`, `int16`, `int32`, `int64`, `uint`, `uint8`, `uint16`, `uint32`, `uint64`, `bool`, `float32`, `float64`, `time.Duration`, and pointer types.
 
-### 2. Struct Defaults (Legacy)
+### 2. Struct Defaults
 ```go
 func (c *Config) Default() {
     *c = Config{
@@ -200,6 +200,11 @@ type Config struct {
     // Float types
     Ratio       float32 `yaml:"ratio" default:"0.75"`
     Threshold   float64 `yaml:"threshold" default:"99.5"`
+    
+    // Duration types
+    Timeout     time.Duration `yaml:"timeout" default:"30s"`
+    RetryDelay  time.Duration `yaml:"retry_delay" default:"5m"`
+    MaxWait     time.Duration `yaml:"max_wait" default:"1h"`
     
     // Pointer types (automatically initialized)
     OptionalHost *string `yaml:"optional_host" default:"localhost"`
@@ -403,7 +408,8 @@ Each subsequent file can override values from previous files.
 - **Unsigned Integers**: `uint`, `uint8`, `uint16`, `uint32`, `uint64`
 - **Booleans**: `bool` (accepts: `"true"`, `"false"`, `"1"`, `"0"`)
 - **Floats**: `float32`, `float64`
-- **Pointers**: `*string`, `*int`, etc. (automatically initialized)
+- **Durations**: `time.Duration` (accepts formats like `"30s"`, `"5m"`, `"1h30m"`, etc.)
+- **Pointers**: `*string`, `*int`, `*time.Duration`, etc. (automatically initialized)
 
 ## Environment Variable Key Construction
 

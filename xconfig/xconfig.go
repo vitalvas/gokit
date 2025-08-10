@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"gopkg.in/yaml.v3"
@@ -310,6 +311,16 @@ func applyDefaultTag(field reflect.Value, fieldType reflect.StructField) error {
 
 	// Only apply default if field is zero value
 	if !field.IsZero() {
+		return nil
+	}
+
+	// Handle time.Duration specifically
+	if field.Type() == reflect.TypeOf(time.Duration(0)) {
+		duration, err := time.ParseDuration(defaultValue)
+		if err != nil {
+			return fmt.Errorf("invalid duration default value %q for field %s: %w", defaultValue, fieldType.Name, err)
+		}
+		field.SetInt(int64(duration))
 		return nil
 	}
 
@@ -632,6 +643,16 @@ func setMapFromEnv(field reflect.Value, envValue, envKey string) error {
 func setFieldFromEnv(field reflect.Value, envKey string) error {
 	envValue := os.Getenv(envKey)
 	if envValue == "" {
+		return nil
+	}
+
+	// Handle time.Duration specifically
+	if field.Type() == reflect.TypeOf(time.Duration(0)) {
+		duration, err := time.ParseDuration(envValue)
+		if err != nil {
+			return fmt.Errorf("invalid duration value for %s: %s", envKey, envValue)
+		}
+		field.SetInt(int64(duration))
 		return nil
 	}
 

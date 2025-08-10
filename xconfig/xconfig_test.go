@@ -3109,6 +3109,16 @@ type UnsupportedTypeConfig struct {
 	SliceField []string `yaml:"slice_field" default:"unsupported"`
 }
 
+type DurationDefaultTagConfig struct {
+	Timeout        time.Duration  `yaml:"timeout" default:"30s"`
+	RetryInterval  time.Duration  `yaml:"retry_interval" default:"5m"`
+	MaxWait        time.Duration  `yaml:"max_wait" default:"1h"`
+	ShortDuration  time.Duration  `yaml:"short_duration" default:"100ms"`
+	NoDurationTag  time.Duration  `yaml:"no_duration"`
+	ZeroDuration   time.Duration  `yaml:"zero_duration" default:"0s"`
+	PointerTimeout *time.Duration `yaml:"pointer_timeout" default:"15s"`
+}
+
 func TestDefaultTag(t *testing.T) {
 	t.Run("basic types", func(t *testing.T) {
 		tests := []struct {
@@ -3318,6 +3328,102 @@ int_field: 999`
 			// Environment values should override tag defaults
 			assert.Equal(t, "env_value", cfg.StringField)
 			assert.Equal(t, 777, cfg.IntField)
+		})
+	})
+
+	t.Run("duration types", func(t *testing.T) {
+		t.Run("all duration fields use default tags", func(t *testing.T) {
+			var cfg DurationDefaultTagConfig
+			err := Load(&cfg)
+			require.NoError(t, err)
+
+			assert.Equal(t, 30*time.Second, cfg.Timeout)
+			assert.Equal(t, 5*time.Minute, cfg.RetryInterval)
+			assert.Equal(t, 1*time.Hour, cfg.MaxWait)
+			assert.Equal(t, 100*time.Millisecond, cfg.ShortDuration)
+			assert.Equal(t, time.Duration(0), cfg.NoDurationTag)
+			assert.Equal(t, time.Duration(0), cfg.ZeroDuration)
+			require.NotNil(t, cfg.PointerTimeout)
+			assert.Equal(t, 15*time.Second, *cfg.PointerTimeout)
+		})
+
+		t.Run("some duration fields already set", func(t *testing.T) {
+			existingTimeout := 45 * time.Second
+			cfg := DurationDefaultTagConfig{
+				Timeout:       existingTimeout,
+				RetryInterval: 10 * time.Minute,
+			}
+
+			err := Load(&cfg)
+			require.NoError(t, err)
+
+			// Should keep existing values, not apply defaults
+			assert.Equal(t, existingTimeout, cfg.Timeout)
+			assert.Equal(t, 10*time.Minute, cfg.RetryInterval)
+			// Should apply defaults for unset fields
+			assert.Equal(t, 1*time.Hour, cfg.MaxWait)
+			assert.Equal(t, 100*time.Millisecond, cfg.ShortDuration)
+		})
+
+		t.Run("duration field with file override", func(t *testing.T) {
+			tmpFile, err := os.CreateTemp("", "duration-test-*.yaml")
+			require.NoError(t, err)
+			defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+			content := `timeout: "2m30s"
+retry_interval: "10s"`
+
+			_, err = tmpFile.WriteString(content)
+			require.NoError(t, err)
+			require.NoError(t, tmpFile.Close())
+
+			var cfg DurationDefaultTagConfig
+			err = Load(&cfg, WithFiles(tmpFile.Name()))
+			require.NoError(t, err)
+
+			// File values should override tag defaults
+			assert.Equal(t, 2*time.Minute+30*time.Second, cfg.Timeout)
+			assert.Equal(t, 10*time.Second, cfg.RetryInterval)
+			// Unspecified in file should use defaults
+			assert.Equal(t, 1*time.Hour, cfg.MaxWait)
+		})
+
+		t.Run("duration field with env override", func(t *testing.T) {
+			envVars := map[string]string{
+				"TEST_TIMEOUT":        "45s",
+				"TEST_RETRY_INTERVAL": "2m",
+			}
+
+			for key, value := range envVars {
+				require.NoError(t, os.Setenv(key, value))
+			}
+			defer func() {
+				for key := range envVars {
+					_ = os.Unsetenv(key)
+				}
+			}()
+
+			var cfg DurationDefaultTagConfig
+			err := Load(&cfg, WithEnv("TEST"))
+			require.NoError(t, err)
+
+			// Environment values should override tag defaults
+			assert.Equal(t, 45*time.Second, cfg.Timeout)
+			assert.Equal(t, 2*time.Minute, cfg.RetryInterval)
+			// Unspecified in env should use defaults
+			assert.Equal(t, 1*time.Hour, cfg.MaxWait)
+		})
+
+		t.Run("invalid duration format", func(t *testing.T) {
+			type InvalidDurationConfig struct {
+				BadDuration time.Duration `yaml:"bad_duration" default:"invalid_duration"`
+			}
+
+			var cfg InvalidDurationConfig
+			err := Load(&cfg)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid duration default value")
+			assert.Contains(t, err.Error(), "BadDuration")
 		})
 	})
 
