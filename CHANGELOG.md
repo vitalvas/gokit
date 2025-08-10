@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.18.0](https://github.com/vitalvas/gokit/compare/v0.17.1...v0.18.0) (2025-08-10)
+
+
+### Features
+
+* **xconfig:** add support default tag ([6e46bbc](https://github.com/vitalvas/gokit/commit/6e46bbcd34cb656b248c80e88ed7c143fc7f1c86))
+* **xconfig:** add support env tag ([c990c6e](https://github.com/vitalvas/gokit/commit/c990c6eb06e3fafc0a58927fc80b84469003871b))
+* **xconfig:** add support time.Duration ([36430f1](https://github.com/vitalvas/gokit/commit/36430f1bf80828480776ec3b5e0e0e49858d8e58))
+
+
+### Bug Fixes
+
+* **xconfig:** support time.Duration and refactor tests ([fc2bad2](https://github.com/vitalvas/gokit/commit/fc2bad2c799d45f94fc7c8ba2e99623bc91f4a63))
+
 ## [0.17.1](https://github.com/vitalvas/gokit/compare/v0.17.0...v0.17.1) (2025-07-26)
 
 
