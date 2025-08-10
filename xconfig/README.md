@@ -6,7 +6,8 @@ A flexible Go configuration library that supports loading from multiple sources 
 
 - **Multiple file formats**: YAML, JSON, YML
 - **Duration parsing**: Human-readable duration strings in both JSON and YAML (`"5m"`, `"30s"`, `"2h30m"`)
-- **Environment variables**: with prefix support
+- **Environment variables**: with prefix support and custom env variable names
+- **Custom env tags**: override default environment variable keys (`env:"CUSTOM_VAR"`)
 - **Multiple files**: load and merge from multiple configuration files
 - **Default tags**: set default values using struct tags (`default:"value"`)
 - **Custom defaults**: override struct defaults programmatically
@@ -130,6 +131,42 @@ APP_LOGGER_LEVEL=error
 APP_HEALTH_ADDRESS=:3000
 APP_HEALTH_ENABLED=false
 ```
+
+### 5.1. Custom Environment Variable Keys
+
+Use the `env` tag to override the default environment variable key construction:
+
+```go
+type Config struct {
+    DatabaseURL  string `env:"DATABASE_URL" yaml:"database_url"`     // Uses DATABASE_URL instead of APP_DATABASE_URL
+    APIKey       string `env:"API_SECRET" yaml:"api_key"`            // Uses API_SECRET instead of APP_API_KEY  
+    ServicePort  int    `env:"PORT" yaml:"port"`                     // Uses PORT instead of APP_PORT
+    LogLevel     string `yaml:"log_level"`                           // Uses APP_LOG_LEVEL (no env tag)
+}
+```
+
+**Environment variables:**
+```bash
+# Custom env tag names (no prefix applied)
+DATABASE_URL=postgres://localhost:5432/mydb
+API_SECRET=secret123
+PORT=8080
+
+# Standard prefixed name (with env tag missing)
+APP_LOG_LEVEL=debug
+```
+
+**Key Benefits:**
+- **Override complex naming**: Use simple names like `PORT` instead of `APP_SERVICE_HTTP_PORT`
+- **Match existing env vars**: Integrate with existing environment variable conventions
+- **Third-party compatibility**: Use standard names like `DATABASE_URL`, `REDIS_URL`, etc.
+- **Selective customization**: Mix custom env names with standard prefixed names
+
+**Important Notes:**
+- When using `env` tags, the **prefix is NOT applied** to the environment variable name
+- The `env` tag value is used exactly as specified (e.g., `env:"PORT"` → `PORT`, not `APP_PORT`)
+- To ignore a field from environment loading, use `env:"-"`
+- Complex tags like `env:"PORT,omitempty"` only use the first part (`PORT`) for the environment variable name
 
 ### 6. Macro Expansion
 
@@ -428,9 +465,10 @@ Environment variable keys are built using this pattern: `PREFIX_FIELD_SUBFIELD_.
 ### Tag Priority for Field Names
 
 The library checks tags in this order:
-1. `yaml` tag (first choice)
-2. `json` tag (if no yaml tag)
-3. Struct field name converted from camelCase to snake_case (if no tags)
+1. `env` tag (highest priority - overrides environment variable key)
+2. `yaml` tag (second choice)
+3. `json` tag (if no yaml tag)
+4. Struct field name converted from camelCase to snake_case (if no tags)
 
 ### Examples
 
@@ -438,39 +476,39 @@ The library checks tags in this order:
 type Config struct {
     Logger    LoggerConfig      `yaml:"logger" json:"log"`
     Health    HealthConfig      `yaml:"health"`
-    DB        DatabaseConfig   `json:"database"`
+    DB        DatabaseConfig   `env:"DATABASE_URL" json:"database"`  // Custom env tag
     CachePool CacheConfig      // no tags - uses camelCase conversion
 }
 
 type LoggerConfig struct {
-    Level        string `yaml:"level" json:"lvl"`
+    Level        string `env:"LOG_LEVEL" yaml:"level" json:"lvl"`     // Custom env tag
     File         string `yaml:"file"`
     TheLongKey   string // no tags - converts to "the_long_key"
 }
 
 type HealthConfig struct {
-    Address string `yaml:"address"`
+    Address string `env:"PORT" yaml:"address"`                       // Custom env tag
     Auth    AuthConfig `yaml:"auth"`
 }
 
 type AuthConfig struct {
     Enabled bool   `yaml:"enabled"`
-    Secret  string `yaml:"secret"`
+    Secret  string `env:"AUTH_SECRET" yaml:"secret"`                 // Custom env tag
 }
 ```
 
 ### Environment Variable Keys (with prefix "APP"):
 
-| Field Path | yaml tag used | Environment Key | Example Value |
-|------------|---------------|-----------------|---------------|
-| `Logger.Level` | ✓ | `APP_LOGGER_LEVEL` | `debug` |
-| `Logger.File` | ✓ | `APP_LOGGER_FILE` | `/var/log/app.log` |
-| `Logger.TheLongKey` | ✗ (camelCase) | `APP_LOGGER_THE_LONG_KEY` | `my-value` |
-| `Health.Address` | ✓ | `APP_HEALTH_ADDRESS` | `:8080` |
-| `Health.Auth.Enabled` | ✓ | `APP_HEALTH_AUTH_ENABLED` | `true` |
-| `Health.Auth.Secret` | ✓ | `APP_HEALTH_AUTH_SECRET` | `mysecret` |
-| `DB` (json tag) | ✗ (uses json) | `APP_DATABASE_*` | |
-| `CachePool` (no tags) | ✗ (camelCase) | `APP_CACHE_POOL_*` | |
+| Field Path | Tag Priority | Environment Key | Example Value |
+|------------|--------------|-----------------|---------------|
+| `Logger.Level` | env tag | `LOG_LEVEL` | `debug` |
+| `Logger.File` | yaml tag | `APP_LOGGER_FILE` | `/var/log/app.log` |
+| `Logger.TheLongKey` | camelCase | `APP_LOGGER_THE_LONG_KEY` | `my-value` |
+| `Health.Address` | env tag | `PORT` | `8080` |
+| `Health.Auth.Enabled` | yaml tag | `APP_HEALTH_AUTH_ENABLED` | `true` |
+| `Health.Auth.Secret` | env tag | `AUTH_SECRET` | `mysecret` |
+| `DB` (custom env) | env tag | `DATABASE_URL` | `postgres://...` |
+| `CachePool` (no tags) | camelCase | `APP_CACHE_POOL_*` | |
 
 ### CamelCase to snake_case Conversion
 

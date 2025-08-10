@@ -548,6 +548,11 @@ func camelToSnake(s string) string {
 }
 
 func getFieldTagName(fieldType reflect.StructField) string {
+	envTag := fieldType.Tag.Get("env")
+	if envTag != "" && envTag != "-" {
+		return strings.Split(envTag, ",")[0]
+	}
+
 	yamlTag := fieldType.Tag.Get("yaml")
 	if yamlTag != "" && yamlTag != "-" {
 		return strings.Split(yamlTag, ",")[0]
@@ -647,7 +652,17 @@ func loadFromEnvRecursive(v reflect.Value, prefix string) error {
 				continue
 			}
 
-			envKey := prefix + "_" + strings.ToUpper(tagName)
+			// Check if env tag is used - if so, use original prefix, not nested prefix
+			envTag := fieldType.Tag.Get("env")
+			var envKey string
+			if envTag != "" && envTag != "-" {
+				// For env tags, use root prefix + env tag name (skip intermediate prefixes)
+				rootPrefix := strings.Split(prefix, "_")[0] // Get the original prefix (e.g., "TEST")
+				envKey = rootPrefix + "_" + strings.ToUpper(strings.Split(envTag, ",")[0])
+			} else {
+				// Use standard prefix + tag name
+				envKey = prefix + "_" + strings.ToUpper(tagName)
+			}
 
 			if err := setFieldFromEnv(field, envKey); err != nil {
 				return fmt.Errorf("failed to set field %s: %w", fieldType.Name, err)

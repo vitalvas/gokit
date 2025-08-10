@@ -1253,17 +1253,25 @@ func TestHelpers(t *testing.T) {
 
 		t.Run("get field tag name edge cases", func(t *testing.T) {
 			type TaggedStruct struct {
-				YAMLField    string `yaml:"yaml_name" json:"json_name"`
+				EnvField     string `env:"ENV_NAME" yaml:"yaml_name" json:"json_name"`
+				YAMLField    string `yaml:"yaml_name" json:"yaml_only"`
 				JSONField    string `json:"json_only"`
 				PlainField   string
 				ComplexField string `yaml:"complex,omitempty" json:"complex_json"`
+				EnvIgnored   string `env:"-" yaml:"env_ignored"`
+				EnvComplex   string `env:"ENV_COMPLEX,omitempty" yaml:"env_complex"`
 			}
 
 			structType := reflect.TypeOf(TaggedStruct{})
 
-			// Test YAML priority
+			// Test env tag priority (highest)
+			envField, _ := structType.FieldByName("EnvField")
+			result := getFieldTagName(envField)
+			assert.Equal(t, "ENV_NAME", result)
+
+			// Test YAML priority (when no env tag)
 			yamlField, _ := structType.FieldByName("YAMLField")
-			result := getFieldTagName(yamlField)
+			result = getFieldTagName(yamlField)
 			assert.Equal(t, "yaml_name", result)
 
 			// Test JSON fallback
@@ -1280,6 +1288,16 @@ func TestHelpers(t *testing.T) {
 			complexField, _ := structType.FieldByName("ComplexField")
 			result = getFieldTagName(complexField)
 			assert.Equal(t, "complex", result)
+
+			// Test env tag ignored with "-"
+			envIgnored, _ := structType.FieldByName("EnvIgnored")
+			result = getFieldTagName(envIgnored)
+			assert.Equal(t, "env_ignored", result) // Should fall back to yaml
+
+			// Test complex env tag
+			envComplex, _ := structType.FieldByName("EnvComplex")
+			result = getFieldTagName(envComplex)
+			assert.Equal(t, "ENV_COMPLEX", result) // Should use env tag, ignoring modifiers
 		})
 
 		t.Run("set value from string additional types", func(t *testing.T) {
@@ -1515,19 +1533,19 @@ func TestHelpers(t *testing.T) {
 					ptrVal := reflect.ValueOf(&ptrStruct).Elem()
 					expandMacrosInValue(ptrVal)
 					assert.Equal(t, os.Getenv("HOME")+"/ptr_path", ptrStruct.Field)
-					
+
 					// Test nil pointer
 					var nilPtr *PtrStruct
 					nilPtrVal := reflect.ValueOf(&nilPtr).Elem()
 					expandMacrosInValue(nilPtrVal) // Should not crash
 					assert.Nil(t, nilPtr)
-					
+
 					// Test empty string (should not be processed)
 					emptyStr := ""
 					emptyStrVal := reflect.ValueOf(&emptyStr).Elem()
 					expandMacrosInValue(emptyStrVal)
 					assert.Equal(t, "", emptyStr)
-					
+
 					// Test map with string values (the map interface{} test was too complex)
 					testMap := map[string]string{
 						"key1": "${env:HOME}/path1",
@@ -1538,25 +1556,25 @@ func TestHelpers(t *testing.T) {
 					assert.Equal(t, os.Getenv("HOME")+"/path1", testMap["key1"])
 					assert.Equal(t, "plain_value", testMap["key2"])
 				})
-				
+
 				t.Run("validation_error_cases", func(t *testing.T) {
 					// Test validateConfigPointer with nil
 					_, err := validateConfigPointer(nil)
 					assert.Error(t, err)
 					assert.Contains(t, err.Error(), "config must be a non-nil pointer")
-					
+
 					// Test validateConfigPointer with non-pointer
 					_, err = validateConfigPointer("not a pointer")
 					assert.Error(t, err)
 					assert.Contains(t, err.Error(), "config must be a non-nil pointer")
-					
+
 					// Test validateConfigPointer with nil pointer
 					var nilPtr *TestConfig
 					_, err = validateConfigPointer(nilPtr)
 					assert.Error(t, err)
 					assert.Contains(t, err.Error(), "config must be a non-nil pointer")
 				})
-				
+
 				t.Run("applyDefaultTagsRecursive_coverage", func(t *testing.T) {
 					// Test with struct that has embedded fields and nested structs
 					type EmbeddedStruct struct {
@@ -1568,63 +1586,63 @@ func TestHelpers(t *testing.T) {
 						SliceField   []string          // No default tag
 						MapField     map[string]string // No default tag
 					}
-					
+
 					var config ComplexStruct
 					configElem := reflect.ValueOf(&config).Elem()
 					err := applyDefaultTagsRecursive(configElem)
 					require.NoError(t, err)
-					
+
 					assert.Equal(t, "embedded_value", config.EmbeddedField)
 					assert.Equal(t, "regular_value", config.RegularField)
 				})
-				
+
 				t.Run("callDefaultMethodsRecursive_coverage", func(t *testing.T) {
 					// Test with struct that has methods on both pointer and value receivers
 					type MethodStruct struct {
 						Field1 string
 						Field2 int
 					}
-					
+
 					// Add method via interface - won't work directly, but test the recursion
 					var config struct {
 						Nested MethodStruct
 						Field  string
 					}
-					
+
 					configElem := reflect.ValueOf(&config).Elem()
 					err := callDefaultMethodsRecursive(configElem)
 					require.NoError(t, err) // Should not error even without Default methods
 				})
-				
+
 				t.Run("loadFromEnv_error_coverage", func(t *testing.T) {
 					// Test loadFromEnv with invalid config
 					err := loadFromEnv(nil, "TEST")
 					assert.Error(t, err)
 					assert.Contains(t, err.Error(), "config must be a non-nil pointer")
 				})
-				
+
 				t.Run("setFieldFromEnv_additional_cases", func(t *testing.T) {
 					// Test with time.Duration from environment (already covered in other tests, but ensures more paths)
 					type DurationStruct struct {
 						Timeout time.Duration `env:"TIMEOUT"`
 					}
-					
+
 					os.Setenv("TEST_TIMEOUT", "5m30s")
 					defer os.Unsetenv("TEST_TIMEOUT")
-					
+
 					var config DurationStruct
 					err := Load(&config, WithEnv("TEST"))
 					require.NoError(t, err)
 					assert.Equal(t, 5*time.Minute+30*time.Second, config.Timeout)
 				})
-				
+
 				t.Run("applyCustomDefaults_coverage", func(t *testing.T) {
 					// Test applyCustomDefaults with invalid config types
 					var config TestConfig
 					err := applyCustomDefaults(nil, &config)
 					assert.Error(t, err)
 					assert.Contains(t, err.Error(), "config must be a non-nil pointer")
-					
+
 					// Test with different type defaults
 					type DifferentStruct struct {
 						Field string
@@ -1634,7 +1652,7 @@ func TestHelpers(t *testing.T) {
 					assert.Error(t, err)
 					assert.Contains(t, err.Error(), "does not match config type")
 				})
-				
+
 				t.Run("additional_error_paths", func(t *testing.T) {
 					// Test loadFromDirs with directory that has permission error
 					// Create a directory and then make it unreadable (if not root)
@@ -1644,13 +1662,13 @@ func TestHelpers(t *testing.T) {
 						require.NoError(t, os.Mkdir(unreadableDir, 0755))
 						require.NoError(t, os.Chmod(unreadableDir, 0000))
 						defer os.Chmod(unreadableDir, 0755) // Restore for cleanup
-						
+
 						var config TestConfig
 						err := loadFromDirs(&config, []string{unreadableDir})
 						assert.Error(t, err)
 						assert.Contains(t, err.Error(), "failed to scan directory")
 					}
-					
+
 					// Test scanDirectory with permission denied - handled in error path above
 				})
 			})
@@ -1662,10 +1680,10 @@ func TestHelpers(t *testing.T) {
 				type RecursiveStruct struct {
 					Name string
 				}
-				
+
 				var config RecursiveStruct
 				configElem := reflect.ValueOf(&config).Elem()
-				
+
 				// This should cover the error return path in callDefaultMethodsRecursive
 				// We can't easily make it error, but we can ensure the happy path coverage
 				err := callDefaultMethodsRecursive(configElem)
@@ -1675,18 +1693,18 @@ func TestHelpers(t *testing.T) {
 			t.Run("loadFromDirs_scan_error", func(t *testing.T) {
 				// Test error in scanDirectory causing loadFromDirs to fail
 				var config TestConfig
-				
+
 				// Create a directory that we can make problematic
 				if os.Getuid() != 0 { // Skip if root user
 					tempDir := t.TempDir()
 					problemDir := tempDir + "/problem"
 					require.NoError(t, os.Mkdir(problemDir, 0755))
-					
+
 					// Create a file inside, then make directory unreadable
 					require.NoError(t, os.WriteFile(problemDir+"/file.json", []byte(`{}`), 0644))
 					require.NoError(t, os.Chmod(problemDir, 0000))
 					defer os.Chmod(problemDir, 0755) // Restore for cleanup
-					
+
 					err := loadFromDirs(&config, []string{problemDir})
 					assert.Error(t, err)
 					assert.Contains(t, err.Error(), "failed to scan directory")
@@ -1698,20 +1716,20 @@ func TestHelpers(t *testing.T) {
 				testMap := make(map[string]interface{})
 				testMap["str_key"] = "${env:HOME}/test"
 				testMap["int_key"] = 42
-				
+
 				// Create a nested struct in the map
 				type NestedStruct struct {
 					Field string
 				}
 				testMap["struct_key"] = NestedStruct{Field: "${env:USER}/nested"}
-				
+
 				mapVal := reflect.ValueOf(&testMap).Elem()
 				expandMacrosInValue(mapVal)
-				
+
 				// Verify string expansion - the map interface{} expansion doesn't always work as expected
 				// Let's just verify the test runs without panicking
 				_ = testMap["str_key"]
-				
+
 				// Int should remain unchanged
 				assert.Equal(t, 42, testMap["int_key"])
 			})
@@ -1720,16 +1738,16 @@ func TestHelpers(t *testing.T) {
 				// Test interface{} case with nil - lines 163-166
 				var testInterface interface{}
 				interfaceVal := reflect.ValueOf(&testInterface).Elem()
-				
+
 				// Should not crash with nil interface
 				expandMacrosInValue(interfaceVal)
 				assert.Nil(t, testInterface)
-				
+
 				// Test with settable interface value
 				testInterface = "${env:HOME}/interface_test"
 				interfaceVal = reflect.ValueOf(&testInterface).Elem()
 				expandMacrosInValue(interfaceVal)
-				
+
 				// The interface expansion may not work as expected, just verify no panic
 				_ = testInterface
 			})
@@ -1737,11 +1755,11 @@ func TestHelpers(t *testing.T) {
 			t.Run("validateConfigPointer_not_settable_path", func(t *testing.T) {
 				// Try to trigger the "config is not settable" error - lines 176-178
 				// This is very hard to trigger in normal Go code since pointer.Elem() is usually settable
-				
+
 				type TestStruct struct {
 					Field string
 				}
-				
+
 				// Test with a normal struct pointer (should work)
 				config := &TestStruct{}
 				configElem, err := validateConfigPointer(config)
@@ -1754,7 +1772,7 @@ func TestHelpers(t *testing.T) {
 				type NestedStruct struct {
 					Value string
 				}
-				
+
 				type TestStruct struct {
 					Nested NestedStruct
 					Ptr    *NestedStruct
@@ -1762,7 +1780,7 @@ func TestHelpers(t *testing.T) {
 					Map    map[string]string
 					Iface  interface{}
 				}
-				
+
 				// Test with complex nested structures
 				ptrValue := &NestedStruct{Value: "ptr_value"}
 				src := TestStruct{
@@ -1772,15 +1790,15 @@ func TestHelpers(t *testing.T) {
 					Map:    map[string]string{"key": "value"},
 					Iface:  "interface_value",
 				}
-				
+
 				dst := TestStruct{}
-				
+
 				srcVal := reflect.ValueOf(&src).Elem()
 				dstVal := reflect.ValueOf(&dst).Elem()
-				
+
 				err := copyValues(dstVal, srcVal)
 				assert.NoError(t, err)
-				
+
 				// Verify all values were copied
 				assert.Equal(t, "nested_value", dst.Nested.Value)
 				assert.NotNil(t, dst.Ptr)
@@ -1793,19 +1811,19 @@ func TestHelpers(t *testing.T) {
 			t.Run("applyDefaultTag_overflow_comprehensive", func(t *testing.T) {
 				// Test all overflow error paths more comprehensively
 				type OverflowStruct struct {
-					Int8Field    int8    `default:"999"`     // Will overflow
-					Int16Field   int16   `default:"99999"`   // Will overflow  
+					Int8Field    int8    `default:"999"`        // Will overflow
+					Int16Field   int16   `default:"99999"`      // Will overflow
 					Int32Field   int32   `default:"9999999999"` // Will overflow
-					Uint8Field   uint8   `default:"999"`     // Will overflow
-					Uint16Field  uint16  `default:"99999"`   // Will overflow
+					Uint8Field   uint8   `default:"999"`        // Will overflow
+					Uint16Field  uint16  `default:"99999"`      // Will overflow
 					Uint32Field  uint32  `default:"9999999999"` // Will overflow
-					Float32Field float32 `default:"1e50"`    // Will overflow
-					Float64Field float64 `default:"1e400"`   // Will overflow
+					Float32Field float32 `default:"1e50"`       // Will overflow
+					Float64Field float64 `default:"1e400"`      // Will overflow
 				}
-				
+
 				config := &OverflowStruct{}
 				configElem := reflect.ValueOf(config).Elem()
-				
+
 				// Test each field individually to hit different overflow paths
 				for i := 0; i < configElem.NumField(); i++ {
 					field := configElem.Field(i)
@@ -1813,9 +1831,9 @@ func TestHelpers(t *testing.T) {
 					err := applyDefaultTag(field, fieldType)
 					assert.Error(t, err, "Field %s should have error", fieldType.Name)
 					// Not all overflow errors say "overflows" - some say "invalid" for very large numbers
-					assert.True(t, 
-						strings.Contains(err.Error(), "overflows") || 
-						strings.Contains(err.Error(), "invalid"), 
+					assert.True(t,
+						strings.Contains(err.Error(), "overflows") ||
+							strings.Contains(err.Error(), "invalid"),
 						"Field %s should have overflow or invalid error, got: %s", fieldType.Name, err.Error())
 				}
 			})
@@ -1823,18 +1841,18 @@ func TestHelpers(t *testing.T) {
 			t.Run("loadFromEnvRecursive_edge_cases", func(t *testing.T) {
 				// Test various edge cases in loadFromEnvRecursive
 				type ComplexEnvStruct struct {
-					IgnoredField string `yaml:"-"`         // Should be ignored
-					EmptyTag     string `yaml:""`          // Empty tag
-					NormalField  string `yaml:"normal"`    // Normal field
+					IgnoredField string `yaml:"-"`      // Should be ignored
+					EmptyTag     string `yaml:""`       // Empty tag
+					NormalField  string `yaml:"normal"` // Normal field
 				}
-				
+
 				config := &ComplexEnvStruct{}
 				configElem := reflect.ValueOf(config).Elem()
-				
+
 				// Set some environment variables
 				os.Setenv("TEST_NORMAL", "normal_value")
 				defer os.Unsetenv("TEST_NORMAL")
-				
+
 				err := loadFromEnvRecursive(configElem, "TEST")
 				assert.NoError(t, err)
 				assert.Equal(t, "normal_value", config.NormalField)
@@ -1843,31 +1861,31 @@ func TestHelpers(t *testing.T) {
 			t.Run("setMapFromEnv_comprehensive_errors", func(t *testing.T) {
 				// Test all error cases in setMapFromEnv comprehensively
 				type MapErrorStruct struct {
-					IntKeyMap    map[int]string    `env:"INT_KEY_MAP"`
-					ValidMap     map[string]string `env:"VALID_MAP"`
-					ComplexMap   map[string]int    `env:"COMPLEX_MAP"`
+					IntKeyMap  map[int]string    `env:"INT_KEY_MAP"`
+					ValidMap   map[string]string `env:"VALID_MAP"`
+					ComplexMap map[string]int    `env:"COMPLEX_MAP"`
 				}
-				
+
 				config := &MapErrorStruct{}
 				configElem := reflect.ValueOf(config).Elem()
-				
+
 				// Test non-string key error
 				intKeyField := configElem.Field(0)
 				err := setMapFromEnv(intKeyField, "key=value", "TEST_INT_KEY_MAP")
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "only string keys are supported")
-				
+
 				// Test invalid pair format
 				validMapField := configElem.Field(1)
 				err = setMapFromEnv(validMapField, "invalid_no_equals", "TEST_VALID_MAP")
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "expected key=value")
-				
+
 				// Test empty key error
 				err = setMapFromEnv(validMapField, "=value", "TEST_VALID_MAP")
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "empty key in map pair")
-				
+
 				// Test invalid value type conversion
 				complexMapField := configElem.Field(2)
 				err = setMapFromEnv(complexMapField, "key=not_a_number", "TEST_COMPLEX_MAP")
@@ -1882,7 +1900,7 @@ func TestHelpers(t *testing.T) {
 				err := setValueFromString(uintElem, "not_a_uint", "TEST_KEY", "test context")
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "invalid unsigned integer value")
-				
+
 				var complexVal complex128
 				complexElem := reflect.ValueOf(&complexVal).Elem()
 				err = setValueFromString(complexElem, "invalid", "TEST_KEY", "test context")
@@ -1893,35 +1911,35 @@ func TestHelpers(t *testing.T) {
 			t.Run("setFieldFromEnv_comprehensive_coverage", func(t *testing.T) {
 				// Test all paths in setFieldFromEnv
 				type FieldTestStruct struct {
-					Duration  time.Duration
-					PtrField  *string
+					Duration   time.Duration
+					PtrField   *string
 					SliceField []string
 					MapField   map[string]string
 					IntField   int
 				}
-				
+
 				config := &FieldTestStruct{}
 				configElem := reflect.ValueOf(config).Elem()
-				
+
 				// Test duration field
 				os.Setenv("TEST_DURATION_FIELD", "5m30s")
 				defer os.Unsetenv("TEST_DURATION_FIELD")
-				
+
 				durationField := configElem.Field(0)
 				err := setFieldFromEnv(durationField, "TEST_DURATION_FIELD")
 				assert.NoError(t, err)
 				assert.Equal(t, 5*time.Minute+30*time.Second, config.Duration)
-				
+
 				// Test pointer field (nil initially)
 				os.Setenv("TEST_PTR_FIELD", "ptr_value")
 				defer os.Unsetenv("TEST_PTR_FIELD")
-				
+
 				ptrField := configElem.Field(1)
 				err = setFieldFromEnv(ptrField, "TEST_PTR_FIELD")
 				assert.NoError(t, err)
 				assert.NotNil(t, config.PtrField)
 				assert.Equal(t, "ptr_value", *config.PtrField)
-				
+
 				// Test with empty env value (should not error, just skip)
 				os.Unsetenv("TEST_EMPTY_FIELD")
 				intField := configElem.Field(4)
@@ -1932,19 +1950,19 @@ func TestHelpers(t *testing.T) {
 
 			t.Run("final_edge_case_coverage", func(t *testing.T) {
 				// Test some specific lines that might still be uncovered
-				
+
 				// Test applyDefaultTagsRecursive with non-settable fields
 				type ReadOnlyStruct struct {
-					_ string // not exported, can't be set
-					PublicField   string `default:"public_value"`
+					_           string // not exported, can't be set
+					PublicField string `default:"public_value"`
 				}
-				
+
 				config := ReadOnlyStruct{}
 				configVal := reflect.ValueOf(config) // Not a pointer, so not settable
-				
+
 				err := applyDefaultTagsRecursive(configVal)
 				assert.NoError(t, err) // Should return early due to !v.CanSet()
-				
+
 				// Test callDefaultMethodsRecursive with non-settable
 				err = callDefaultMethodsRecursive(configVal)
 				assert.NoError(t, err) // Should return early due to !v.CanSet()
@@ -2133,6 +2151,199 @@ optional: 15s`
 				require.NotNil(t, yamlConfig.Optional)
 				assert.Equal(t, *jsonConfig.Optional, *yamlConfig.Optional)
 			})
+		})
+	})
+
+	t.Run("env tag support", func(t *testing.T) {
+		type EnvTagConfig struct {
+			CustomEnvVar   string `env:"CUSTOM_VAR" yaml:"custom_env_var" json:"custom_env_var"`
+			YamlOnlyVar    string `yaml:"yaml_var" json:"yaml_var"`
+			DefaultCaseVar string
+			MixedTagsVar   string `env:"MIXED_ENV" yaml:"mixed_yaml" json:"mixed_json"`
+			IgnoredEnvVar  string `env:"-" yaml:"ignored_var"`
+			ComplexEnvVar  string `env:"COMPLEX_VAR,omitempty" yaml:"complex_var"`
+		}
+
+		t.Run("env tag takes precedence", func(t *testing.T) {
+			envVars := map[string]string{
+				"TEST_CUSTOM_VAR":       "custom_value",
+				"TEST_YAML_VAR":         "yaml_value",
+				"TEST_DEFAULT_CASE_VAR": "default_value",
+				"TEST_MIXED_ENV":        "mixed_value",
+				"TEST_COMPLEX_VAR":      "complex_value",
+			}
+
+			for key, value := range envVars {
+				require.NoError(t, os.Setenv(key, value))
+			}
+			defer func() {
+				for key := range envVars {
+					_ = os.Unsetenv(key)
+				}
+			}()
+
+			var cfg EnvTagConfig
+			err := Load(&cfg, WithEnv("TEST"))
+			require.NoError(t, err)
+
+			assert.Equal(t, "custom_value", cfg.CustomEnvVar)
+			assert.Equal(t, "yaml_value", cfg.YamlOnlyVar)
+			assert.Equal(t, "default_value", cfg.DefaultCaseVar)
+			assert.Equal(t, "mixed_value", cfg.MixedTagsVar)
+			assert.Equal(t, "", cfg.IgnoredEnvVar)
+			assert.Equal(t, "complex_value", cfg.ComplexEnvVar)
+		})
+
+		t.Run("fallback behavior when env tag missing", func(t *testing.T) {
+			require.NoError(t, os.Setenv("TEST_YAML_VAR", "fallback_yaml"))
+			require.NoError(t, os.Setenv("TEST_MIXED_YAML", "should_not_work"))
+			defer func() {
+				_ = os.Unsetenv("TEST_YAML_VAR")
+				_ = os.Unsetenv("TEST_MIXED_YAML")
+			}()
+
+			var cfg EnvTagConfig
+			err := Load(&cfg, WithEnv("TEST"))
+			require.NoError(t, err)
+
+			assert.Equal(t, "fallback_yaml", cfg.YamlOnlyVar)
+			assert.Equal(t, "", cfg.MixedTagsVar)
+		})
+
+		t.Run("env tag with special characters", func(t *testing.T) {
+			type SpecialEnvConfig struct {
+				DatabaseURL string `env:"DATABASE_URL"`
+				APIKey      string `env:"API_KEY_SECRET"`
+				HostPort    string `env:"HOST_PORT_8080"`
+			}
+
+			envVars := map[string]string{
+				"TEST_DATABASE_URL":   "postgres://localhost:5432/db",
+				"TEST_API_KEY_SECRET": "secret123",
+				"TEST_HOST_PORT_8080": "localhost:8080",
+			}
+
+			for key, value := range envVars {
+				require.NoError(t, os.Setenv(key, value))
+			}
+			defer func() {
+				for key := range envVars {
+					_ = os.Unsetenv(key)
+				}
+			}()
+
+			var cfg SpecialEnvConfig
+			err := Load(&cfg, WithEnv("TEST"))
+			require.NoError(t, err)
+
+			assert.Equal(t, "postgres://localhost:5432/db", cfg.DatabaseURL)
+			assert.Equal(t, "secret123", cfg.APIKey)
+			assert.Equal(t, "localhost:8080", cfg.HostPort)
+		})
+
+		t.Run("nested structs with env tags", func(t *testing.T) {
+			type DatabaseConfig struct {
+				Host     string `env:"DB_HOST" yaml:"host"`
+				Port     int    `env:"DB_PORT" yaml:"port"`
+				Username string `env:"DB_USER" yaml:"username"`
+			}
+
+			type NestedEnvConfig struct {
+				AppName  string         `env:"APP_NAME" yaml:"app_name"`
+				Database DatabaseConfig `yaml:"database"`
+			}
+
+			envVars := map[string]string{
+				"TEST_APP_NAME": "my_app",
+				"TEST_DB_HOST":  "db_server",
+				"TEST_DB_PORT":  "3306",
+				"TEST_DB_USER":  "db_user",
+			}
+
+			for key, value := range envVars {
+				require.NoError(t, os.Setenv(key, value))
+			}
+			defer func() {
+				for key := range envVars {
+					_ = os.Unsetenv(key)
+				}
+			}()
+
+			var cfg NestedEnvConfig
+			err := Load(&cfg, WithEnv("TEST"))
+			require.NoError(t, err)
+
+			assert.Equal(t, "my_app", cfg.AppName)
+			assert.Equal(t, "db_server", cfg.Database.Host)
+			assert.Equal(t, 3306, cfg.Database.Port)
+			assert.Equal(t, "db_user", cfg.Database.Username)
+		})
+
+		t.Run("env tag with various data types", func(t *testing.T) {
+			type DataTypeEnvConfig struct {
+				StringVal   string            `env:"STRING_VAL"`
+				IntVal      int               `env:"INT_VAL"`
+				BoolVal     bool              `env:"BOOL_VAL"`
+				FloatVal    float64           `env:"FLOAT_VAL"`
+				DurationVal time.Duration     `env:"DURATION_VAL"`
+				SliceVal    []string          `env:"SLICE_VAL"`
+				MapVal      map[string]string `env:"MAP_VAL"`
+			}
+
+			envVars := map[string]string{
+				"TEST_STRING_VAL":   "test_string",
+				"TEST_INT_VAL":      "42",
+				"TEST_BOOL_VAL":     "true",
+				"TEST_FLOAT_VAL":    "3.14",
+				"TEST_DURATION_VAL": "5m30s",
+				"TEST_SLICE_VAL":    "item1,item2,item3",
+				"TEST_MAP_VAL":      "key1=value1,key2=value2",
+			}
+
+			for key, value := range envVars {
+				require.NoError(t, os.Setenv(key, value))
+			}
+			defer func() {
+				for key := range envVars {
+					_ = os.Unsetenv(key)
+				}
+			}()
+
+			var cfg DataTypeEnvConfig
+			err := Load(&cfg, WithEnv("TEST"))
+			require.NoError(t, err)
+
+			assert.Equal(t, "test_string", cfg.StringVal)
+			assert.Equal(t, 42, cfg.IntVal)
+			assert.True(t, cfg.BoolVal)
+			assert.Equal(t, 3.14, cfg.FloatVal)
+			assert.Equal(t, 5*time.Minute+30*time.Second, cfg.DurationVal)
+			assert.Equal(t, []string{"item1", "item2", "item3"}, cfg.SliceVal)
+			assert.Equal(t, map[string]string{"key1": "value1", "key2": "value2"}, cfg.MapVal)
+		})
+
+		t.Run("env tag priority over files and defaults", func(t *testing.T) {
+			type PriorityEnvConfig struct {
+				Value string `env:"PRIORITY_VALUE" yaml:"value" default:"default_value"`
+			}
+
+			tmpFile, err := os.CreateTemp("", "priority-env-*.yaml")
+			require.NoError(t, err)
+			defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+			content := `value: "file_value"`
+			_, err = tmpFile.WriteString(content)
+			require.NoError(t, err)
+			require.NoError(t, tmpFile.Close())
+
+			require.NoError(t, os.Setenv("TEST_PRIORITY_VALUE", "env_value"))
+			defer func() { _ = os.Unsetenv("TEST_PRIORITY_VALUE") }()
+
+			var cfg PriorityEnvConfig
+			err = Load(&cfg, WithFiles(tmpFile.Name()), WithEnv("TEST"))
+			require.NoError(t, err)
+
+			assert.Equal(t, "env_value", cfg.Value)
 		})
 	})
 }
