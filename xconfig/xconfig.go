@@ -59,10 +59,23 @@ func Load(config interface{}, options ...Option) error {
 		option(opts)
 	}
 
-	if err := callDefaults(config); err != nil {
-		return fmt.Errorf("failed to set defaults: %w", err)
+	// Apply default tags first
+	configElem, err := validateConfigPointer(config)
+	if err != nil {
+		return fmt.Errorf("failed to validate config: %w", err)
+	}
+	if err := applyDefaultTagsRecursive(configElem); err != nil {
+		return fmt.Errorf("failed to apply default tags: %w", err)
 	}
 
+	// Then call Default() methods (only if no custom defaults provided)
+	if opts.customDefault == nil {
+		if err := callDefaultMethodsRecursive(configElem); err != nil {
+			return fmt.Errorf("failed to call default methods: %w", err)
+		}
+	}
+
+	// Then apply custom defaults (which completely override Default() methods)
 	if opts.customDefault != nil {
 		if err := applyCustomDefaults(config, opts.customDefault); err != nil {
 			return fmt.Errorf("failed to apply custom defaults: %w", err)
@@ -196,8 +209,16 @@ func copyValues(dst, src reflect.Value) error {
 				continue
 			}
 
-			if err := copyValues(dstField, srcField); err != nil {
-				return err
+			// Only copy non-zero values from custom defaults
+			if !srcField.IsZero() {
+				// For struct fields, do complete replacement to override Default() methods
+				if srcField.Kind() == reflect.Struct {
+					dstField.Set(srcField)
+				} else {
+					if err := copyValues(dstField, srcField); err != nil {
+						return err
+					}
+				}
 			}
 		}
 	case reflect.Slice:
@@ -236,22 +257,7 @@ func copyValues(dst, src reflect.Value) error {
 	return nil
 }
 
-func callDefaults(config interface{}) error {
-	configElem, err := validateConfigPointer(config)
-	if err != nil {
-		return err
-	}
-	return callDefaultsRecursive(configElem, "")
-}
-
-func buildFieldPath(path, fieldName string) string {
-	if path == "" {
-		return fieldName
-	}
-	return path + "." + fieldName
-}
-
-func callDefaultsRecursive(v reflect.Value, path string) error {
+func applyDefaultTagsRecursive(v reflect.Value) error {
 	if !v.CanSet() {
 		return nil
 	}
@@ -260,7 +266,7 @@ func callDefaultsRecursive(v reflect.Value, path string) error {
 	case reflect.Struct:
 		t := v.Type()
 
-		// First, apply default tag values to struct fields
+		// Apply default tag values to struct fields
 		for i := 0; i < v.NumField(); i++ {
 			field := v.Field(i)
 			fieldType := t.Field(i)
@@ -274,20 +280,13 @@ func callDefaultsRecursive(v reflect.Value, path string) error {
 			}
 		}
 
-		// Then call Default method if it exists (takes precedence over tags)
-		if method := v.Addr().MethodByName("Default"); method.IsValid() {
-			method.Call(nil)
-			// Continue to process nested fields after calling Default()
-		}
-
-		// Finally, process nested fields recursively
+		// Process nested fields recursively
 		for i := 0; i < v.NumField(); i++ {
 			field := v.Field(i)
 			if !field.CanSet() {
 				continue
 			}
-			fieldPath := buildFieldPath(path, t.Field(i).Name)
-			if err := callDefaultsRecursive(field, fieldPath); err != nil {
+			if err := applyDefaultTagsRecursive(field); err != nil {
 				return err
 			}
 		}
@@ -296,7 +295,41 @@ func callDefaultsRecursive(v reflect.Value, path string) error {
 			v.Set(reflect.New(v.Type().Elem()))
 		}
 		if !v.IsNil() {
-			return callDefaultsRecursive(v.Elem(), path)
+			return applyDefaultTagsRecursive(v.Elem())
+		}
+	}
+
+	return nil
+}
+
+func callDefaultMethodsRecursive(v reflect.Value) error {
+	if !v.CanSet() {
+		return nil
+	}
+
+	switch v.Kind() {
+	case reflect.Struct:
+		// Call Default method if it exists
+		if method := v.Addr().MethodByName("Default"); method.IsValid() {
+			method.Call(nil)
+		}
+
+		// Process nested fields recursively
+		for i := 0; i < v.NumField(); i++ {
+			field := v.Field(i)
+			if !field.CanSet() {
+				continue
+			}
+			if err := callDefaultMethodsRecursive(field); err != nil {
+				return err
+			}
+		}
+	case reflect.Ptr:
+		if v.IsNil() && v.CanSet() {
+			v.Set(reflect.New(v.Type().Elem()))
+		}
+		if !v.IsNil() {
+			return callDefaultMethodsRecursive(v.Elem())
 		}
 	}
 
@@ -384,12 +417,113 @@ func loadFromFile(config interface{}, filename string) error {
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
 	case ".json":
-		return json.Unmarshal(data, config)
+		return unmarshalJSON(data, config)
 	case ".yaml", ".yml":
 		return yaml.Unmarshal(data, config)
 	default:
-		return yaml.Unmarshal(data, config)
+		return fmt.Errorf("unsupported file extension %s for file %s", ext, filename)
 	}
+}
+
+func unmarshalJSON(data []byte, config interface{}) error {
+	// First, unmarshal into a map to find duration fields
+	var rawData map[string]interface{}
+	if err := json.Unmarshal(data, &rawData); err != nil {
+		return err
+	}
+
+	// Process duration fields recursively
+	if err := processDurationFields(rawData, reflect.ValueOf(config).Elem()); err != nil {
+		return err
+	}
+
+	// Convert back to JSON and unmarshal normally
+	processedData, err := json.Marshal(rawData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal processed data: %w", err)
+	}
+
+	return json.Unmarshal(processedData, config)
+}
+
+func processDurationFields(data map[string]interface{}, configValue reflect.Value) error {
+	if !configValue.IsValid() || configValue.Kind() != reflect.Struct {
+		return nil
+	}
+
+	configType := configValue.Type()
+	for i := 0; i < configValue.NumField(); i++ {
+		field := configValue.Field(i)
+		fieldType := configType.Field(i)
+
+		// Skip unexported fields
+		if !fieldType.IsExported() {
+			continue
+		}
+
+		// Get the JSON field name
+		jsonFieldName := getJSONFieldName(fieldType)
+		if jsonFieldName == "" || jsonFieldName == "-" {
+			continue
+		}
+
+		// Check if this field exists in the data
+		fieldData, exists := data[jsonFieldName]
+		if !exists {
+			continue
+		}
+
+		// Handle different field types
+		switch {
+		case field.Type() == reflect.TypeOf(time.Duration(0)):
+			// Handle time.Duration fields
+			if strVal, ok := fieldData.(string); ok {
+				duration, err := time.ParseDuration(strVal)
+				if err != nil {
+					return fmt.Errorf("invalid duration value %q for field %s: %w", strVal, fieldType.Name, err)
+				}
+				// Convert to nanoseconds (int64) for JSON unmarshaling
+				data[jsonFieldName] = int64(duration)
+			}
+		case field.Kind() == reflect.Ptr && field.Type().Elem() == reflect.TypeOf(time.Duration(0)):
+			// Handle *time.Duration fields
+			if strVal, ok := fieldData.(string); ok {
+				duration, err := time.ParseDuration(strVal)
+				if err != nil {
+					return fmt.Errorf("invalid duration value %q for field %s: %w", strVal, fieldType.Name, err)
+				}
+				// Convert to nanoseconds (int64) for JSON unmarshaling
+				data[jsonFieldName] = int64(duration)
+			}
+		case field.Kind() == reflect.Struct:
+			// Handle nested structs
+			if nestedMap, ok := fieldData.(map[string]interface{}); ok {
+				if err := processDurationFields(nestedMap, field); err != nil {
+					return err
+				}
+			}
+		case field.Kind() == reflect.Ptr && field.Type().Elem().Kind() == reflect.Struct:
+			// Handle pointers to structs
+			if nestedMap, ok := fieldData.(map[string]interface{}); ok {
+				// Create a new struct value to process
+				newStruct := reflect.New(field.Type().Elem()).Elem()
+				if err := processDurationFields(nestedMap, newStruct); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func getJSONFieldName(fieldType reflect.StructField) string {
+	jsonTag := fieldType.Tag.Get("json")
+	if jsonTag != "" && jsonTag != "-" {
+		return strings.Split(jsonTag, ",")[0]
+	}
+	// If no json tag, use the field name as-is (Go's default behavior)
+	return fieldType.Name
 }
 
 func camelToSnake(s string) string {

@@ -5,12 +5,13 @@ A flexible Go configuration library that supports loading from multiple sources 
 ## Features
 
 - **Multiple file formats**: YAML, JSON, YML
+- **Duration parsing**: Human-readable duration strings in both JSON and YAML (`"5m"`, `"30s"`, `"2h30m"`)
 - **Environment variables**: with prefix support
 - **Multiple files**: load and merge from multiple configuration files
 - **Default tags**: set default values using struct tags (`default:"value"`)
 - **Custom defaults**: override struct defaults programmatically
 - **Macro expansion**: `${env:VAR_NAME}` syntax for environment variable substitution
-- **Data types**: strings, numbers, booleans, slices, maps
+- **Data types**: strings, numbers, booleans, slices, maps, time.Duration
 - **Type safety**: compile-time type checking
 - **Zero dependencies**: only uses Go standard library + gopkg.in/yaml.v3
 
@@ -106,6 +107,7 @@ logger:
 health:
   address: ":9090"
   enabled: true
+timeout: "30s"  # time.Duration supported in YAML
 ```
 
 **JSON** (`config.json`):
@@ -117,7 +119,8 @@ health:
   "health": {
     "address": ":9090",
     "enabled": true
-  }
+  },
+  "timeout": "30s"
 }
 ```
 
