@@ -733,6 +733,159 @@ health:
 		assert.Equal(t, "custom_value", cfg.CustomVar)
 		assert.Equal(t, "normal_value", cfg.NormalVar)
 	})
+
+	t.Run("environment variables with mixed case field names", func(t *testing.T) {
+		type ConfigWithMixedCase struct {
+			KafkaUsername string
+			HTTPClient    string
+			XMLParser     string
+		}
+
+		envVars := map[string]string{
+			"KAFKA_USERNAME": "kafka_user",
+			"HTTP_CLIENT":    "client_value",
+			"XML_PARSER":     "parser_value",
+		}
+
+		for key, value := range envVars {
+			require.NoError(t, os.Setenv(key, value))
+		}
+		defer func() {
+			for key := range envVars {
+				_ = os.Unsetenv(key)
+			}
+		}()
+
+		var cfg ConfigWithMixedCase
+		err := Load(&cfg, WithEnv("-"))
+		require.NoError(t, err)
+
+		assert.Equal(t, "kafka_user", cfg.KafkaUsername)
+		assert.Equal(t, "client_value", cfg.HTTPClient)
+		assert.Equal(t, "parser_value", cfg.XMLParser)
+	})
+
+	t.Run("verify environment variable name generation", func(t *testing.T) {
+		type ConfigWithMixedCase struct {
+			KafkaUsername string
+		}
+
+		// Test with KAFKAUSERNAME (incorrect) - should fail to load
+		require.NoError(t, os.Setenv("KAFKAUSERNAME", "wrong"))
+		defer func() {
+			_ = os.Unsetenv("KAFKAUSERNAME")
+		}()
+
+		var cfg ConfigWithMixedCase
+		err := Load(&cfg, WithEnv("-"))
+		require.NoError(t, err)
+
+		// Should be empty because KAFKAUSERNAME is not the correct env var name
+		assert.Equal(t, "", cfg.KafkaUsername)
+
+		// Now test with correct name
+		require.NoError(t, os.Setenv("KAFKA_USERNAME", "correct"))
+		defer func() {
+			_ = os.Unsetenv("KAFKA_USERNAME")
+		}()
+
+		err = Load(&cfg, WithEnv("-"))
+		require.NoError(t, err)
+		assert.Equal(t, "correct", cfg.KafkaUsername)
+	})
+
+	t.Run("environment variables with mixed case slice fields", func(t *testing.T) {
+		type ConfigWithSlices struct {
+			KafkaBrokers  []string
+			HTTPEndpoints []string
+			DatabaseHosts []string
+			APIKeys       []string
+		}
+
+		envVars := map[string]string{
+			"KAFKA_BROKERS":  "broker1:9092,broker2:9092,broker3:9092",
+			"HTTP_ENDPOINTS": "http://api1.com,http://api2.com",
+			"DATABASE_HOSTS": "db1.example.com,db2.example.com,db3.example.com",
+			"API_KEYS":       "key1,key2,key3",
+		}
+
+		for key, value := range envVars {
+			require.NoError(t, os.Setenv(key, value))
+		}
+		defer func() {
+			for key := range envVars {
+				_ = os.Unsetenv(key)
+			}
+		}()
+
+		var cfg ConfigWithSlices
+		err := Load(&cfg, WithEnv("-"))
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"broker1:9092", "broker2:9092", "broker3:9092"}, cfg.KafkaBrokers)
+		assert.Equal(t, []string{"http://api1.com", "http://api2.com"}, cfg.HTTPEndpoints)
+		assert.Equal(t, []string{"db1.example.com", "db2.example.com", "db3.example.com"}, cfg.DatabaseHosts)
+		assert.Equal(t, []string{"key1", "key2", "key3"}, cfg.APIKeys)
+	})
+
+	t.Run("environment variables with mixed case slice fields and prefix", func(t *testing.T) {
+		type ConfigWithSlices struct {
+			KafkaBrokers  []string
+			HTTPEndpoints []string
+		}
+
+		envVars := map[string]string{
+			"APP_KAFKA_BROKERS":  "broker1:9092,broker2:9092",
+			"APP_HTTP_ENDPOINTS": "http://api1.com,http://api2.com",
+		}
+
+		for key, value := range envVars {
+			require.NoError(t, os.Setenv(key, value))
+		}
+		defer func() {
+			for key := range envVars {
+				_ = os.Unsetenv(key)
+			}
+		}()
+
+		var cfg ConfigWithSlices
+		err := Load(&cfg, WithEnv("APP"))
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"broker1:9092", "broker2:9092"}, cfg.KafkaBrokers)
+		assert.Equal(t, []string{"http://api1.com", "http://api2.com"}, cfg.HTTPEndpoints)
+	})
+
+	t.Run("environment variables with mixed case typed slice fields", func(t *testing.T) {
+		type ConfigWithTypedSlices struct {
+			KafkaPorts   []int
+			HTTPTimeouts []int
+			DatabaseIDs  []int
+		}
+
+		envVars := map[string]string{
+			"KAFKA_PORTS":   "9092,9093,9094",
+			"HTTP_TIMEOUTS": "30,60,90",
+			"DATABASE_I_DS": "1,2,3,4,5",
+		}
+
+		for key, value := range envVars {
+			require.NoError(t, os.Setenv(key, value))
+		}
+		defer func() {
+			for key := range envVars {
+				_ = os.Unsetenv(key)
+			}
+		}()
+
+		var cfg ConfigWithTypedSlices
+		err := Load(&cfg, WithEnv("-"))
+		require.NoError(t, err)
+
+		assert.Equal(t, []int{9092, 9093, 9094}, cfg.KafkaPorts)
+		assert.Equal(t, []int{30, 60, 90}, cfg.HTTPTimeouts)
+		assert.Equal(t, []int{1, 2, 3, 4, 5}, cfg.DatabaseIDs)
+	})
 }
 
 func TestDefaultTag(t *testing.T) {
