@@ -628,6 +628,10 @@ func loadFromEnv(config interface{}, prefix string) error {
 	if err != nil {
 		return err
 	}
+	// Handle special case where prefix is "-" to not prepend any prefix
+	if prefix == "-" {
+		return loadFromEnvRecursive(configElem, "")
+	}
 	return loadFromEnvRecursive(configElem, strings.ToUpper(prefix))
 }
 
@@ -657,11 +661,21 @@ func loadFromEnvRecursive(v reflect.Value, prefix string) error {
 			var envKey string
 			if envTag != "" && envTag != "-" {
 				// For env tags, use root prefix + env tag name (skip intermediate prefixes)
-				rootPrefix := strings.Split(prefix, "_")[0] // Get the original prefix (e.g., "TEST")
-				envKey = rootPrefix + "_" + strings.ToUpper(strings.Split(envTag, ",")[0])
+				if prefix == "" {
+					// No prefix case (WithEnv("-"))
+					envKey = strings.ToUpper(strings.Split(envTag, ",")[0])
+				} else {
+					rootPrefix := strings.Split(prefix, "_")[0] // Get the original prefix (e.g., "TEST")
+					envKey = rootPrefix + "_" + strings.ToUpper(strings.Split(envTag, ",")[0])
+				}
 			} else {
 				// Use standard prefix + tag name
-				envKey = prefix + "_" + strings.ToUpper(tagName)
+				if prefix == "" {
+					// No prefix case (WithEnv("-"))
+					envKey = strings.ToUpper(tagName)
+				} else {
+					envKey = prefix + "_" + strings.ToUpper(tagName)
+				}
 			}
 
 			if err := setFieldFromEnv(field, envKey); err != nil {

@@ -678,6 +678,61 @@ health:
 		require.NotNil(t, cfg.IntPtr)
 		assert.Equal(t, 42, *cfg.IntPtr)
 	})
+
+	t.Run("environment variables without prefix", func(t *testing.T) {
+		envVars := map[string]string{
+			"LOGGER_LEVEL":   "error",
+			"HEALTH_ADDRESS": ":3000",
+			"DB_HOST":        "envhost",
+			"DB_PORT":        "5433",
+		}
+
+		for key, value := range envVars {
+			require.NoError(t, os.Setenv(key, value))
+		}
+		defer func() {
+			for key := range envVars {
+				_ = os.Unsetenv(key)
+			}
+		}()
+
+		var cfg TestConfig
+		err := Load(&cfg, WithEnv("-"))
+		require.NoError(t, err)
+
+		assert.Equal(t, "error", cfg.Logger.Level)
+		assert.Equal(t, ":3000", cfg.Health.Address)
+		assert.Equal(t, "envhost", cfg.DB.Host)
+		assert.Equal(t, 5433, cfg.DB.Port)
+	})
+
+	t.Run("environment variables without prefix with env tags", func(t *testing.T) {
+		type ConfigWithEnvTags struct {
+			CustomVar string `env:"CUSTOM_VAR"`
+			NormalVar string
+		}
+
+		envVars := map[string]string{
+			"CUSTOM_VAR": "custom_value",
+			"NORMAL_VAR": "normal_value",
+		}
+
+		for key, value := range envVars {
+			require.NoError(t, os.Setenv(key, value))
+		}
+		defer func() {
+			for key := range envVars {
+				_ = os.Unsetenv(key)
+			}
+		}()
+
+		var cfg ConfigWithEnvTags
+		err := Load(&cfg, WithEnv("-"))
+		require.NoError(t, err)
+
+		assert.Equal(t, "custom_value", cfg.CustomVar)
+		assert.Equal(t, "normal_value", cfg.NormalVar)
+	})
 }
 
 func TestDefaultTag(t *testing.T) {
@@ -996,6 +1051,7 @@ func TestHelpers(t *testing.T) {
 			{"HTTPClient", "http_client"},
 			{"UserID", "user_id"},
 			{"APIKey", "api_key"},
+			{"KafkaUsername", "kafka_username"},
 		}
 
 		for _, test := range tests {

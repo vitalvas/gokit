@@ -126,10 +126,22 @@ timeout: "30s"  # time.Duration supported in YAML
 ```
 
 ### 5. Environment Variables
+
+**With prefix:**
 ```bash
 APP_LOGGER_LEVEL=error
 APP_HEALTH_ADDRESS=:3000
 APP_HEALTH_ENABLED=false
+```
+
+**Without prefix (using `WithEnv("-")`):**
+```go
+err := xconfig.Load(&cfg, xconfig.WithEnv("-"))
+```
+```bash
+LOGGER_LEVEL=error
+HEALTH_ADDRESS=:3000
+HEALTH_ENABLED=false
 ```
 
 ### 5.1. Custom Environment Variable Keys
@@ -145,15 +157,26 @@ type Config struct {
 }
 ```
 
-**Environment variables:**
+**Environment variables (with prefix "APP"):**
 ```bash
-# Custom env tag names (no prefix applied)
+# Custom env tag names (prefix is ignored when env tag is present)
 DATABASE_URL=postgres://localhost:5432/mydb
 API_SECRET=secret123
 PORT=8080
 
-# Standard prefixed name (with env tag missing)
+# Standard prefixed name (no env tag)
 APP_LOG_LEVEL=debug
+```
+
+**Environment variables (with `WithEnv("-")` - no prefix):**
+```bash
+# Custom env tag names (used as-is)
+DATABASE_URL=postgres://localhost:5432/mydb
+API_SECRET=secret123
+PORT=8080
+
+# Standard field names (no prefix applied)
+LOG_LEVEL=debug
 ```
 
 **Key Benefits:**
@@ -430,7 +453,8 @@ Each subsequent file can override values from previous files.
 |--------|-------------|---------|
 | `WithFiles(files...)` | Load single/multiple files | `WithFiles("config.yaml")` or `WithFiles("base.yaml", "prod.json")` |
 | `WithDirs(dirs...)` | Load from single/multiple directories | `WithDirs("/etc/myapp")` or `WithDirs("/etc/myapp", "/usr/local/etc/myapp")` |
-| `WithEnv(prefix)` | Load environment variables | `WithEnv("APP")` |
+| `WithEnv(prefix)` | Load environment variables with prefix | `WithEnv("APP")` |
+| `WithEnv("-")` | Load environment variables without prefix | `WithEnv("-")` |
 | `WithDefault(config)` | Set custom defaults | `WithDefault(myDefaults)` |
 
 ## Supported Types
