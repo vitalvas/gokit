@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.1](https://github.com/vitalvas/gokit/compare/v0.18.0...v0.18.1) (2025-09-09)
+
+
+### Bug Fixes
+
+* load empty var ([3e04549](https://github.com/vitalvas/gokit/commit/3e04549aa7964be130d30a6bb0d00cf25aa4d20e))
+
 ## [0.18.0](https://github.com/vitalvas/gokit/compare/v0.17.1...v0.18.0) (2025-08-10)
 
 
