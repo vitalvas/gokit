@@ -135,3 +135,64 @@ func TestCIDRContainsString(t *testing.T) {
 		})
 	}
 }
+
+// Benchmarks
+
+func BenchmarkCIDRContains_10(b *testing.B) {
+	nets := make([]net.IPNet, 10)
+	for i := 0; i < 10; i++ {
+		_, ipNet, _ := net.ParseCIDR(net.IPv4(10, byte(i), 0, 0).String() + "/24")
+		nets[i] = *ipNet
+	}
+	ip := net.IPv4(10, 5, 1, 1)
+
+	b.ResetTimer()
+	for b.Loop() {
+		_ = CIDRContains(nets, ip)
+	}
+}
+
+func BenchmarkCIDRContains_100(b *testing.B) {
+	nets := make([]net.IPNet, 100)
+	for i := 0; i < 100; i++ {
+		_, ipNet, _ := net.ParseCIDR(net.IPv4(10, byte(i), 0, 0).String() + "/24")
+		nets[i] = *ipNet
+	}
+	ip := net.IPv4(10, 50, 1, 1)
+
+	b.ResetTimer()
+	for b.Loop() {
+		_ = CIDRContains(nets, ip)
+	}
+}
+
+func BenchmarkCIDRContains_1000(b *testing.B) {
+	nets := make([]net.IPNet, 1000)
+	for i := 0; i < 1000; i++ {
+		octet2 := byte(i / 256)
+		octet3 := byte(i % 256)
+		_, ipNet, _ := net.ParseCIDR(net.IPv4(10, octet2, octet3, 0).String() + "/24")
+		nets[i] = *ipNet
+	}
+	ip := net.IPv4(10, 1, 244, 1)
+
+	b.ResetTimer()
+	for b.Loop() {
+		_ = CIDRContains(nets, ip)
+	}
+}
+
+func BenchmarkCIDRContainsString_1000(b *testing.B) {
+	nets := make([]string, 1000)
+	for i := 0; i < 1000; i++ {
+		octet2 := byte(i / 256)
+		octet3 := byte(i % 256)
+		nets[i] = net.IPv4(10, octet2, octet3, 0).String() + "/24"
+	}
+	ip := net.IPv4(10, 1, 244, 1)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = CIDRContainsString(nets, ip)
+	}
+}

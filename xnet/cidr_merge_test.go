@@ -490,7 +490,7 @@ func BenchmarkCIDRMerge_IPv4_19to32(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		result := CIDRMerge(cidrs)
 		if len(result) != 1 {
 			b.Fatalf("expected 1 result, got %d", len(result))
@@ -518,7 +518,7 @@ func BenchmarkCIDRMerge_IPv6_115to128(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		result := CIDRMerge(cidrs)
 		if len(result) != 1 {
 			b.Fatalf("expected 1 result, got %d", len(result))
@@ -536,7 +536,7 @@ func BenchmarkCIDRMerge_IPv4_16to24(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		result := CIDRMerge(cidrs)
 		if len(result) != 1 {
 			b.Fatalf("expected 1 result, got %d", len(result))
@@ -561,7 +561,7 @@ func BenchmarkCIDRMerge_IPv6_32to48(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		result := CIDRMerge(cidrs)
 		if len(result) != 1 {
 			b.Fatalf("expected 1 result, got %d", len(result))
@@ -583,7 +583,7 @@ func BenchmarkCIDRMergeString_Small(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		result, err := CIDRMergeString(cidrs)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
@@ -609,7 +609,7 @@ func BenchmarkCIDRMerge_WithGaps(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		result := CIDRMerge(cidrs)
 		if len(result) != 2 {
 			b.Fatalf("expected 2 results, got %d", len(result))

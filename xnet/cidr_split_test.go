@@ -311,7 +311,7 @@ func BenchmarkCIDRSplit_IPv4_16to24(b *testing.B) {
 	_, network, _ := net.ParseCIDR("192.168.0.0/16")
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		result, err := CIDRSplit(*network, 24)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
@@ -326,7 +326,7 @@ func BenchmarkCIDRSplit_IPv4_19to32(b *testing.B) {
 	_, network, _ := net.ParseCIDR("10.0.0.0/19")
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		result, err := CIDRSplit(*network, 32)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
@@ -341,7 +341,7 @@ func BenchmarkCIDRSplit_IPv6_32to48(b *testing.B) {
 	_, network, _ := net.ParseCIDR("2001:db8::/32")
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		result, err := CIDRSplit(*network, 48)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
@@ -356,7 +356,7 @@ func BenchmarkCIDRSplit_IPv6_115to128(b *testing.B) {
 	_, network, _ := net.ParseCIDR("2001:db8::/115")
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		result, err := CIDRSplit(*network, 128)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
@@ -369,7 +369,7 @@ func BenchmarkCIDRSplit_IPv6_115to128(b *testing.B) {
 
 func BenchmarkCIDRSplitString_Small(b *testing.B) {
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		result, err := CIDRSplitString("10.0.0.0/24", 26)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
@@ -384,7 +384,7 @@ func BenchmarkCIDRSplit_IPv4_8to16(b *testing.B) {
 	_, network, _ := net.ParseCIDR("10.0.0.0/8")
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		result, err := CIDRSplit(*network, 16)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
