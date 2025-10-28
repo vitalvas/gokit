@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.19.0](https://github.com/vitalvas/gokit/compare/v0.18.1...v0.19.0) (2025-10-28)
+
+
+### Features
+
+* **xnet:** add cidr_macher ([f765354](https://github.com/vitalvas/gokit/commit/f7653548cb0dce582feddc262bdea993db7a7318))
+* **xnet:** add cidr_merge ([87faffd](https://github.com/vitalvas/gokit/commit/87faffd268712784ce7ec899b9fd75d16665e850))
+* **xnet:** add cidr_split ([de5dcb1](https://github.com/vitalvas/gokit/commit/de5dcb1897be2d1122469006c802be05ceb91116))
+
 ## [0.18.1](https://github.com/vitalvas/gokit/compare/v0.18.0...v0.18.1) (2025-09-09)
 
 
