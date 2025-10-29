@@ -1095,7 +1095,7 @@ func TestExpandMacros(t *testing.T) {
 		require.NoError(t, os.Setenv("DB_HOST", "dbserver"))
 		require.NoError(t, os.Setenv("API_HOST", "apiserver"))
 		defer func() {
-			_ = os.Unsetenv("DB_HOST")
+			_ = os.Unsetenv("TEST_DB_HOST")
 			_ = os.Unsetenv("API_HOST")
 		}()
 
@@ -2454,7 +2454,7 @@ optional: 15s`
 			type DatabaseConfig struct {
 				Host     string `env:"DB_HOST" yaml:"host"`
 				Port     int    `env:"DB_PORT" yaml:"port"`
-				Username string `env:"DB_USER" yaml:"username"`
+				Username string `env:"DB_USERNAME" yaml:"username"`
 			}
 
 			type NestedEnvConfig struct {
@@ -2463,10 +2463,10 @@ optional: 15s`
 			}
 
 			envVars := map[string]string{
-				"TEST_APP_NAME": "my_app",
-				"TEST_DB_HOST":  "db_server",
-				"TEST_DB_PORT":  "3306",
-				"TEST_DB_USER":  "db_user",
+				"TEST_APP_NAME":    "my_app",
+				"TEST_DB_HOST":     "db_server",
+				"TEST_DB_PORT":     "3306",
+				"TEST_DB_USERNAME": "db_user",
 			}
 
 			for key, value := range envVars {

@@ -21,6 +21,7 @@ var (
 )
 
 type Options struct {
+	dotenvFiles   []string
 	files         []string
 	dirs          []string
 	envPrefix     string
@@ -28,6 +29,12 @@ type Options struct {
 }
 
 type Option func(*Options)
+
+func WithDotenv(filenames ...string) Option {
+	return func(o *Options) {
+		o.dotenvFiles = append(o.dotenvFiles, filenames...)
+	}
+}
 
 func WithFiles(filenames ...string) Option {
 	return func(o *Options) {
@@ -79,6 +86,13 @@ func Load(config interface{}, options ...Option) error {
 	if opts.customDefault != nil {
 		if err := applyCustomDefaults(config, opts.customDefault); err != nil {
 			return fmt.Errorf("failed to apply custom defaults: %w", err)
+		}
+	}
+
+	// Load dotenv files first (lowest priority for configuration)
+	if len(opts.dotenvFiles) > 0 {
+		if err := loadDotenvFiles(opts.dotenvFiles); err != nil {
+			return fmt.Errorf("failed to load dotenv files: %w", err)
 		}
 	}
 
