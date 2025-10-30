@@ -1,7 +1,8 @@
-package libmarkov
+package markov
 
 import (
-	"encoding/json"
+	"bytes"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -21,46 +22,6 @@ type Chain struct {
 	statePool    *spool
 	frequencyMat map[int]sparseArray
 	lock         *sync.RWMutex
-}
-
-// ChainJSON godoc
-type ChainJSON struct {
-	Order    int                 `json:"int"`
-	SpoolMap map[string]int      `json:"spool_map"`
-	FreqMat  map[int]sparseArray `json:"freq_mat"`
-}
-
-// MarshalJSON godoc
-func (chain Chain) MarshalJSON() ([]byte, error) {
-	obj := ChainJSON{
-		Order:    chain.Order,
-		SpoolMap: chain.statePool.stringMap,
-		FreqMat:  chain.frequencyMat,
-	}
-	return json.Marshal(obj)
-}
-
-// UnmarshalJSON godoc
-func (chain *Chain) UnmarshalJSON(b []byte) error {
-	var obj ChainJSON
-	err := json.Unmarshal(b, &obj)
-	if err != nil {
-		return err
-	}
-
-	chain.Order = obj.Order
-	intMap := make(map[int]string)
-
-	for k, v := range obj.SpoolMap {
-		intMap[v] = k
-	}
-	chain.statePool = &spool{
-		stringMap: obj.SpoolMap,
-		intMap:    intMap,
-	}
-	chain.frequencyMat = obj.FreqMat
-	chain.lock = new(sync.RWMutex)
-	return nil
 }
 
 // NewChain godoc
@@ -94,8 +55,7 @@ func (chain *Chain) Add(input []string) {
 	tokens = append(tokens, endTokens...)
 	pairs := MakePairs(tokens, chain.Order)
 
-	for i := 0; i < len(pairs); i++ {
-		pair := pairs[i]
+	for _, pair := range pairs {
 		currentIndex := chain.statePool.add(pair.CurrentState.key())
 		nextIndex := chain.statePool.add(pair.NextState)
 		chain.lock.Lock()
@@ -150,4 +110,60 @@ func (chain *Chain) Generate(current NGram) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// Export serializes the chain to bytes using gob encoding.
+func (chain *Chain) Export() ([]byte, error) {
+	chain.lock.RLock()
+	defer chain.lock.RUnlock()
+
+	var buf bytes.Buffer
+	encoder := gob.NewEncoder(&buf)
+
+	exportData := struct {
+		Order        int
+		StringMap    map[string]int
+		FrequencyMat map[int]sparseArray
+	}{
+		Order:        chain.Order,
+		StringMap:    chain.statePool.stringMap,
+		FrequencyMat: chain.frequencyMat,
+	}
+
+	if err := encoder.Encode(exportData); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+// ImportChain deserializes a chain from bytes.
+func ImportChain(data []byte) (*Chain, error) {
+	var exportData struct {
+		Order        int
+		StringMap    map[string]int
+		FrequencyMat map[int]sparseArray
+	}
+
+	buf := bytes.NewBuffer(data)
+	decoder := gob.NewDecoder(buf)
+
+	if err := decoder.Decode(&exportData); err != nil {
+		return nil, err
+	}
+
+	intMap := make(map[int]string)
+	for k, v := range exportData.StringMap {
+		intMap[v] = k
+	}
+
+	return &Chain{
+		Order: exportData.Order,
+		statePool: &spool{
+			stringMap: exportData.StringMap,
+			intMap:    intMap,
+		},
+		frequencyMat: exportData.FrequencyMat,
+		lock:         new(sync.RWMutex),
+	}, nil
 }

@@ -1,4 +1,4 @@
-package libmarkov
+package markov
 
 import "strings"
 

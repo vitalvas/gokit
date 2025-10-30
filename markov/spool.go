@@ -1,4 +1,4 @@
-package libmarkov
+package markov
 
 import "sync"
 
@@ -33,6 +33,8 @@ func (s *spool) add(str string) int {
 }
 
 func (s *spool) get(str string) (int, bool) {
+	s.RLock()
 	index, ok := s.stringMap[str]
+	s.RUnlock()
 	return index, ok
 }
