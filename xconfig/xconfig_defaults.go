@@ -130,6 +130,16 @@ func applyDefaultTagsRecursive(v reflect.Value) error {
 				return err
 			}
 		}
+	case reflect.Slice:
+		// Process each element in the slice
+		for i := 0; i < v.Len(); i++ {
+			elem := v.Index(i)
+			if elem.CanSet() {
+				if err := applyDefaultTagsRecursive(elem); err != nil {
+					return err
+				}
+			}
+		}
 	case reflect.Ptr:
 		if v.IsNil() && v.CanSet() {
 			v.Set(reflect.New(v.Type().Elem()))
@@ -162,6 +172,16 @@ func callDefaultMethodsRecursive(v reflect.Value) error {
 			}
 			if err := callDefaultMethodsRecursive(field); err != nil {
 				return err
+			}
+		}
+	case reflect.Slice:
+		// Process each element in the slice
+		for i := 0; i < v.Len(); i++ {
+			elem := v.Index(i)
+			if elem.CanSet() {
+				if err := callDefaultMethodsRecursive(elem); err != nil {
+					return err
+				}
 			}
 		}
 	case reflect.Ptr:

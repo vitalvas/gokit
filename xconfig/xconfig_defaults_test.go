@@ -52,6 +52,42 @@ type DefaultTagConfig struct {
 	PointerField *string `yaml:"pointer_field" default:"default_pointer"`
 }
 
+// Test type for Default() method in slices
+type ClusterWithDefaultMethod struct {
+	ID               string
+	Name             string
+	Hosts            []string
+	Port             int
+	Username         string
+	Password         string
+	Keyspace         string
+	ConnectTimeout   time.Duration
+	Timeout          time.Duration
+	NumConns         int
+	ConsistencyLevel string
+}
+
+func (c *ClusterWithDefaultMethod) Default() {
+	// Preserve existing non-zero values (ID, Name, Hosts)
+	id := c.ID
+	name := c.Name
+	hosts := c.Hosts
+
+	*c = ClusterWithDefaultMethod{
+		Port:             9042,
+		Keyspace:         "system",
+		ConnectTimeout:   2 * time.Second,
+		Timeout:          5 * time.Second,
+		NumConns:         2,
+		ConsistencyLevel: "LOCAL_QUORUM",
+	}
+
+	// Restore preserved values
+	c.ID = id
+	c.Name = name
+	c.Hosts = hosts
+}
+
 type NestedDefaultConfig struct {
 	Parent ParentConfig `yaml:"parent"`
 }
@@ -341,5 +377,121 @@ int_field: 999`
 		// Fields not in env should use default tags
 		assert.True(t, cfg.BoolField)
 		assert.Equal(t, 3.14, cfg.FloatField)
+	})
+}
+
+func TestDefaultTagWithSlices(t *testing.T) {
+	t.Run("default tags in slice elements", func(t *testing.T) {
+		type ClusterConfig struct {
+			ID               string
+			Name             string
+			Hosts            []string
+			Port             int           `default:"9042"`
+			Username         string
+			Password         string
+			Keyspace         string        `default:"system"`
+			ConnectTimeout   time.Duration `default:"2s"`
+			Timeout          time.Duration `default:"5s"`
+			NumConns         int           `default:"2"`
+			ConsistencyLevel string        `default:"LOCAL_QUORUM"`
+		}
+
+		type CassandraConfig struct {
+			Clusters []ClusterConfig
+		}
+
+		type Config struct {
+			Cassandra CassandraConfig
+		}
+
+		cfg := Config{
+			Cassandra: CassandraConfig{
+				Clusters: []ClusterConfig{
+					{
+						ID:    "cluster1",
+						Name:  "Cluster 1",
+						Hosts: []string{"host1", "host2"},
+					},
+					{
+						ID:    "cluster2",
+						Name:  "Cluster 2",
+						Hosts: []string{"host3", "host4"},
+					},
+				},
+			},
+		}
+
+		err := Load(&cfg)
+		require.NoError(t, err)
+
+		// Verify defaults are applied to first cluster
+		assert.Equal(t, "cluster1", cfg.Cassandra.Clusters[0].ID)
+		assert.Equal(t, 9042, cfg.Cassandra.Clusters[0].Port)
+		assert.Equal(t, "system", cfg.Cassandra.Clusters[0].Keyspace)
+		assert.Equal(t, 2*time.Second, cfg.Cassandra.Clusters[0].ConnectTimeout)
+		assert.Equal(t, 5*time.Second, cfg.Cassandra.Clusters[0].Timeout)
+		assert.Equal(t, 2, cfg.Cassandra.Clusters[0].NumConns)
+		assert.Equal(t, "LOCAL_QUORUM", cfg.Cassandra.Clusters[0].ConsistencyLevel)
+
+		// Verify defaults are applied to second cluster
+		assert.Equal(t, "cluster2", cfg.Cassandra.Clusters[1].ID)
+		assert.Equal(t, 9042, cfg.Cassandra.Clusters[1].Port)
+		assert.Equal(t, "system", cfg.Cassandra.Clusters[1].Keyspace)
+		assert.Equal(t, 2*time.Second, cfg.Cassandra.Clusters[1].ConnectTimeout)
+		assert.Equal(t, 5*time.Second, cfg.Cassandra.Clusters[1].Timeout)
+		assert.Equal(t, 2, cfg.Cassandra.Clusters[1].NumConns)
+		assert.Equal(t, "LOCAL_QUORUM", cfg.Cassandra.Clusters[1].ConsistencyLevel)
+	})
+
+	t.Run("default method in slice elements", func(t *testing.T) {
+		type CassandraConfig struct {
+			Clusters []ClusterWithDefaultMethod
+		}
+
+		type Config struct {
+			Cassandra CassandraConfig
+		}
+
+		cfg := Config{
+			Cassandra: CassandraConfig{
+				Clusters: []ClusterWithDefaultMethod{
+					{
+						ID:    "cluster1",
+						Name:  "Cluster 1",
+						Hosts: []string{"host1", "host2"},
+					},
+					{
+						ID:    "cluster2",
+						Name:  "Cluster 2",
+						Hosts: []string{"host3", "host4"},
+					},
+				},
+			},
+		}
+
+		err := Load(&cfg)
+		require.NoError(t, err)
+
+		// Verify Default() method was called and defaults were applied to first cluster
+		assert.Equal(t, "cluster1", cfg.Cassandra.Clusters[0].ID)
+		assert.Equal(t, "Cluster 1", cfg.Cassandra.Clusters[0].Name)
+		assert.Equal(t, []string{"host1", "host2"}, cfg.Cassandra.Clusters[0].Hosts)
+		assert.Equal(t, 9042, cfg.Cassandra.Clusters[0].Port)
+		assert.Equal(t, "system", cfg.Cassandra.Clusters[0].Keyspace)
+		assert.Equal(t, 2*time.Second, cfg.Cassandra.Clusters[0].ConnectTimeout)
+		assert.Equal(t, 5*time.Second, cfg.Cassandra.Clusters[0].Timeout)
+		assert.Equal(t, 2, cfg.Cassandra.Clusters[0].NumConns)
+		assert.Equal(t, "LOCAL_QUORUM", cfg.Cassandra.Clusters[0].ConsistencyLevel)
+
+		// Verify Default() method was called and defaults were applied to second cluster
+		assert.Equal(t, "cluster2", cfg.Cassandra.Clusters[1].ID)
+		assert.Equal(t, "Cluster 2", cfg.Cassandra.Clusters[1].Name)
+		assert.Equal(t, []string{"host3", "host4"}, cfg.Cassandra.Clusters[1].Hosts)
+		assert.Equal(t, 9042, cfg.Cassandra.Clusters[1].Port)
+		assert.Equal(t, "system", cfg.Cassandra.Clusters[1].Keyspace)
+		assert.Equal(t, 2*time.Second, cfg.Cassandra.Clusters[1].ConnectTimeout)
+		assert.Equal(t, 5*time.Second, cfg.Cassandra.Clusters[1].Timeout)
+		assert.Equal(t, 2, cfg.Cassandra.Clusters[1].NumConns)
+		assert.Equal(t, "LOCAL_QUORUM", cfg.Cassandra.Clusters[1].ConsistencyLevel)
 	})
 }
