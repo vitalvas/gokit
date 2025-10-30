@@ -38,6 +38,7 @@ Min-entropy (Rényi entropy with α=∞) measures the **worst-case** predictabil
 **Use Cases**: Cryptographic key quality, password security, worst-case security analysis.
 
 **Why Both?**
+
 - **Shannon**: Average-case analysis (e.g., "How compressible is this data?")
 - **Min-Entropy**: Worst-case analysis (e.g., "How secure is this key against focused attacks?")
 
@@ -127,6 +128,7 @@ minEntUniform := xentropy.MinEntropy(uniform)     // 1.00 bits
 ```
 
 **When to Use:**
+
 - Use **Shannon** for data compression, average randomness
 - Use **MinEntropy** for cryptographic keys, security-critical applications
 
@@ -231,6 +233,7 @@ fmt.Printf("Is secure: %v\n", isSecure)
 - Security-critical entropy sources
 
 **IsRandom vs IsSecure:**
+
 - `IsRandom`: Uses Shannon entropy (average case) - threshold 0.9
 - `IsSecure`: Uses min-entropy (worst case) - threshold 0.8
 - Use `IsSecure` for security-critical applications

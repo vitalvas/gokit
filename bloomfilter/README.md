@@ -76,13 +76,16 @@ fmt.Printf("Hash functions: %d\n", bf.K())
 ```
 
 **Parameters:**
+
 - `n`: Expected number of elements
 - `p`: Desired false positive rate (0.0 to 1.0)
 
 **Returns:**
+
 - Optimally sized Bloom filter
 
 **Automatic Optimizations:**
+
 - Calculates optimal bit count using formula: `m = -n * ln(p) / (ln(2))^2`
 - Calculates optimal hash count using formula: `k = (m/n) * ln(2)`
 - Rounds size to power of 2 for fast modulo operations
@@ -158,6 +161,7 @@ if !bf.Contains("orange") {
 ```
 
 **Returns:**
+
 - `true`: Element is probably in the set (may be false positive)
 - `false`: Element is definitely not in the set (never false negative)
 
@@ -446,6 +450,7 @@ func getUserByID(id string) (*User, error) {
 | `Import` | O(m/64) | Deserialize bitset |
 
 Where:
+
 - `m` = number of bits
 - `k` = number of hash functions (typically 7-10)
 
@@ -538,6 +543,7 @@ bf.Add("item")
 ```
 
 **Workarounds:**
+
 - Use counting Bloom filter (different data structure)
 - Create a new filter and re-add remaining elements
 - Use `Clear()` to reset entire filter
