@@ -8,6 +8,7 @@ The following libraries will be released in v1.0.0:
 
 - **bloomfilter** - High-performance Bloom filter with optimized bit-level operations
 - **cuckoo** - Cuckoo filter for approximate set membership with deletion support
+- **ewma** - Exponentially weighted moving average for smoothing time series data and rate calculation
 - **hyperloglog** - Cardinality estimation for counting distinct elements with minimal memory
 - **markov** - Markov chain text generator with thread-safe operations
 - **tdigest** - T-Digest for accurate quantile estimation from streaming or distributed data
