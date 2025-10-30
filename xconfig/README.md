@@ -8,6 +8,7 @@ A flexible Go configuration library that supports loading from multiple sources 
 - **Duration parsing**: Human-readable duration strings in both JSON and YAML (`"5m"`, `"30s"`, `"2h30m"`)
 - **Environment variables**: with prefix support and custom env variable names
 - **Custom env tags**: override default environment variable keys (`env:"CUSTOM_VAR"`)
+- **Custom separators**: customize delimiters for slices and maps (`envSeparator:":"`)
 - **Multiple files**: load and merge from multiple configuration files
 - **Default tags**: set default values using struct tags (`default:"value"`)
 - **Custom defaults**: override struct defaults programmatically
@@ -380,6 +381,47 @@ type Config struct {
 // APP_LABELS=env=prod,region=us-east
 ```
 
+### Custom Separators for Slices and Maps
+
+By default, environment variables for slices and maps use commas (`,`) as separators. You can customize the separator using the `envSeparator` tag:
+
+```go
+type Config struct {
+    // Use colon as separator
+    Hosts    []string          `yaml:"hosts" envSeparator:":"`
+
+    // Use pipe as separator
+    Tags     []string          `yaml:"tags" envSeparator:"|"`
+
+    // Use semicolon for maps
+    Labels   map[string]string `yaml:"labels" envSeparator:";"`
+
+    // Default comma separator (no tag needed)
+    Ports    []int             `yaml:"ports"`
+}
+```
+
+**Environment variables:**
+```bash
+APP_HOSTS=web1.example.com:web2.example.com:web3.example.com
+APP_TAGS=tag1|tag2|tag3
+APP_LABELS=env=prod;region=us-east;tier=web
+APP_PORTS=8080,9090,3000
+```
+
+**Use Cases:**
+- **Colon separator (`:`)**: When values contain commas (e.g., URLs with query parameters)
+- **Pipe separator (`|`)**: For better readability or when values contain commas
+- **Semicolon separator (`;`)**: Common in Windows environments or when interfacing with legacy systems
+- **Custom separators**: Use any single-character or multi-character separator that suits your needs
+
+**Key Points:**
+- The `envSeparator` tag only affects environment variable parsing
+- File-based configuration (YAML/JSON) uses standard array/object syntax
+- Whitespace around separators is automatically trimmed
+- Different fields can use different separators
+- Default separator remains comma (`,`) for backward compatibility
+
 ## Priority Chain
 
 Configuration values are resolved in this order (later sources override earlier ones):
@@ -555,11 +597,14 @@ The conversion handles acronyms intelligently, keeping consecutive uppercase let
 # For []string field with yaml:"hosts"
 APP_HOSTS=web1.example.com,web2.example.com,web3.example.com
 
-# For []int field with yaml:"ports"  
+# For []int field with yaml:"ports"
 APP_PORTS=8080,9090,3000
 
 # For []bool field with yaml:"enabled"
 APP_ENABLED=true,false,true
+
+# With custom separator (envSeparator:":")
+APP_HOSTS=web1.example.com:web2.example.com:web3.example.com
 ```
 
 #### Maps
@@ -572,6 +617,9 @@ APP_PORTS=http=80,https=443,ssh=22
 
 # For map[string]bool field with yaml:"features"
 APP_FEATURES=auth=true,cache=false,debug=true
+
+# With custom separator (envSeparator:";")
+APP_LABELS=env=production;region=us-east;tier=web
 ```
 
 #### Nested Structures
@@ -632,8 +680,12 @@ enabled: ${env:ENABLED}  # Won't expand - use environment variables instead
 
 - **Primitives**: `PREFIX_FIELD=value`
 - **Nested**: `PREFIX_PARENT_CHILD=value`
-- **Slices**: `PREFIX_FIELD=item1,item2,item3`
-- **Maps**: `PREFIX_FIELD=key1=value1,key2=value2`
+- **Slices**: `PREFIX_FIELD=item1,item2,item3` (default comma separator)
+- **Slices with custom separator**: `PREFIX_FIELD=item1:item2:item3` (use `envSeparator:":"`)
+- **Maps**: `PREFIX_FIELD=key1=value1,key2=value2` (default comma separator)
+- **Maps with custom separator**: `PREFIX_FIELD=key1=value1;key2=value2` (use `envSeparator:";"`)
+
+**Note**: The `envSeparator` tag allows customizing the delimiter for parsing slices and maps from environment variables. This is useful when values contain commas or when working with legacy systems that use different separators.
 
 ## License
 

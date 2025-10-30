@@ -106,7 +106,7 @@ func loadFromEnvRecursive(v reflect.Value, prefix string) error {
 				}
 			}
 
-			if err := setFieldFromEnv(field, envKey); err != nil {
+			if err := setFieldFromEnv(field, fieldType, envKey); err != nil {
 				return fmt.Errorf("failed to set field %s: %w", fieldType.Name, err)
 			}
 
@@ -125,12 +125,20 @@ func loadFromEnvRecursive(v reflect.Value, prefix string) error {
 	return nil
 }
 
-func parseCommaSeparated(envValue string) []string {
+func getEnvSeparator(fieldType reflect.StructField) string {
+	separator := fieldType.Tag.Get("envSeparator")
+	if separator == "" {
+		return "," // Default separator
+	}
+	return separator
+}
+
+func parseSeparated(envValue, separator string) []string {
 	if envValue == "" {
 		return nil
 	}
 	var result []string
-	for _, value := range strings.Split(envValue, ",") {
+	for _, value := range strings.Split(envValue, separator) {
 		if value = strings.TrimSpace(value); value != "" {
 			result = append(result, value)
 		}
@@ -138,12 +146,18 @@ func parseCommaSeparated(envValue string) []string {
 	return result
 }
 
-func setSliceFromEnv(field reflect.Value, envValue, envKey string) error {
+// parseCommaSeparated is deprecated, use parseSeparated instead.
+// Kept for backward compatibility.
+func parseCommaSeparated(envValue string) []string {
+	return parseSeparated(envValue, ",")
+}
+
+func setSliceFromEnv(field reflect.Value, envValue, envKey, separator string) error {
 	if envValue == "" {
 		return nil
 	}
 
-	values := parseCommaSeparated(envValue)
+	values := parseSeparated(envValue, separator)
 	elemType := field.Type().Elem()
 	slice := reflect.MakeSlice(field.Type(), 0, len(values))
 
@@ -193,12 +207,12 @@ func setValueFromString(elem reflect.Value, value, envKey, context string) error
 	return nil
 }
 
-func setMapFromEnv(field reflect.Value, envValue, envKey string) error {
+func setMapFromEnv(field reflect.Value, envValue, envKey, separator string) error {
 	if envValue == "" {
 		return nil
 	}
 
-	pairs := parseCommaSeparated(envValue)
+	pairs := parseSeparated(envValue, separator)
 	keyType := field.Type().Key()
 	if keyType.Kind() != reflect.String {
 		return fmt.Errorf("unsupported map key type %s for %s, only string keys are supported", keyType.Kind(), envKey)
@@ -231,7 +245,7 @@ func setMapFromEnv(field reflect.Value, envValue, envKey string) error {
 	return nil
 }
 
-func setFieldFromEnv(field reflect.Value, envKey string) error {
+func setFieldFromEnv(field reflect.Value, fieldType reflect.StructField, envKey string) error {
 	envValue := os.Getenv(envKey)
 	if envValue == "" {
 		return nil
@@ -247,16 +261,18 @@ func setFieldFromEnv(field reflect.Value, envKey string) error {
 		return nil
 	}
 
+	separator := getEnvSeparator(fieldType)
+
 	switch field.Kind() {
 	case reflect.Ptr:
 		if field.IsNil() {
 			field.Set(reflect.New(field.Type().Elem()))
 		}
-		return setFieldFromEnv(field.Elem(), envKey)
+		return setFieldFromEnv(field.Elem(), fieldType, envKey)
 	case reflect.Slice:
-		return setSliceFromEnv(field, envValue, envKey)
+		return setSliceFromEnv(field, envValue, envKey, separator)
 	case reflect.Map:
-		return setMapFromEnv(field, envValue, envKey)
+		return setMapFromEnv(field, envValue, envKey, separator)
 	default:
 		return setValueFromString(field, envValue, envKey, "")
 	}

@@ -295,3 +295,198 @@ func TestInvalidEnvironmentValues(t *testing.T) {
 		assert.Contains(t, err.Error(), "invalid duration value")
 	})
 }
+
+func TestEnvSeparator(t *testing.T) {
+	t.Run("slice with custom separator - colon", func(t *testing.T) {
+		type ConfigWithColonSeparator struct {
+			Hosts []string `yaml:"hosts" envSeparator:":"`
+		}
+
+		require.NoError(t, os.Setenv("TEST_HOSTS", "host1:host2:host3"))
+		defer func() { _ = os.Unsetenv("TEST_HOSTS") }()
+
+		var cfg ConfigWithColonSeparator
+		err := Load(&cfg, WithEnv("TEST"))
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"host1", "host2", "host3"}, cfg.Hosts)
+	})
+
+	t.Run("slice with custom separator - pipe", func(t *testing.T) {
+		type ConfigWithPipeSeparator struct {
+			Tags []string `yaml:"tags" envSeparator:"|"`
+		}
+
+		require.NoError(t, os.Setenv("TEST_TAGS", "tag1|tag2|tag3"))
+		defer func() { _ = os.Unsetenv("TEST_TAGS") }()
+
+		var cfg ConfigWithPipeSeparator
+		err := Load(&cfg, WithEnv("TEST"))
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"tag1", "tag2", "tag3"}, cfg.Tags)
+	})
+
+	t.Run("slice with custom separator - semicolon", func(t *testing.T) {
+		type ConfigWithSemicolonSeparator struct {
+			Ports []int `yaml:"ports" envSeparator:";"`
+		}
+
+		require.NoError(t, os.Setenv("TEST_PORTS", "8080;8081;8082"))
+		defer func() { _ = os.Unsetenv("TEST_PORTS") }()
+
+		var cfg ConfigWithSemicolonSeparator
+		err := Load(&cfg, WithEnv("TEST"))
+		require.NoError(t, err)
+
+		assert.Equal(t, []int{8080, 8081, 8082}, cfg.Ports)
+	})
+
+	t.Run("slice with default separator - comma", func(t *testing.T) {
+		type ConfigWithDefaultSeparator struct {
+			Hosts []string `yaml:"hosts"`
+		}
+
+		require.NoError(t, os.Setenv("TEST_HOSTS", "host1,host2,host3"))
+		defer func() { _ = os.Unsetenv("TEST_HOSTS") }()
+
+		var cfg ConfigWithDefaultSeparator
+		err := Load(&cfg, WithEnv("TEST"))
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"host1", "host2", "host3"}, cfg.Hosts)
+	})
+
+	t.Run("map with custom separator - pipe", func(t *testing.T) {
+		type ConfigWithPipeMapSeparator struct {
+			Labels map[string]string `yaml:"labels" envSeparator:"|"`
+		}
+
+		require.NoError(t, os.Setenv("TEST_LABELS", "env=prod|region=us-east|tier=frontend"))
+		defer func() { _ = os.Unsetenv("TEST_LABELS") }()
+
+		var cfg ConfigWithPipeMapSeparator
+		err := Load(&cfg, WithEnv("TEST"))
+		require.NoError(t, err)
+
+		assert.Equal(t, map[string]string{
+			"env":    "prod",
+			"region": "us-east",
+			"tier":   "frontend",
+		}, cfg.Labels)
+	})
+
+	t.Run("map with custom separator - semicolon", func(t *testing.T) {
+		type ConfigWithSemicolonMapSeparator struct {
+			Counters map[string]int `yaml:"counters" envSeparator:";"`
+		}
+
+		require.NoError(t, os.Setenv("TEST_COUNTERS", "a=1;b=2;c=3"))
+		defer func() { _ = os.Unsetenv("TEST_COUNTERS") }()
+
+		var cfg ConfigWithSemicolonMapSeparator
+		err := Load(&cfg, WithEnv("TEST"))
+		require.NoError(t, err)
+
+		assert.Equal(t, map[string]int{
+			"a": 1,
+			"b": 2,
+			"c": 3,
+		}, cfg.Counters)
+	})
+
+	t.Run("map with default separator - comma", func(t *testing.T) {
+		type ConfigWithDefaultMapSeparator struct {
+			Labels map[string]string `yaml:"labels"`
+		}
+
+		require.NoError(t, os.Setenv("TEST_LABELS", "env=prod,region=us-east"))
+		defer func() { _ = os.Unsetenv("TEST_LABELS") }()
+
+		var cfg ConfigWithDefaultMapSeparator
+		err := Load(&cfg, WithEnv("TEST"))
+		require.NoError(t, err)
+
+		assert.Equal(t, map[string]string{
+			"env":    "prod",
+			"region": "us-east",
+		}, cfg.Labels)
+	})
+
+	t.Run("multiple fields with different separators", func(t *testing.T) {
+		type ConfigWithMixedSeparators struct {
+			Hosts    []string          `yaml:"hosts" envSeparator:":"`
+			Ports    []int             `yaml:"ports" envSeparator:";"`
+			Tags     []string          `yaml:"tags" envSeparator:"|"`
+			Labels   map[string]string `yaml:"labels" envSeparator:":"`
+			Counters map[string]int    `yaml:"counters"`
+		}
+
+		envVars := map[string]string{
+			"TEST_HOSTS":    "host1:host2:host3",
+			"TEST_PORTS":    "8080;8081;8082",
+			"TEST_TAGS":     "tag1|tag2|tag3",
+			"TEST_LABELS":   "env=prod:region=us",
+			"TEST_COUNTERS": "a=1,b=2",
+		}
+
+		for key, value := range envVars {
+			require.NoError(t, os.Setenv(key, value))
+		}
+		defer func() {
+			for key := range envVars {
+				_ = os.Unsetenv(key)
+			}
+		}()
+
+		var cfg ConfigWithMixedSeparators
+		err := Load(&cfg, WithEnv("TEST"))
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"host1", "host2", "host3"}, cfg.Hosts)
+		assert.Equal(t, []int{8080, 8081, 8082}, cfg.Ports)
+		assert.Equal(t, []string{"tag1", "tag2", "tag3"}, cfg.Tags)
+		assert.Equal(t, map[string]string{"env": "prod", "region": "us"}, cfg.Labels)
+		assert.Equal(t, map[string]int{"a": 1, "b": 2}, cfg.Counters)
+	})
+
+	t.Run("slice with spaces around custom separator", func(t *testing.T) {
+		type ConfigWithSpacedSeparator struct {
+			Items []string `yaml:"items" envSeparator:"|"`
+		}
+
+		require.NoError(t, os.Setenv("TEST_ITEMS", "item1 | item2 | item3"))
+		defer func() { _ = os.Unsetenv("TEST_ITEMS") }()
+
+		var cfg ConfigWithSpacedSeparator
+		err := Load(&cfg, WithEnv("TEST"))
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"item1", "item2", "item3"}, cfg.Items)
+	})
+}
+
+func TestParseSeparated(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		separator string
+		expected  []string
+	}{
+		{"comma separated", "a,b,c", ",", []string{"a", "b", "c"}},
+		{"colon separated", "a:b:c", ":", []string{"a", "b", "c"}},
+		{"pipe separated", "a|b|c", "|", []string{"a", "b", "c"}},
+		{"semicolon separated", "a;b;c", ";", []string{"a", "b", "c"}},
+		{"with spaces", " a | b | c ", "|", []string{"a", "b", "c"}},
+		{"empty string", "", ",", nil},
+		{"single value", "single", ",", []string{"single"}},
+		{"trailing separator", "a|b|", "|", []string{"a", "b"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseSeparated(tt.input, tt.separator)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

@@ -886,33 +886,33 @@ func TestHelpers(t *testing.T) {
 		// Test string slice
 		var stringSlice []string
 		stringSliceVal := reflect.ValueOf(&stringSlice).Elem()
-		err := setSliceFromEnv(stringSliceVal, "one,two,three", "TEST_KEY")
+		err := setSliceFromEnv(stringSliceVal, "one,two,three", "TEST_KEY", ",")
 		require.NoError(t, err)
 		assert.Equal(t, []string{"one", "two", "three"}, stringSlice)
 
 		// Test int slice
 		var intSlice []int
 		intSliceVal := reflect.ValueOf(&intSlice).Elem()
-		err = setSliceFromEnv(intSliceVal, "1,2,3", "TEST_KEY")
+		err = setSliceFromEnv(intSliceVal, "1,2,3", "TEST_KEY", ",")
 		require.NoError(t, err)
 		assert.Equal(t, []int{1, 2, 3}, intSlice)
 
 		// Test invalid int slice
 		var invalidIntSlice []int
 		invalidIntSliceVal := reflect.ValueOf(&invalidIntSlice).Elem()
-		err = setSliceFromEnv(invalidIntSliceVal, "one,two,three", "TEST_KEY")
+		err = setSliceFromEnv(invalidIntSliceVal, "one,two,three", "TEST_KEY", ",")
 		assert.Error(t, err)
 
 		// Test unsupported slice type
 		var unsupportedSlice []complex64
 		unsupportedSliceVal := reflect.ValueOf(&unsupportedSlice).Elem()
-		err = setSliceFromEnv(unsupportedSliceVal, "1,2,3", "TEST_KEY")
+		err = setSliceFromEnv(unsupportedSliceVal, "1,2,3", "TEST_KEY", ",")
 		assert.Error(t, err)
 
 		// Test empty value
 		var emptySlice []string
 		emptySliceVal := reflect.ValueOf(&emptySlice).Elem()
-		err = setSliceFromEnv(emptySliceVal, "", "TEST_KEY")
+		err = setSliceFromEnv(emptySliceVal, "", "TEST_KEY", ",")
 		require.NoError(t, err)
 		assert.Nil(t, emptySlice)
 	})
@@ -921,7 +921,7 @@ func TestHelpers(t *testing.T) {
 		// Test string map
 		var stringMap map[string]string
 		stringMapVal := reflect.ValueOf(&stringMap).Elem()
-		err := setMapFromEnv(stringMapVal, "key1=value1,key2=value2", "TEST_KEY")
+		err := setMapFromEnv(stringMapVal, "key1=value1,key2=value2", "TEST_KEY", ",")
 		require.NoError(t, err)
 		expected := map[string]string{"key1": "value1", "key2": "value2"}
 		assert.Equal(t, expected, stringMap)
@@ -929,7 +929,7 @@ func TestHelpers(t *testing.T) {
 		// Test int map
 		var intMap map[string]int
 		intMapVal := reflect.ValueOf(&intMap).Elem()
-		err = setMapFromEnv(intMapVal, "num1=1,num2=2", "TEST_KEY")
+		err = setMapFromEnv(intMapVal, "num1=1,num2=2", "TEST_KEY", ",")
 		require.NoError(t, err)
 		expectedInt := map[string]int{"num1": 1, "num2": 2}
 		assert.Equal(t, expectedInt, intMap)
@@ -937,25 +937,25 @@ func TestHelpers(t *testing.T) {
 		// Test invalid format
 		var invalidMap map[string]string
 		invalidMapVal := reflect.ValueOf(&invalidMap).Elem()
-		err = setMapFromEnv(invalidMapVal, "invalid_format", "TEST_KEY")
+		err = setMapFromEnv(invalidMapVal, "invalid_format", "TEST_KEY", ",")
 		assert.Error(t, err)
 
 		// Test invalid int map
 		var invalidIntMap map[string]int
 		invalidIntMapVal := reflect.ValueOf(&invalidIntMap).Elem()
-		err = setMapFromEnv(invalidIntMapVal, "key=not_a_number", "TEST_KEY")
+		err = setMapFromEnv(invalidIntMapVal, "key=not_a_number", "TEST_KEY", ",")
 		assert.Error(t, err)
 
 		// Test unsupported map type
 		var unsupportedMap map[string]complex64
 		unsupportedMapVal := reflect.ValueOf(&unsupportedMap).Elem()
-		err = setMapFromEnv(unsupportedMapVal, "key=1", "TEST_KEY")
+		err = setMapFromEnv(unsupportedMapVal, "key=1", "TEST_KEY", ",")
 		assert.Error(t, err)
 
 		// Test empty value
 		var emptyMap map[string]string
 		emptyMapVal := reflect.ValueOf(&emptyMap).Elem()
-		err = setMapFromEnv(emptyMapVal, "", "TEST_KEY")
+		err = setMapFromEnv(emptyMapVal, "", "TEST_KEY", ",")
 		require.NoError(t, err)
 		assert.Nil(t, emptyMap)
 	})
@@ -1644,24 +1644,24 @@ func TestHelpers(t *testing.T) {
 
 				// Test non-string key error
 				intKeyField := configElem.Field(0)
-				err := setMapFromEnv(intKeyField, "key=value", "TEST_INT_KEY_MAP")
+				err := setMapFromEnv(intKeyField, "key=value", "TEST_INT_KEY_MAP", ",")
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "only string keys are supported")
 
 				// Test invalid pair format
 				validMapField := configElem.Field(1)
-				err = setMapFromEnv(validMapField, "invalid_no_equals", "TEST_VALID_MAP")
+				err = setMapFromEnv(validMapField, "invalid_no_equals", "TEST_VALID_MAP", ",")
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "expected key=value")
 
 				// Test empty key error
-				err = setMapFromEnv(validMapField, "=value", "TEST_VALID_MAP")
+				err = setMapFromEnv(validMapField, "=value", "TEST_VALID_MAP", ",")
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "empty key in map pair")
 
 				// Test invalid value type conversion
 				complexMapField := configElem.Field(2)
-				err = setMapFromEnv(complexMapField, "key=not_a_number", "TEST_COMPLEX_MAP")
+				err = setMapFromEnv(complexMapField, "key=not_a_number", "TEST_COMPLEX_MAP", ",")
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "invalid map value")
 			})
@@ -1693,13 +1693,15 @@ func TestHelpers(t *testing.T) {
 
 				config := &FieldTestStruct{}
 				configElem := reflect.ValueOf(config).Elem()
+				configType := configElem.Type()
 
 				// Test duration field
 				os.Setenv("TEST_DURATION_FIELD", "5m30s")
 				defer os.Unsetenv("TEST_DURATION_FIELD")
 
 				durationField := configElem.Field(0)
-				err := setFieldFromEnv(durationField, "TEST_DURATION_FIELD")
+				durationFieldType := configType.Field(0)
+				err := setFieldFromEnv(durationField, durationFieldType, "TEST_DURATION_FIELD")
 				assert.NoError(t, err)
 				assert.Equal(t, 5*time.Minute+30*time.Second, config.Duration)
 
@@ -1708,7 +1710,8 @@ func TestHelpers(t *testing.T) {
 				defer os.Unsetenv("TEST_PTR_FIELD")
 
 				ptrField := configElem.Field(1)
-				err = setFieldFromEnv(ptrField, "TEST_PTR_FIELD")
+				ptrFieldType := configType.Field(1)
+				err = setFieldFromEnv(ptrField, ptrFieldType, "TEST_PTR_FIELD")
 				assert.NoError(t, err)
 				assert.NotNil(t, config.PtrField)
 				assert.Equal(t, "ptr_value", *config.PtrField)
@@ -1716,7 +1719,8 @@ func TestHelpers(t *testing.T) {
 				// Test with empty env value (should not error, just skip)
 				os.Unsetenv("TEST_EMPTY_FIELD")
 				intField := configElem.Field(4)
-				err = setFieldFromEnv(intField, "TEST_EMPTY_FIELD")
+				intFieldType := configType.Field(4)
+				err = setFieldFromEnv(intField, intFieldType, "TEST_EMPTY_FIELD")
 				assert.NoError(t, err)
 				assert.Equal(t, 0, config.IntField) // Should remain zero
 			})
