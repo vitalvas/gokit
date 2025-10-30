@@ -7,6 +7,7 @@ Cemetery of libraries
 The following libraries will be released in v1.0.0:
 
 - **bloomfilter** - High-performance Bloom filter with optimized bit-level operations
+- **cuckoo** - Cuckoo filter for approximate set membership with deletion support
 - **hyperloglog** - Cardinality estimation for counting distinct elements with minimal memory
 - **markov** - Markov chain text generator with thread-safe operations
 - **xcmd** - Periodic task execution and signal handling for long-running processes
