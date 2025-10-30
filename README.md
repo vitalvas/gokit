@@ -10,6 +10,7 @@ The following libraries will be released in v1.0.0:
 - **cuckoo** - Cuckoo filter for approximate set membership with deletion support
 - **hyperloglog** - Cardinality estimation for counting distinct elements with minimal memory
 - **markov** - Markov chain text generator with thread-safe operations
+- **tdigest** - T-Digest for accurate quantile estimation from streaming or distributed data
 - **xcmd** - Periodic task execution and signal handling for long-running processes
 - **xconfig** - Flexible configuration library supporting multiple formats and sources
 - **xentropy** - Shannon and min-entropy calculator for randomness and security assessment
