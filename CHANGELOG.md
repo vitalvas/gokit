@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.20.0](https://github.com/vitalvas/gokit/compare/v0.19.0...v0.20.0) (2025-10-30)
+
+
+### Features
+
+* add rates ([f4a611c](https://github.com/vitalvas/gokit/commit/f4a611c83508fb7c4269dd2e6310ab60a4c6d9bf))
+* **countmin:** create spacesaving ([f581aed](https://github.com/vitalvas/gokit/commit/f581aedfeae1c4fd4d201f1b8cd6e289be3b7bba))
+* **cuckoo:** create cuckoo ([b4cd992](https://github.com/vitalvas/gokit/commit/b4cd992519f407c9e49313d175ed9624577b75e5))
+* **ewma:** create ewma ([d10c38d](https://github.com/vitalvas/gokit/commit/d10c38d7afdf4f4443067adb7aee7c133e4ab351))
+* **hyperloglog:** create hyperloglog ([f4425ac](https://github.com/vitalvas/gokit/commit/f4425ac5f91f368a299e4fe662f6a6b49159245a))
+* **markov:** full refactor lib ([51c8bc5](https://github.com/vitalvas/gokit/commit/51c8bc5e95cab3d5d746e410a0f8cd8ed88ec59a))
+* **spacesaving:** create spacesaving ([5574643](https://github.com/vitalvas/gokit/commit/5574643aeed84fa662deed0456acf922f6a7a0dd))
+* **tdigest:** create t-digest ([e62c814](https://github.com/vitalvas/gokit/commit/e62c814470c48af284c32ab9c28d3aa61673a464))
+* **xconfig:** add envSeparator ([80e9e9b](https://github.com/vitalvas/gokit/commit/80e9e9b20b0809e345582af4bf4d20e537ff702b))
+* **xconfig:** add support dotenv ([737690c](https://github.com/vitalvas/gokit/commit/737690c9eb19428fd495de72c39743a71ce04c2e))
+* **xentropy:** add entropy ([f5bdb2f](https://github.com/vitalvas/gokit/commit/f5bdb2f2a10e23f97fb95b53b634e4ad779f3542))
+
+
+### Bug Fixes
+
+* linter errors ([769dcf9](https://github.com/vitalvas/gokit/commit/769dcf9522e7fcc07863649cd209b0c82d218a7c))
+* linter errors ([ed155a1](https://github.com/vitalvas/gokit/commit/ed155a107b17521c00c346ff39e63376fd622b64))
+* linter errors ([9549109](https://github.com/vitalvas/gokit/commit/95491091cb7e7fea96327573eb502d1d2246ee7b))
+* **xconfig:** support slice objects ([af18fd3](https://github.com/vitalvas/gokit/commit/af18fd35f2148e92e0a17afce74ebd972dac4da6))
+
 ## [0.19.0](https://github.com/vitalvas/gokit/compare/v0.18.1...v0.19.0) (2025-10-28)
 
 
