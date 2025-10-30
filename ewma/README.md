@@ -9,8 +9,9 @@ A high-performance EWMA (Exponentially Weighted Moving Average) implementation i
 - **Standard time windows**: 1-minute, 5-minute, 15-minute helpers
 - **Flexible configuration**: Custom alpha and interval support
 - **Rate calculation**: Events per second tracking
+- **Automatic decay**: Rate type with time-based exponential decay
 - **Snapshot support**: Consistent reads of multiple values
-- **Lightweight**: ~8ns per operation
+- **Lightweight**: ~8ns per operation (EWMA), ~45ns (Rate)
 - **Zero dependencies**: Only uses Go standard library
 
 ## What is EWMA?
@@ -288,6 +289,182 @@ fmt.Printf("1m: %.2f, 5m: %.2f, 15m: %.2f\n", m1, m5, m15)
 fmt.Printf("1-min rate: %.2f\n", ma.Rate1())
 fmt.Printf("5-min rate: %.2f\n", ma.Rate5())
 fmt.Printf("15-min rate: %.2f\n", ma.Rate15())
+```
+
+## Rate: Automatic Decay Tracking
+
+The `Rate` type provides automatic rate tracking with exponential decay, without requiring manual `Tick()` calls.
+
+### When to Use Rate vs EWMA
+
+**Use Rate when:**
+
+- ✅ You want automatic decay based on time elapsed
+- ✅ You don't want to manage a ticker
+- ✅ Events arrive at irregular intervals
+- ✅ You need real-time rate tracking
+
+**Use EWMA when:**
+
+- ✅ You have a regular ticker already
+- ✅ You want precise control over update intervals
+- ✅ You're tracking metrics at fixed intervals
+- ✅ You need to batch multiple events between ticks
+
+### Creating a Rate
+
+```go
+// Create with 60 second half-life
+r := ewma.NewRate(60 * time.Second)
+
+// Events after one half-life have 50% weight
+// Events after two half-lives have 25% weight
+```
+
+**Half-Life Guidelines:**
+
+- **1s-10s**: Very responsive, quick decay
+- **30s-60s**: Balanced (default: 60s)
+- **5m-15m**: Smooth, slow decay
+
+### Recording Events
+
+No ticker needed - decay is automatic:
+
+```go
+r := ewma.NewRate(60 * time.Second)
+
+// Add events (decay applied automatically)
+r.Add(10.0)
+r.Add(5.0)
+r.Add(3.0)
+
+// Current rate with automatic decay
+rate := r.Rate()
+fmt.Printf("Current rate: %.2f\n", rate)
+```
+
+### With Timestamps
+
+For testing or historical data:
+
+```go
+r := ewma.NewRate(60 * time.Second)
+now := time.Now()
+
+// Add events at specific times
+r.AddAt(10.0, now)
+r.AddAt(5.0, now.Add(30*time.Second))
+r.AddAt(8.0, now.Add(60*time.Second))
+
+// Query rate at specific time
+rate := r.RateAt(now.Add(90 * time.Second))
+```
+
+### Decay Example
+
+```go
+r := ewma.NewRate(60 * time.Second)
+r.Add(100.0)
+
+// Immediately: rate = 100
+fmt.Printf("Now: %.2f\n", r.Rate())
+
+// After 60 seconds (one half-life): rate ≈ 50
+time.Sleep(60 * time.Second)
+fmt.Printf("After 60s: %.2f\n", r.Rate())
+
+// After 120 seconds (two half-lives): rate ≈ 25
+time.Sleep(60 * time.Second)
+fmt.Printf("After 120s: %.2f\n", r.Rate())
+```
+
+### Comparison: EWMA vs Rate
+
+| Feature | EWMA | Rate |
+|---------|------|------|
+| Tick() calls | Required | Not needed |
+| Decay trigger | On Tick() | On query/add |
+| Time-based | No (interval-based) | Yes (elapsed time) |
+| Setup complexity | Medium (need ticker) | Low (automatic) |
+| Memory | ~80 bytes | ~64 bytes |
+| Performance | ~8ns/op | ~45ns/op |
+| Thread-safe | ✅ | ✅ |
+
+### Use Cases for Rate
+
+#### Request Rate Monitoring
+
+```go
+var requestRate = ewma.NewRate(60 * time.Second)
+
+func handleRequest(w http.ResponseWriter, r *http.Request) {
+    requestRate.Add(1.0)
+
+    // ... handle request ...
+
+    // Get current rate (automatic decay)
+    if rand.Float64() < 0.01 {
+        log.Printf("Rate: %.2f req/sec", requestRate.Rate())
+    }
+}
+```
+
+#### Burst Detection
+
+```go
+type BurstDetector struct {
+    rate      *ewma.Rate
+    threshold float64
+}
+
+func NewBurstDetector(threshold float64) *BurstDetector {
+    return &BurstDetector{
+        rate:      ewma.NewRate(10 * time.Second),
+        threshold: threshold,
+    }
+}
+
+func (bd *BurstDetector) RecordEvent() bool {
+    bd.rate.Add(1.0)
+
+    // Check if we're in a burst
+    if bd.rate.Rate() > bd.threshold {
+        return true // Burst detected
+    }
+    return false
+}
+```
+
+#### Adaptive Rate Limiting
+
+```go
+type AdaptiveLimiter struct {
+    rate  *ewma.Rate
+    limit float64
+}
+
+func NewAdaptiveLimiter(limit float64) *AdaptiveLimiter {
+    return &AdaptiveLimiter{
+        rate:  ewma.NewRate(30 * time.Second),
+        limit: limit,
+    }
+}
+
+func (al *AdaptiveLimiter) Allow() bool {
+    current := al.rate.Rate()
+
+    if current >= al.limit {
+        return false
+    }
+
+    al.rate.Add(1.0)
+    return true
+}
+
+func (al *AdaptiveLimiter) CurrentRate() float64 {
+    return al.rate.Rate()
+}
 ```
 
 ## Use Cases

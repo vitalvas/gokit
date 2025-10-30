@@ -12,6 +12,7 @@ A high-performance HyperLogLog implementation in Go for cardinality estimation w
 - **Export/Import**: Serialize for storage or network transmission
 - **High performance**: ~83ns per add, ~7.6ns for zero-allocation bytes
 - **Accurate**: ~0.81% error rate at default precision (14)
+- **Rate tracking**: Track unique item rates with automatic decay
 - **Zero dependencies**: Only uses Go standard library
 
 ## What is HyperLogLog?
@@ -309,6 +310,194 @@ if err != nil {
 
 count := hll.Count()
 fmt.Printf("Restored count: %d\n", count)
+```
+
+## Rate: Unique Item Rate Tracking
+
+The `Rate` type tracks the rate at which unique items are added with exponential decay, without requiring manual ticker management.
+
+### When to Use Rate
+
+**Use Rate when:**
+
+- You want to track rate of unique visitors/IPs/sessions
+- Events arrive at irregular intervals
+- You need automatic decay based on time
+- You want to detect bursts of unique items
+- You need real-time unique item rate tracking
+
+**Difference from HyperLogLog:**
+
+| Feature | HyperLogLog | Rate |
+|---------|-------------|------|
+| Purpose | Count distinct items | Track rate of unique items |
+| Output | Cardinality estimate | Items per second |
+| Time-based | No | Yes (automatic decay) |
+| Memory | O(2^precision) | O(1) constant |
+| Use case | Total unique count | Real-time rate tracking |
+
+### Creating a Rate
+
+```go
+// Create with 60 second half-life
+r := hyperloglog.NewRate(60 * time.Second)
+
+// Events after one half-life have 50% weight
+// Events after two half-lives have 25% weight
+```
+
+**Half-Life Guidelines:**
+
+- **1s-10s**: Very responsive, quick decay
+- **30s-60s**: Balanced (default: 60s)
+- **5m-15m**: Smooth, slow decay
+
+### Recording Unique Items
+
+No ticker needed - decay is automatic:
+
+```go
+r := hyperloglog.NewRate(60 * time.Second)
+
+// Track unique visitors
+r.Add(1.0) // One unique visitor
+r.Add(5.0) // Five unique visitors
+
+// Current rate with automatic decay
+rate := r.Rate()
+fmt.Printf("Unique visitor rate: %.2f visitors/sec\n", rate)
+```
+
+### With Timestamps
+
+For testing or historical data:
+
+```go
+r := hyperloglog.NewRate(60 * time.Second)
+now := time.Now()
+
+// Add unique items at specific times
+r.AddAt(10.0, now)
+r.AddAt(5.0, now.Add(30*time.Second))
+r.AddAt(8.0, now.Add(60*time.Second))
+
+// Query rate at specific time
+rate := r.RateAt(now.Add(90 * time.Second))
+```
+
+### Decay Example
+
+```go
+r := hyperloglog.NewRate(60 * time.Second)
+r.Add(100.0) // 100 unique items
+
+// Immediately: rate = 100
+fmt.Printf("Now: %.2f\n", r.Rate())
+
+// After 60 seconds (one half-life): rate ≈ 50
+time.Sleep(60 * time.Second)
+fmt.Printf("After 60s: %.2f\n", r.Rate())
+
+// After 120 seconds (two half-lives): rate ≈ 25
+time.Sleep(60 * time.Second)
+fmt.Printf("After 120s: %.2f\n", r.Rate())
+```
+
+### Rate Implementation Examples
+
+#### Unique Visitor Rate Monitoring
+
+```go
+var uniqueVisitorRate = hyperloglog.NewRate(60 * time.Second)
+var visitors = hyperloglog.New(14) // For total count
+
+func trackVisitor(userID string) {
+    visitors.AddString(userID)
+
+    // Estimate if this is a new unique visitor
+    oldCount := visitors.Count()
+    testVisitors := visitors.Clone()
+    testVisitors.AddString(userID)
+    newCount := testVisitors.Count()
+
+    if newCount > oldCount {
+        uniqueVisitorRate.Add(1.0)
+    }
+
+    // Get current rate
+    if rand.Float64() < 0.01 {
+        log.Printf("Unique visitor rate: %.2f/sec", uniqueVisitorRate.Rate())
+    }
+}
+```
+
+#### New IP Detection Rate
+
+```go
+type IPRateTracker struct {
+    seen *hyperloglog.HyperLogLog
+    rate *hyperloglog.Rate
+}
+
+func NewIPRateTracker() *IPRateTracker {
+    return &IPRateTracker{
+        seen: hyperloglog.New(14),
+        rate: hyperloglog.NewRate(60 * time.Second),
+    }
+}
+
+func (ipt *IPRateTracker) TrackIP(ip string) {
+    oldCount := ipt.seen.Count()
+    ipt.seen.AddString(ip)
+    newCount := ipt.seen.Count()
+
+    // New unique IP detected
+    if newCount > oldCount {
+        ipt.rate.Add(1.0)
+    }
+}
+
+func (ipt *IPRateTracker) NewIPRate() float64 {
+    return ipt.rate.Rate()
+}
+
+func (ipt *IPRateTracker) TotalUniqueIPs() uint64 {
+    return ipt.seen.Count()
+}
+```
+
+#### Burst Detection
+
+```go
+type BurstDetector struct {
+    hll       *hyperloglog.HyperLogLog
+    rate      *hyperloglog.Rate
+    threshold float64
+}
+
+func NewBurstDetector(threshold float64) *BurstDetector {
+    return &BurstDetector{
+        hll:       hyperloglog.New(14),
+        rate:      hyperloglog.NewRate(10 * time.Second),
+        threshold: threshold,
+    }
+}
+
+func (bd *BurstDetector) AddItem(item string) bool {
+    oldCount := bd.hll.Count()
+    bd.hll.AddString(item)
+    newCount := bd.hll.Count()
+
+    if newCount > oldCount {
+        bd.rate.Add(1.0)
+    }
+
+    // Check if we're in a burst of unique items
+    if bd.rate.Rate() > bd.threshold {
+        return true // Burst detected
+    }
+    return false
+}
 ```
 
 ## Use Cases

@@ -13,12 +13,12 @@ import (
 // - Have better lookup performance
 // - Use less space at similar false positive rates
 type Filter struct {
-	buckets       []bucket
-	numBuckets    uint
-	bucketSize    uint
+	buckets         []bucket
+	numBuckets      uint
+	bucketSize      uint
 	fingerprintSize uint
-	count         uint
-	maxKicks      uint
+	count           uint
+	maxKicks        uint
 }
 
 // bucket represents a bucket in the cuckoo filter.

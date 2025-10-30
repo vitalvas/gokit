@@ -336,10 +336,10 @@ func TestExportImport(t *testing.T) {
 
 func TestAccuracy(t *testing.T) {
 	testCases := []struct {
-		precision      uint8
-		cardinality    int
-		maxErrorRate   float64
-		name           string
+		precision    uint8
+		cardinality  int
+		maxErrorRate float64
+		name         string
 	}{
 		{10, 1000, 0.08, "precision 10, 1K elements"},
 		{12, 10000, 0.06, "precision 12, 10K elements"},
