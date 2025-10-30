@@ -134,7 +134,6 @@ db:
 		assert.Equal(t, 5433, cfg.DB.Port)
 	})
 
-
 	t.Run("invalid config", func(t *testing.T) {
 		err := Load(nil)
 		require.Error(t, err)
@@ -414,7 +413,6 @@ db:
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid map value")
 	})
-
 
 	t.Run("pointer fields", func(t *testing.T) {
 		type PointerConfig struct {

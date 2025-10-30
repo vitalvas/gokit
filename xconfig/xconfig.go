@@ -178,4 +178,3 @@ func expandMacrosInValue(v reflect.Value) {
 		}
 	}
 }
-
