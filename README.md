@@ -11,6 +11,7 @@ The following libraries will be released in v1.0.0:
 - **ewma** - Exponentially weighted moving average for smoothing time series data and rate calculation
 - **hyperloglog** - Cardinality estimation for counting distinct elements with minimal memory
 - **markov** - Markov chain text generator with thread-safe operations
+- **spacesaving** - Space-Saving algorithm for finding top-k most frequent items (heavy hitters) in streams
 - **tdigest** - T-Digest for accurate quantile estimation from streaming or distributed data
 - **xcmd** - Periodic task execution and signal handling for long-running processes
 - **xconfig** - Flexible configuration library supporting multiple formats and sources
