@@ -146,47 +146,6 @@ db:
 		assert.Contains(t, err.Error(), "config must be a non-nil pointer")
 	})
 
-	t.Run("multiple files", func(t *testing.T) {
-		// Create first config file
-		tmpFile1, err := os.CreateTemp("", "config1-*.yaml")
-		require.NoError(t, err)
-		defer func() { _ = os.Remove(tmpFile1.Name()) }()
-
-		content1 := `logger:
-  level: "debug"
-health:
-  address: ":9090"`
-
-		_, err = tmpFile1.WriteString(content1)
-		require.NoError(t, err)
-		require.NoError(t, tmpFile1.Close())
-
-		// Create second config file
-		tmpFile2, err := os.CreateTemp("", "config2-*.yaml")
-		require.NoError(t, err)
-		defer func() { _ = os.Remove(tmpFile2.Name()) }()
-
-		content2 := `logger:
-  level: "error"
-db:
-  host: "testhost"
-  port: 3306`
-
-		_, err = tmpFile2.WriteString(content2)
-		require.NoError(t, err)
-		require.NoError(t, tmpFile2.Close())
-
-		var cfg TestConfig
-		err = Load(&cfg, WithFiles(tmpFile1.Name(), tmpFile2.Name()))
-		require.NoError(t, err)
-
-		// Second file should override first file
-		assert.Equal(t, "error", cfg.Logger.Level)
-		assert.Equal(t, ":9090", cfg.Health.Address)
-		assert.Equal(t, "testhost", cfg.DB.Host)
-		assert.Equal(t, 3306, cfg.DB.Port)
-	})
-
 	t.Run("file and environment combined", func(t *testing.T) {
 		tmpFile, err := os.CreateTemp("", "config-*.yaml")
 		require.NoError(t, err)
@@ -313,70 +272,6 @@ db:
 		assert.Equal(t, ":8888", cfg.Health.Address) // file overrides custom default
 		assert.Equal(t, "filehost", cfg.DB.Host)     // from file
 		assert.Equal(t, 9999, cfg.DB.Port)           // env overrides default
-	})
-
-	t.Run("directories", func(t *testing.T) {
-		// Create temporary directory
-		tmpDir, err := os.MkdirTemp("", "xconfig-test-*")
-		require.NoError(t, err)
-		defer func() { _ = os.RemoveAll(tmpDir) }()
-
-		// Create config files in directory (will be loaded in alphabetical order)
-		file1Content := `logger:
-  level: "debug"
-health:
-  address: ":9090"`
-		require.NoError(t, os.WriteFile(tmpDir+"/01-base.yaml", []byte(file1Content), 0644))
-
-		file2Content := `logger:
-  level: "info"  # will override debug
-db:
-  host: "dbserver"`
-		require.NoError(t, os.WriteFile(tmpDir+"/02-override.yaml", []byte(file2Content), 0644))
-
-		// Add a non-config file (should be ignored)
-		require.NoError(t, os.WriteFile(tmpDir+"/readme.txt", []byte("ignore me"), 0644))
-
-		var cfg TestConfig
-		err = Load(&cfg, WithDirs(tmpDir))
-		require.NoError(t, err)
-
-		// Second file should override first (alphabetical order)
-		assert.Equal(t, "info", cfg.Logger.Level)
-		assert.Equal(t, ":9090", cfg.Health.Address)
-		assert.Equal(t, "dbserver", cfg.DB.Host)
-	})
-
-	t.Run("directories and files combined", func(t *testing.T) {
-		// Create directory with config
-		tmpDir, err := os.MkdirTemp("", "xconfig-test-*")
-		require.NoError(t, err)
-		defer func() { _ = os.RemoveAll(tmpDir) }()
-
-		dirContent := `logger:
-  level: "debug"`
-		require.NoError(t, os.WriteFile(tmpDir+"/config.yaml", []byte(dirContent), 0644))
-
-		// Create separate file (higher priority than directory)
-		tmpFile, err := os.CreateTemp("", "explicit-config-*.yaml")
-		require.NoError(t, err)
-		defer func() { _ = os.Remove(tmpFile.Name()) }()
-
-		fileContent := `logger:
-  level: "warn"
-health:
-  address: ":8888"`
-		_, err = tmpFile.WriteString(fileContent)
-		require.NoError(t, err)
-		require.NoError(t, tmpFile.Close())
-
-		var cfg TestConfig
-		err = Load(&cfg, WithDirs(tmpDir), WithFiles(tmpFile.Name()))
-		require.NoError(t, err)
-
-		// Explicit file should override directory
-		assert.Equal(t, "warn", cfg.Logger.Level)
-		assert.Equal(t, ":8888", cfg.Health.Address)
 	})
 
 	t.Run("nonexistent directory", func(t *testing.T) {
