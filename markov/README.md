@@ -509,22 +509,77 @@ chain, _ := markov.ImportChain(data)
 
 ### Benchmarks (Apple M3 Pro)
 
+#### Core Operations
+
+| Operation | Input Size | Time | Allocations |
+|-----------|-----------|------|-------------|
+| NewChain | Any order | ~28 ns | 0 allocs |
+| Add | 3 tokens | ~745 ns | 12 allocs |
+| Add | 10 tokens | ~1.6 µs | 20 allocs |
+| Add | 50 tokens | ~6.2 µs | 61 allocs |
+| Add | 100 tokens | ~11.8 µs | 112 allocs |
+| RawAdd | Short (5 chars) | ~1.1 µs | 15 allocs |
+| RawAdd | Medium (15 chars) | ~2.6 µs | 28 allocs |
+| RawAdd | Long (50 chars) | ~7.1 µs | 67 allocs |
+| Generate | Order 1 | ~112 ns | 0 allocs |
+| Generate | Order 2 | ~153 ns | 1 alloc |
+| Generate | Order 3 | ~162 ns | 1 alloc |
+| Generate | Order 5 | ~185 ns | 1 alloc |
+| TransitionProbability | - | ~104 ns | 1 alloc |
+
+#### Concurrent Operations
+
+| Operation | Goroutines | Time | Allocations |
+|-----------|-----------|------|-------------|
+| ConcurrentAdd | 1-16 | ~1.8 µs | 14 allocs |
+| ConcurrentGenerate | 1-16 | ~130-165 ns | 1 alloc |
+
+**Thread Safety:**
+
+- Lock contention is minimal
+- Generate scales well with concurrency (~130ns with 4 goroutines)
+- Add operations maintain consistent performance under load
+
+#### Serialization
+
 | Operation | Time | Allocations |
 |-----------|------|-------------|
-| NewChain | ~28 ns | 0 allocs |
-| Add (3 tokens) | ~745 ns | 12 allocs |
-| Add (100 tokens) | ~11 µs | 112 allocs |
-| Generate (Order 2) | ~158 ns | 1 alloc |
-| TransitionProbability | ~104 ns | 1 alloc |
-| ConcurrentGenerate | ~156 ns | 1 alloc |
-| Export | ~5.5 µs | 94 allocs |
-| Import | ~16.3 µs | 281 allocs |
+| Export | ~5.6 µs | 94 allocs |
+| Import | ~17 µs | 281 allocs |
+
+#### Sequence Generation
+
+| Length | Time | Allocations |
+|--------|------|-------------|
+| 10 tokens | ~1.0 µs | 8 allocs |
+| 50 tokens | ~1.6 µs | 11 allocs |
+| 100 tokens | ~1.7 µs | 11 allocs |
+
+#### Full Workflow
+
+| Operation | Time | Memory |
+|-----------|------|--------|
+| Train + Generate (10 sequences) | ~35 µs | ~48 KB |
+
+**Performance Characteristics:**
+
+- Zero-allocation chain creation
+- Sub-microsecond generation for typical use cases
+- Linear scaling with token count during training
+- Constant-time generation regardless of training data size
+- Minimal lock contention in concurrent scenarios
+- ~17µs to load pre-trained models
 
 ### Memory Usage
 
 - **Order 1**: ~50-100 bytes per unique token
 - **Order 2**: ~100-200 bytes per unique bigram
 - **Order 3**: ~200-400 bytes per unique trigram
+
+**Example:** Training on 1000 words with Order 2:
+
+- Storage: ~100-200 KB
+- Export size: ~50-100 KB (compressed with gob)
 
 ### Optimization Tips
 

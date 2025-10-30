@@ -444,6 +444,39 @@ _, err = xnet.CIDRSplitString("10.0.0.0/24", 16)
 
 ## Performance Considerations
 
+### Benchmarks (Apple M3 Pro)
+
+#### CIDRMatcher Operations
+
+| Operation | Networks | Time | Memory |
+|-----------|----------|------|--------|
+| Build | 10 | ~2.7 µs | ~2.7 KB |
+| Build | 100 | ~25 µs | ~24 KB |
+| Build | 1000 | ~111 µs | ~48 KB |
+| Contains | 10 | ~49 ns | 0 allocs |
+| Contains | 100 | ~48 ns | 0 allocs |
+| Contains | 1000 | ~54 ns | 0 allocs |
+
+**CIDRMatcher Benefits:**
+
+- O(log n) lookup time using radix tree
+- Constant ~50ns lookup regardless of network count
+- Build once, query many times for best performance
+
+#### CIDR Operations
+
+| Operation | Scale | Time |
+|-----------|-------|------|
+| CIDRMerge IPv4 | /19→/32 | ~1.3 ms |
+| CIDRMerge IPv6 | /115→/128 | ~1.8 ms |
+| CIDRMerge IPv4 | /16→/24 | ~37 µs |
+| CIDRSplit IPv4 | /16→/24 | ~7 µs |
+| CIDRSplit IPv4 | /19→/32 | ~411 µs |
+| CIDRSplit IPv6 | /32→/48 | ~3.6 ms |
+| CIDRContains | 10 CIDRs | ~130 ns |
+| CIDRContains | 100 CIDRs | ~1.2 µs |
+| CIDRContains | 1000 CIDRs | ~6.4 µs |
+
 ### CIDR Containment
 
 For checking a few IPs:
@@ -457,7 +490,7 @@ For checking many IPs:
 // Faster approach - build once, query many times
 matcher, _ := xnet.NewCIDRMatcherFromStrings(cidrs)
 for _, ip := range manyIPs {
-    matcher.Contains(ip)
+    matcher.Contains(ip)  // ~50ns per lookup
 }
 ```
 
@@ -475,6 +508,7 @@ merged := xnet.CIDRMerge(manyNetworks)
 - `CIDRMatcher` uses O(n * bits) memory for n networks
 - More memory than simple slice, but much faster lookups
 - Trade memory for speed when checking many IPs
+- ~2-50 KB for typical use cases (10-1000 networks)
 
 ## License
 

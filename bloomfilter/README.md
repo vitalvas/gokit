@@ -473,6 +473,27 @@ Where:
 
 **Savings:** 20-60x less memory than native Go map.
 
+### Benchmarks (Apple M3 Pro)
+
+| Operation | Time | Allocations |
+|-----------|------|-------------|
+| Add (1M elements) | ~94 ns | 2 allocs |
+| Add (10M elements) | ~273 ns | 1 alloc |
+| Add (50M elements) | ~442 ns | 1 alloc |
+| AddBytes | ~16 ns | 0 allocs |
+| Contains (1M elements) | ~90 ns | 1 alloc |
+| Contains (10M elements) | ~309 ns | 1 alloc |
+| ContainsBytes | ~17 ns | 0 allocs |
+| Hash (string) | ~15 ns | 0 allocs |
+| Hash (bytes) | ~15 ns | 0 allocs |
+
+**Performance Characteristics:**
+
+- Zero-allocation operations with byte methods
+- Consistent ~15ns hashing for all inputs
+- Scales linearly with filter size
+- ~90-450ns per operation for typical use cases
+
 ### Optimizations
 
 The implementation includes several performance optimizations:
