@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.0](https://github.com/vitalvas/gokit/compare/v0.20.0...v0.21.0) (2025-11-23)
+
+
+### Features
+
+* create wirefilter ([cdc2629](https://github.com/vitalvas/gokit/commit/cdc2629453878bef3e37c238972419f0321c602a))
+* **xcmd:** add errgroup ([cb71999](https://github.com/vitalvas/gokit/commit/cb7199918e0d8a3ed7579c45665a6168fbc4619e))
+
 ## [0.20.0](https://github.com/vitalvas/gokit/compare/v0.19.0...v0.20.0) (2025-10-30)
 
 
