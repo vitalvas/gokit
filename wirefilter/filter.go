@@ -1,0 +1,348 @@
+// Package wirefilter implements a filtering expression language and execution engine.
+// It allows you to compile and evaluate filter expressions against runtime data.
+//
+// The filter language supports:
+//   - Logical operators: and, or, not, &&, ||
+//   - Comparison operators: ==, !=, <, >, <=, >=
+//   - Array operators: === (all equal), !== (any not equal)
+//   - Membership operators: in, contains, matches
+//   - Range expressions: {1..10}
+//   - Multiple data types: string, int, bool, IP, bytes, arrays
+//
+// Example:
+//
+//	schema := wirefilter.NewSchema().
+//	    AddField("http.host", wirefilter.TypeString).
+//	    AddField("http.status", wirefilter.TypeInt)
+//
+//	filter, err := wirefilter.Compile(`http.host == "example.com" and http.status >= 400`, schema)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//
+//	ctx := wirefilter.NewExecutionContext().
+//	    SetStringField("http.host", "example.com").
+//	    SetIntField("http.status", 500)
+//
+//	result, err := filter.Execute(ctx)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	fmt.Println(result) // true
+package wirefilter
+
+import "net"
+
+// Filter represents a compiled filter expression that can be executed against an execution context.
+type Filter struct {
+	expr   Expression
+	schema *Schema
+}
+
+// Compile parses and compiles a filter expression string into an executable Filter.
+// If a schema is provided, it validates that all fields referenced in the expression exist in the schema.
+// Returns an error if the expression is malformed or references unknown fields.
+func Compile(filterStr string, schema *Schema) (*Filter, error) {
+	lexer := NewLexer(filterStr)
+	parser := NewParser(lexer)
+
+	expr, err := parser.Parse()
+	if err != nil {
+		return nil, err
+	}
+
+	if schema != nil {
+		if err := schema.Validate(expr); err != nil {
+			return nil, err
+		}
+	}
+
+	return &Filter{
+		expr:   expr,
+		schema: schema,
+	}, nil
+}
+
+// Execute evaluates the compiled filter against the provided execution context.
+// Returns true if the filter matches, false otherwise.
+// Returns an error if evaluation fails.
+func (f *Filter) Execute(ctx *ExecutionContext) (bool, error) {
+	result, err := f.evaluate(f.expr, ctx)
+	if err != nil {
+		return false, err
+	}
+
+	if result.Type() != TypeBool {
+		return false, nil
+	}
+
+	return bool(result.(BoolValue)), nil
+}
+
+func (f *Filter) evaluate(expr Expression, ctx *ExecutionContext) (Value, error) {
+	switch e := expr.(type) {
+	case *BinaryExpr:
+		return f.evaluateBinaryExpr(e, ctx)
+	case *UnaryExpr:
+		return f.evaluateUnaryExpr(e, ctx)
+	case *FieldExpr:
+		return f.evaluateFieldExpr(e, ctx)
+	case *LiteralExpr:
+		return e.Value, nil
+	case *ArrayExpr:
+		return f.evaluateArrayExpr(e, ctx)
+	case *RangeExpr:
+		return f.evaluateRangeExpr(e, ctx)
+	}
+	return nil, nil
+}
+
+func (f *Filter) evaluateArrayExpr(expr *ArrayExpr, ctx *ExecutionContext) (Value, error) {
+	values := make([]Value, 0, len(expr.Elements))
+	for _, elem := range expr.Elements {
+		if rangeExpr, ok := elem.(*RangeExpr); ok {
+			rangeVals, err := f.evaluateRangeExpr(rangeExpr, ctx)
+			if err != nil {
+				return nil, err
+			}
+			if arr, ok := rangeVals.(ArrayValue); ok {
+				values = append(values, arr...)
+			}
+		} else {
+			val, err := f.evaluate(elem, ctx)
+			if err != nil {
+				return nil, err
+			}
+			values = append(values, val)
+		}
+	}
+	return ArrayValue(values), nil
+}
+
+func (f *Filter) evaluateRangeExpr(expr *RangeExpr, ctx *ExecutionContext) (Value, error) {
+	start, err := f.evaluate(expr.Start, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	end, err := f.evaluate(expr.End, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if start.Type() != TypeInt || end.Type() != TypeInt {
+		return ArrayValue([]Value{}), nil
+	}
+
+	startInt := int64(start.(IntValue))
+	endInt := int64(end.(IntValue))
+
+	if startInt > endInt {
+		return ArrayValue([]Value{}), nil
+	}
+
+	values := make([]Value, 0, endInt-startInt+1)
+	for i := startInt; i <= endInt; i++ {
+		values = append(values, IntValue(i))
+	}
+
+	return ArrayValue(values), nil
+}
+
+func (f *Filter) evaluateFieldExpr(expr *FieldExpr, ctx *ExecutionContext) (Value, error) {
+	val, ok := ctx.GetField(expr.Name)
+	if !ok {
+		return BoolValue(false), nil
+	}
+	return val, nil
+}
+
+func (f *Filter) evaluateUnaryExpr(expr *UnaryExpr, ctx *ExecutionContext) (Value, error) {
+	operand, err := f.evaluate(expr.Operand, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if expr.Operator == TokenNot {
+		if operand.Type() != TypeBool {
+			return BoolValue(false), nil
+		}
+		return BoolValue(!bool(operand.(BoolValue))), nil
+	}
+
+	return nil, nil
+}
+
+func (f *Filter) evaluateBinaryExpr(expr *BinaryExpr, ctx *ExecutionContext) (Value, error) {
+	left, err := f.evaluate(expr.Left, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	right, err := f.evaluate(expr.Right, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	switch expr.Operator {
+	case TokenAnd:
+		if left.Type() != TypeBool || right.Type() != TypeBool {
+			return BoolValue(false), nil
+		}
+		return BoolValue(bool(left.(BoolValue)) && bool(right.(BoolValue))), nil
+
+	case TokenOr:
+		if left.Type() != TypeBool || right.Type() != TypeBool {
+			return BoolValue(false), nil
+		}
+		return BoolValue(bool(left.(BoolValue)) || bool(right.(BoolValue))), nil
+
+	case TokenEq:
+		return f.evaluateEquality(left, right)
+
+	case TokenNe:
+		result, err := f.evaluateEquality(left, right)
+		if err != nil {
+			return nil, err
+		}
+		return BoolValue(!bool(result.(BoolValue))), nil
+
+	case TokenAllEq:
+		return f.evaluateAllEqual(left, right)
+
+	case TokenAnyNe:
+		return f.evaluateAnyNotEqual(left, right)
+
+	case TokenLt:
+		return f.evaluateComparison(left, right, func(a, b int64) bool { return a < b })
+
+	case TokenGt:
+		return f.evaluateComparison(left, right, func(a, b int64) bool { return a > b })
+
+	case TokenLe:
+		return f.evaluateComparison(left, right, func(a, b int64) bool { return a <= b })
+
+	case TokenGe:
+		return f.evaluateComparison(left, right, func(a, b int64) bool { return a >= b })
+
+	case TokenContains:
+		return f.evaluateContains(left, right)
+
+	case TokenMatches:
+		return f.evaluateMatches(left, right)
+
+	case TokenIn:
+		return f.evaluateIn(left, right)
+	}
+
+	return BoolValue(false), nil
+}
+
+func (f *Filter) evaluateEquality(left, right Value) (Value, error) {
+	if left.Type() == TypeIP && right.Type() == TypeString {
+		ip := net.ParseIP(string(right.(StringValue)))
+		if ip == nil {
+			return BoolValue(false), nil
+		}
+		right = IPValue{IP: ip}
+	} else if left.Type() == TypeString && right.Type() == TypeIP {
+		ip := net.ParseIP(string(left.(StringValue)))
+		if ip == nil {
+			return BoolValue(false), nil
+		}
+		left = IPValue{IP: ip}
+	}
+	return BoolValue(left.Equal(right)), nil
+}
+
+func (f *Filter) evaluateComparison(left, right Value, cmp func(int64, int64) bool) (Value, error) {
+	if left.Type() != TypeInt || right.Type() != TypeInt {
+		return BoolValue(false), nil
+	}
+	return BoolValue(cmp(int64(left.(IntValue)), int64(right.(IntValue)))), nil
+}
+
+func (f *Filter) evaluateContains(left, right Value) (Value, error) {
+	if left.Type() == TypeString && right.Type() == TypeString {
+		return BoolValue(ContainsString(string(left.(StringValue)), string(right.(StringValue)))), nil
+	}
+	if left.Type() == TypeArray {
+		return BoolValue(left.(ArrayValue).Contains(right)), nil
+	}
+	return BoolValue(false), nil
+}
+
+func (f *Filter) evaluateMatches(left, right Value) (Value, error) {
+	if left.Type() != TypeString || right.Type() != TypeString {
+		return BoolValue(false), nil
+	}
+	matched, err := MatchesRegex(string(left.(StringValue)), string(right.(StringValue)))
+	if err != nil {
+		return BoolValue(false), err
+	}
+	return BoolValue(matched), nil
+}
+
+func (f *Filter) evaluateIn(left, right Value) (Value, error) {
+	if right.Type() == TypeArray {
+		return BoolValue(right.(ArrayValue).Contains(left)), nil
+	}
+
+	if left.Type() == TypeIP && right.Type() == TypeString {
+		ipVal := left.(IPValue)
+		cidr := string(right.(StringValue))
+		inCIDR, err := IPInCIDR(ipVal.IP, cidr)
+		if err != nil {
+			return BoolValue(false), err
+		}
+		return BoolValue(inCIDR), nil
+	}
+
+	return BoolValue(false), nil
+}
+
+func (f *Filter) evaluateAllEqual(left, right Value) (Value, error) {
+	if left.Type() != TypeArray {
+		return BoolValue(false), nil
+	}
+
+	arr := left.(ArrayValue)
+	if len(arr) == 0 {
+		return BoolValue(false), nil
+	}
+
+	for _, elem := range arr {
+		result, err := f.evaluateEquality(elem, right)
+		if err != nil {
+			return nil, err
+		}
+		if !bool(result.(BoolValue)) {
+			return BoolValue(false), nil
+		}
+	}
+
+	return BoolValue(true), nil
+}
+
+func (f *Filter) evaluateAnyNotEqual(left, right Value) (Value, error) {
+	if left.Type() != TypeArray {
+		return BoolValue(false), nil
+	}
+
+	arr := left.(ArrayValue)
+	if len(arr) == 0 {
+		return BoolValue(false), nil
+	}
+
+	for _, elem := range arr {
+		result, err := f.evaluateEquality(elem, right)
+		if err != nil {
+			return nil, err
+		}
+		if !bool(result.(BoolValue)) {
+			return BoolValue(true), nil
+		}
+	}
+
+	return BoolValue(false), nil
+}

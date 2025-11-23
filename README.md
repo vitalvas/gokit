@@ -13,6 +13,7 @@ The following libraries will be released in v1.0.0:
 - **markov** - Markov chain text generator with thread-safe operations
 - **spacesaving** - Space-Saving algorithm for finding top-k most frequent items (heavy hitters) in streams
 - **tdigest** - T-Digest for accurate quantile estimation from streaming or distributed data
+- **wirefilter** - Filtering expression language and execution engine for runtime data evaluation
 - **xcmd** - Periodic task execution and signal handling for long-running processes
 - **xconfig** - Flexible configuration library supporting multiple formats and sources
 - **xentropy** - Shannon and min-entropy calculator for randomness and security assessment
