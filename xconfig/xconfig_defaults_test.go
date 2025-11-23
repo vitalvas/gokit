@@ -386,7 +386,7 @@ func TestDefaultTagWithSlices(t *testing.T) {
 			ID               string
 			Name             string
 			Hosts            []string
-			Port             int           `default:"9042"`
+			Port             int `default:"9042"`
 			Username         string
 			Password         string
 			Keyspace         string        `default:"system"`
