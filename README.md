@@ -9,6 +9,7 @@ The following libraries will be released in v1.0.0:
 - **bloomfilter** - High-performance Bloom filter with optimized bit-level operations
 - **cuckoo** - Cuckoo filter for approximate set membership with deletion support
 - **ewma** - Exponentially weighted moving average for smoothing time series data and rate calculation
+- **fastcdc** - Fast Content-Defined Chunking with gear rolling hash and configurable hash algorithms
 - **hyperloglog** - Cardinality estimation for counting distinct elements with minimal memory
 - **markov** - Markov chain text generator with thread-safe operations
 - **spacesaving** - Space-Saving algorithm for finding top-k most frequent items (heavy hitters) in streams
