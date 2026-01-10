@@ -395,7 +395,7 @@ func TestPrecisionErrorRelationship(t *testing.T) {
 		cardinality := 10000
 
 		precisions := []uint8{10, 12, 14, 16}
-		var errors []float64
+		errors := make([]float64, 0, len(precisions))
 
 		for _, prec := range precisions {
 			hll := New(prec)

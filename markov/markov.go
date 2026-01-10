@@ -49,7 +49,7 @@ func (chain *Chain) RawAdd(input string) {
 func (chain *Chain) Add(input []string) {
 	startTokens := array(StartToken, chain.Order)
 	endTokens := array(EndToken, chain.Order)
-	tokens := make([]string, 0)
+	tokens := make([]string, 0, len(startTokens)+len(input)+len(endTokens))
 	tokens = append(tokens, startTokens...)
 	tokens = append(tokens, input...)
 	tokens = append(tokens, endTokens...)

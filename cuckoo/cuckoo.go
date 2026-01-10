@@ -177,7 +177,12 @@ func (f *Filter) Export() ([]byte, error) {
 	enc := gob.NewEncoder(&gobWriter{buf: &buf})
 
 	// Flatten buckets for efficient encoding
-	var allEntries []fingerprint
+	totalEntries := 0
+	for i := range f.buckets {
+		totalEntries += len(f.buckets[i].entries)
+	}
+
+	allEntries := make([]fingerprint, 0, totalEntries)
 	bucketSizes := make([]uint, 0, len(f.buckets))
 
 	for i := range f.buckets {
