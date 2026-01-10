@@ -47,7 +47,6 @@ type ProxyProtoConfig struct {
 	TrustedProxies []net.IPNet
 }
 
-
 // ProxyProtoListen creates a new listener on the specified network address with PROXY protocol support.
 func ProxyProtoListen(network, address string, config ProxyProtoConfig) (net.Listener, error) {
 	listener, err := net.Listen(network, address)

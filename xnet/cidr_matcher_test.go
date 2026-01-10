@@ -25,11 +25,10 @@ func TestCIDRMatcher(t *testing.T) {
 	})
 
 	t.Run("multiple IPv4 networks", func(t *testing.T) {
-		nets := []net.IPNet{}
 		_, n1, _ := net.ParseCIDR("192.168.1.0/24")
 		_, n2, _ := net.ParseCIDR("10.0.0.0/8")
 		_, n3, _ := net.ParseCIDR("172.16.0.0/12")
-		nets = append(nets, *n1, *n2, *n3)
+		nets := []net.IPNet{*n1, *n2, *n3}
 
 		matcher := NewCIDRMatcher(nets)
 
@@ -46,10 +45,9 @@ func TestCIDRMatcher(t *testing.T) {
 	})
 
 	t.Run("overlapping networks", func(t *testing.T) {
-		nets := []net.IPNet{}
 		_, n1, _ := net.ParseCIDR("10.0.0.0/8")
 		_, n2, _ := net.ParseCIDR("10.1.0.0/16")
-		nets = append(nets, *n1, *n2)
+		nets := []net.IPNet{*n1, *n2}
 
 		matcher := NewCIDRMatcher(nets)
 
@@ -70,10 +68,9 @@ func TestCIDRMatcher(t *testing.T) {
 	})
 
 	t.Run("mixed IPv4 and IPv6", func(t *testing.T) {
-		nets := []net.IPNet{}
 		_, n1, _ := net.ParseCIDR("192.168.0.0/16")
 		_, n2, _ := net.ParseCIDR("2001:db8::/32")
-		nets = append(nets, *n1, *n2)
+		nets := []net.IPNet{*n1, *n2}
 
 		matcher := NewCIDRMatcher(nets)
 
@@ -87,10 +84,9 @@ func TestCIDRMatcher(t *testing.T) {
 	})
 
 	t.Run("host routes /32 and /128", func(t *testing.T) {
-		nets := []net.IPNet{}
 		_, n1, _ := net.ParseCIDR("192.168.1.100/32")
 		_, n2, _ := net.ParseCIDR("2001:db8::1/128")
-		nets = append(nets, *n1, *n2)
+		nets := []net.IPNet{*n1, *n2}
 
 		matcher := NewCIDRMatcher(nets)
 

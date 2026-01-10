@@ -46,7 +46,7 @@ func TestCIDRContains(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var nets []net.IPNet
+			nets := make([]net.IPNet, 0, len(tt.nets))
 			for _, cidr := range tt.nets {
 				_, subnet, err := net.ParseCIDR(cidr)
 				if err != nil {
