@@ -6,6 +6,200 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func BenchmarkCompile(b *testing.B) {
+	schema := NewSchema().
+		AddField("http.host", TypeString).
+		AddField("http.status", TypeInt).
+		AddField("ip.src", TypeIP)
+
+	tests := []struct {
+		name       string
+		expression string
+	}{
+		{
+			name:       "simple equality",
+			expression: `http.host == "example.com"`,
+		},
+		{
+			name:       "multiple conditions",
+			expression: `http.host == "example.com" and http.status >= 400`,
+		},
+		{
+			name:       "complex expression",
+			expression: `(http.host == "example.com" or http.host == "test.com") and http.status >= 200 and http.status < 300`,
+		},
+		{
+			name:       "ip in cidr",
+			expression: `ip.src in "192.168.0.0/16"`,
+		},
+		{
+			name:       "array membership",
+			expression: `http.status in {200, 201, 204, 301, 302, 304}`,
+		},
+		{
+			name:       "range expression",
+			expression: `http.status in {200..299, 400..499}`,
+		},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				_, err := Compile(tt.expression, schema)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkExecute(b *testing.B) {
+	schema := NewSchema().
+		AddField("http.host", TypeString).
+		AddField("http.status", TypeInt).
+		AddField("http.path", TypeString).
+		AddField("ip.src", TypeIP)
+
+	tests := []struct {
+		name       string
+		expression string
+		setup      func() *ExecutionContext
+	}{
+		{
+			name:       "simple equality",
+			expression: `http.host == "example.com"`,
+			setup: func() *ExecutionContext {
+				return NewExecutionContext().
+					SetStringField("http.host", "example.com")
+			},
+		},
+		{
+			name:       "multiple conditions",
+			expression: `http.host == "example.com" and http.status >= 400`,
+			setup: func() *ExecutionContext {
+				return NewExecutionContext().
+					SetStringField("http.host", "example.com").
+					SetIntField("http.status", 500)
+			},
+		},
+		{
+			name:       "complex boolean logic",
+			expression: `(http.host == "example.com" or http.host == "test.com") and http.status >= 200 and http.status < 300`,
+			setup: func() *ExecutionContext {
+				return NewExecutionContext().
+					SetStringField("http.host", "example.com").
+					SetIntField("http.status", 200)
+			},
+		},
+		{
+			name:       "string contains",
+			expression: `http.path contains "/api"`,
+			setup: func() *ExecutionContext {
+				return NewExecutionContext().
+					SetStringField("http.path", "/api/v1/users")
+			},
+		},
+		{
+			name:       "regex match",
+			expression: `http.host matches "^example\\..*"`,
+			setup: func() *ExecutionContext {
+				return NewExecutionContext().
+					SetStringField("http.host", "example.com")
+			},
+		},
+		{
+			name:       "ip in cidr",
+			expression: `ip.src in "192.168.0.0/16"`,
+			setup: func() *ExecutionContext {
+				return NewExecutionContext().
+					SetIPField("ip.src", "192.168.1.1")
+			},
+		},
+		{
+			name:       "array membership",
+			expression: `http.status in {200, 201, 204, 301, 302, 304}`,
+			setup: func() *ExecutionContext {
+				return NewExecutionContext().
+					SetIntField("http.status", 200)
+			},
+		},
+		{
+			name:       "range expression",
+			expression: `http.status in {200..299}`,
+			setup: func() *ExecutionContext {
+				return NewExecutionContext().
+					SetIntField("http.status", 250)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			filter, err := Compile(tt.expression, schema)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			ctx := tt.setup()
+
+			b.ResetTimer()
+			b.ReportAllocs()
+			for b.Loop() {
+				_, err := filter.Execute(ctx)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func FuzzCompile(f *testing.F) {
+	f.Add(`http.host == "example.com"`)
+	f.Add(`http.status >= 400`)
+	f.Add(`http.host == "example.com" and http.status >= 400`)
+	f.Add(`(http.host == "test.com" or http.path contains "/api") and http.status < 500`)
+	f.Add(`http.status in {200, 201, 204, 301, 302, 304}`)
+	f.Add(`port in {80..100, 443, 8000..9000}`)
+	f.Add(`ip.src in "192.168.0.0/16"`)
+	f.Add(`http.path matches "^/api/v[0-9]+/"`)
+	f.Add(`not http.host == "blocked.com"`)
+	f.Add(`true and false`)
+
+	f.Fuzz(func(_ *testing.T, input string) {
+		_, _ = Compile(input, nil)
+	})
+}
+
+func FuzzExecute(f *testing.F) {
+	f.Add(`http.host == "example.com"`, "example.com", int64(200))
+	f.Add(`http.status >= 400`, "test.com", int64(500))
+	f.Add(`http.host == "example.com" and http.status >= 400`, "example.com", int64(404))
+	f.Add(`http.status in {200, 201, 204}`, "test.com", int64(200))
+	f.Add(`http.host contains "example"`, "example.com", int64(200))
+	f.Add(`http.status < 300`, "test.com", int64(250))
+	f.Add(`not http.host == "blocked"`, "allowed.com", int64(200))
+
+	schema := NewSchema().
+		AddField("http.host", TypeString).
+		AddField("http.status", TypeInt)
+
+	f.Fuzz(func(_ *testing.T, expression string, host string, status int64) {
+		filter, err := Compile(expression, schema)
+		if err != nil {
+			return
+		}
+
+		ctx := NewExecutionContext().
+			SetStringField("http.host", host).
+			SetIntField("http.status", status)
+
+		_, _ = filter.Execute(ctx)
+	})
+}
+
 func TestFilter(t *testing.T) {
 	t.Run("simple string equality", func(t *testing.T) {
 		schema := NewSchema().

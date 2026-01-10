@@ -7,6 +7,120 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func BenchmarkValueOperations(b *testing.B) {
+	b.Run("string equality", func(b *testing.B) {
+		v1 := StringValue("example.com")
+		v2 := StringValue("example.com")
+		b.ReportAllocs()
+		for b.Loop() {
+			v1.Equal(v2)
+		}
+	})
+
+	b.Run("int comparison", func(b *testing.B) {
+		v1 := IntValue(200)
+		v2 := IntValue(200)
+		b.ReportAllocs()
+		for b.Loop() {
+			v1.Equal(v2)
+		}
+	})
+
+	b.Run("ip equality", func(b *testing.B) {
+		v1 := IPValue{IP: []byte{192, 168, 1, 1}}
+		v2 := IPValue{IP: []byte{192, 168, 1, 1}}
+		b.ReportAllocs()
+		for b.Loop() {
+			v1.Equal(v2)
+		}
+	})
+
+	b.Run("array contains", func(b *testing.B) {
+		arr := ArrayValue{IntValue(1), IntValue(2), IntValue(3), IntValue(4), IntValue(5)}
+		val := IntValue(3)
+		b.ReportAllocs()
+		for b.Loop() {
+			arr.Contains(val)
+		}
+	})
+}
+
+func BenchmarkIPOperations(b *testing.B) {
+	b.Run("ipv4 in cidr", func(b *testing.B) {
+		ip := []byte{192, 168, 1, 1}
+		cidr := "192.168.0.0/16"
+		b.ReportAllocs()
+		for b.Loop() {
+			_, err := IPInCIDR(ip, cidr)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("ipv6 in cidr", func(b *testing.B) {
+		ip := []byte{0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+		cidr := "2001:db8::/32"
+		b.ReportAllocs()
+		for b.Loop() {
+			_, err := IPInCIDR(ip, cidr)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+func BenchmarkStringOperations(b *testing.B) {
+	b.Run("contains", func(b *testing.B) {
+		haystack := "this is a long string that contains some text"
+		needle := "contains"
+		b.ReportAllocs()
+		for b.Loop() {
+			ContainsString(haystack, needle)
+		}
+	})
+
+	b.Run("regex match", func(b *testing.B) {
+		value := "example.com"
+		pattern := "^example\\..*"
+		b.ReportAllocs()
+		for b.Loop() {
+			_, err := MatchesRegex(value, pattern)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+func FuzzIPInCIDR(f *testing.F) {
+	f.Add([]byte{192, 168, 1, 1}, "192.168.0.0/16")
+	f.Add([]byte{10, 0, 0, 1}, "10.0.0.0/8")
+	f.Add([]byte{172, 16, 0, 1}, "172.16.0.0/12")
+	f.Add([]byte{8, 8, 8, 8}, "8.8.8.0/24")
+	f.Add([]byte{0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}, "2001:db8::/32")
+
+	f.Fuzz(func(_ *testing.T, ipBytes []byte, cidr string) {
+		if len(ipBytes) != 4 && len(ipBytes) != 16 {
+			return
+		}
+		_, _ = IPInCIDR(ipBytes, cidr)
+	})
+}
+
+func FuzzMatchesRegex(f *testing.F) {
+	f.Add("example.com", "^example\\..*")
+	f.Add("test123", "[a-z]+[0-9]+")
+	f.Add("/api/v1/users", "^/api/v[0-9]+/")
+	f.Add("hello world", "\\bworld\\b")
+	f.Add("abc", ".*")
+
+	f.Fuzz(func(_ *testing.T, value, pattern string) {
+		_, _ = MatchesRegex(value, pattern)
+	})
+}
+
 func TestStringValue(t *testing.T) {
 	t.Run("type and string", func(t *testing.T) {
 		sv := StringValue("test")

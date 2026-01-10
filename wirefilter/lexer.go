@@ -5,7 +5,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"unicode"
 )
 
 // Lexer tokenizes filter expression strings into tokens.
@@ -133,7 +132,31 @@ func (l *Lexer) NextToken() Token {
 
 func (l *Lexer) readString() string {
 	l.readChar()
+	start := l.pos - 1
+
+	// Fast path: check if string has no escape sequences
+	hasEscape := false
+	for l.ch != '"' && l.ch != 0 {
+		if l.ch == '\\' {
+			hasEscape = true
+			break
+		}
+		l.readChar()
+	}
+
+	// If no escapes, return substring directly (zero allocation)
+	if !hasEscape {
+		return l.input[start : l.pos-1]
+	}
+
+	// Slow path: handle escape sequences
 	var result strings.Builder
+	result.Grow(l.pos - start + 16) // Pre-allocate with estimate
+
+	// Copy what we've already scanned
+	result.WriteString(l.input[start : l.pos-1])
+
+	// Continue scanning with escape handling
 	for l.ch != '"' && l.ch != 0 {
 		if l.ch == '\\' {
 			l.readChar()
@@ -178,19 +201,23 @@ func (l *Lexer) readNumber() string {
 	return l.input[start : l.pos-1]
 }
 
+// isLetter checks if the byte is an ASCII letter (fast path for common case).
 func isLetter(ch byte) bool {
-	return unicode.IsLetter(rune(ch))
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
 }
 
+// isDigit checks if the byte is an ASCII digit (fast path for common case).
 func isDigit(ch byte) bool {
-	return unicode.IsDigit(rune(ch))
+	return ch >= '0' && ch <= '9'
 }
 
 func (l *Lexer) readIdentifierToken() Token {
 	literal := l.readIdentifier()
 	tok := Token{Literal: literal}
 
-	switch strings.ToLower(literal) {
+	// Fast case-insensitive keyword matching
+	lower := strings.ToLower(literal)
+	switch lower {
 	case "and":
 		tok.Type = TokenAnd
 	case "or":
@@ -203,19 +230,46 @@ func (l *Lexer) readIdentifierToken() Token {
 		tok.Type = TokenMatches
 	case "in":
 		tok.Type = TokenIn
-	case "true", "false":
+	case "true":
 		tok.Type = TokenBool
-		tok.Value = strings.ToLower(literal) == "true"
+		tok.Value = true
+	case "false":
+		tok.Type = TokenBool
+		tok.Value = false
 	default:
-		if ip := net.ParseIP(literal); ip != nil {
-			tok.Type = TokenIP
-			tok.Value = ip
-		} else {
-			tok.Type = TokenIdent
-			tok.Value = literal
+		// Only try to parse as IP if it looks like one (starts with digit or contains colon for IPv6)
+		if looksLikeIP(literal) {
+			if ip := net.ParseIP(literal); ip != nil {
+				tok.Type = TokenIP
+				tok.Value = ip
+				return tok
+			}
 		}
+		tok.Type = TokenIdent
+		tok.Value = literal
 	}
 	return tok
+}
+
+// looksLikeIP returns true if the literal might be an IP address.
+// This is a fast heuristic to avoid calling net.ParseIP on every identifier.
+func looksLikeIP(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	// IPv4 starts with a digit, IPv6 can start with a digit or letter followed by colons
+	firstChar := s[0]
+	if firstChar >= '0' && firstChar <= '9' {
+		// Could be IPv4 or IPv6 starting with digit
+		return true
+	}
+	// Check for IPv6 with :: or hex prefix
+	for i := 0; i < len(s); i++ {
+		if s[i] == ':' {
+			return true
+		}
+	}
+	return false
 }
 
 func (l *Lexer) readNumberToken() Token {

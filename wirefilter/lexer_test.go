@@ -6,6 +6,72 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func BenchmarkLexer(b *testing.B) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "simple expression",
+			input: `http.host == "example.com"`,
+		},
+		{
+			name:  "complex expression",
+			input: `http.host == "example.com" and http.status >= 400 or http.path contains "/api"`,
+		},
+		{
+			name:  "array expression",
+			input: `http.status in {200, 201, 204, 301, 302, 304}`,
+		},
+		{
+			name:  "range expression",
+			input: `port in {80..100, 443, 8000..9000}`,
+		},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				lexer := NewLexer(tt.input)
+				for {
+					tok := lexer.NextToken()
+					if tok.Type == TokenEOF {
+						break
+					}
+				}
+			}
+		})
+	}
+}
+
+func FuzzLexer(f *testing.F) {
+	f.Add(`http.host == "example.com"`)
+	f.Add(`http.status >= 400`)
+	f.Add(`http.host == "example.com" and http.status >= 400`)
+	f.Add(`(http.host == "test.com" or http.path contains "/api") and http.status < 500`)
+	f.Add(`http.status in {200, 201, 204, 301, 302, 304}`)
+	f.Add(`port in {80..100, 443, 8000..9000}`)
+	f.Add(`ip.src in "192.168.0.0/16"`)
+	f.Add(`http.path matches "^/api/v[0-9]+/"`)
+	f.Add(`not http.host == "blocked.com"`)
+	f.Add(`true and false`)
+	f.Add(`""`)
+	f.Add(`"string with \"escape\""`)
+	f.Add(`field === "value"`)
+	f.Add(`field !== "value"`)
+
+	f.Fuzz(func(_ *testing.T, input string) {
+		lexer := NewLexer(input)
+		for {
+			tok := lexer.NextToken()
+			if tok.Type == TokenEOF {
+				break
+			}
+		}
+	})
+}
+
 func TestLexer(t *testing.T) {
 	t.Run("operators", func(t *testing.T) {
 		input := "== != === !== < > <= >= && || and or not"
