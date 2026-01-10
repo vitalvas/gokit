@@ -1,6 +1,6 @@
 # xnet
 
-A Go networking utility library for working with IP addresses and CIDR blocks.
+A Go networking utility library for working with IP addresses, CIDR blocks, and network protocols.
 
 ## Features
 
@@ -9,6 +9,7 @@ A Go networking utility library for working with IP addresses and CIDR blocks.
 - **CIDR Merging**: Combine adjacent and overlapping networks into minimal set
 - **CIDR Splitting**: Divide networks into smaller subnets
 - **Fast CIDR Matching**: O(log n) IP lookups using radix tree
+- **PROXY Protocol**: v1 (text) and v2 (binary) listener wrapper with trusted proxy support
 - **IPv4 and IPv6**: Full support for both IP versions
 - **Type Safety**: Compile-time type checking
 - **Zero Dependencies**: Only uses Go standard library
@@ -339,6 +340,141 @@ fmt.Println(matcher.Contains(ip)) // true
 - Build time: O(n * bits) where n is number of networks
 - Lookup time: O(bits) which is O(1) for fixed-size IPs
 - Memory efficient: shared prefixes stored once
+
+## PROXY Protocol
+
+Listener wrapper for PROXY protocol v1 (text) and v2 (binary) support. Used by load balancers like HAProxy, AWS ELB, and others to pass client connection information to backend servers.
+
+### Features
+
+- PROXY protocol v1 (TCP4, TCP6, UNKNOWN)
+- PROXY protocol v2 (IPv4, IPv6, Unix sockets, LOCAL/PROXY commands)
+- Strict and auto-detect modes
+- Configurable header read timeout
+- Trusted proxy CIDR filtering
+
+### Basic Usage
+
+**Using ProxyProtoListen (recommended):**
+```go
+// Creates listener with PROXY protocol support - drop-in replacement for net.Listen
+listener, err := xnet.ProxyProtoListen("tcp", ":8080", xnet.ProxyProtoConfig{
+    HeaderTimeout: 5 * time.Second,
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+conn, err := listener.Accept()
+if err != nil {
+    log.Fatal(err)
+}
+
+// conn.RemoteAddr() returns client's real IP from PROXY header
+fmt.Println("Client IP:", conn.RemoteAddr())
+```
+
+**Wrapping existing listener:**
+```go
+listener, _ := net.Listen("tcp", ":8080")
+
+// Wrap with PROXY protocol support
+proxyListener := xnet.NewProxyProtoListener(listener, xnet.ProxyProtoConfig{
+    HeaderTimeout: 5 * time.Second,
+})
+
+conn, err := proxyListener.Accept()
+// ...
+```
+
+### Modes
+
+**Strict Mode (default):**
+All connections must have a valid PROXY protocol header. Connections without headers are rejected.
+
+```go
+proxyListener := xnet.NewProxyProtoListener(listener, xnet.ProxyProtoConfig{
+    Mode:          xnet.ProxyProtoModeStrict,
+    HeaderTimeout: 5 * time.Second,
+})
+```
+
+**Auto Mode:**
+Auto-detects PROXY protocol headers. Accepts both PROXY and regular connections.
+
+```go
+proxyListener := xnet.NewProxyProtoListener(listener, xnet.ProxyProtoConfig{
+    Mode:          xnet.ProxyProtoModeAuto,
+    HeaderTimeout: 5 * time.Second,
+})
+```
+
+### Trusted Proxies
+
+Restrict PROXY protocol acceptance to specific source IPs.
+
+**Strict mode with trusted proxies:**
+Only accepts connections from trusted sources, all must have PROXY headers.
+
+```go
+_, trustedNet, _ := net.ParseCIDR("10.0.0.0/8")
+proxyListener := xnet.NewProxyProtoListener(listener, xnet.ProxyProtoConfig{
+    Mode:           xnet.ProxyProtoModeStrict,
+    HeaderTimeout:  5 * time.Second,
+    TrustedProxies: []net.IPNet{*trustedNet},
+})
+```
+
+**Auto mode with trusted proxies:**
+Connections from trusted sources require PROXY header, others accepted as regular connections.
+
+```go
+_, trustedNet, _ := net.ParseCIDR("10.0.0.0/8")
+proxyListener := xnet.NewProxyProtoListener(listener, xnet.ProxyProtoConfig{
+    Mode:           xnet.ProxyProtoModeAuto,
+    HeaderTimeout:  5 * time.Second,
+    TrustedProxies: []net.IPNet{*trustedNet},
+})
+```
+
+### Accessing Connection Details
+
+```go
+conn, _ := proxyListener.Accept()
+
+// Type assert to access additional methods
+proxyConn := conn.(*xnet.ProxyProtoConn)
+
+// Client's address from PROXY header
+clientAddr := proxyConn.RemoteAddr()
+
+// Actual proxy's address (connection source)
+proxyAddr := proxyConn.RealRemoteAddr()
+
+// Full header information
+header := proxyConn.ProxyHeader()
+if header != nil {
+    fmt.Println("Source:", header.SourceAddr)
+    fmt.Println("Destination:", header.DestAddr)
+}
+```
+
+### Configuration Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `Mode` | `ProxyProtoMode` | `ProxyProtoModeStrict` (default) or `ProxyProtoModeAuto` |
+| `HeaderTimeout` | `time.Duration` | Timeout for reading PROXY header (0 = no timeout) |
+| `TrustedProxies` | `[]net.IPNet` | CIDRs allowed to send PROXY headers |
+
+### Errors
+
+| Error | Description |
+|-------|-------------|
+| `ErrProxyProtoRequired` | PROXY header required but not found (strict mode) |
+| `ErrProxyProtoInvalid` | Malformed PROXY protocol header |
+| `ErrProxyProtoUntrusted` | Connection from untrusted source (when TrustedProxies configured) |
+| `ErrProxyProtoUnknownProto` | Unknown protocol version (strict mode) |
 
 ## Use Cases
 

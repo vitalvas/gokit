@@ -18,4 +18,4 @@ The following libraries will be released in v1.0.0:
 - **xcmd** - Periodic task execution and signal handling for long-running processes
 - **xconfig** - Flexible configuration library supporting multiple formats and sources
 - **xentropy** - Shannon and min-entropy calculator for randomness and security assessment
-- **xnet** - Network utilities for IP addresses and CIDR blocks (containment, merging, splitting, fast matching)
+- **xnet** - Network utilities for IP addresses and CIDR blocks (containment, merging, splitting, fast matching, PROXY protocol v1/v2)
