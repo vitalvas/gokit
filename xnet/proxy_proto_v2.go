@@ -44,9 +44,9 @@ func isProxyV2(data []byte) bool {
 }
 
 func parseProxyV2(reader *bufio.Reader) (*ProxyHeader, error) {
-	headerBuf := make([]byte, proxyV2HeaderLen)
+	var headerBuf [proxyV2HeaderLen]byte
 
-	if _, err := io.ReadFull(reader, headerBuf); err != nil {
+	if _, err := io.ReadFull(reader, headerBuf[:]); err != nil {
 		return nil, ErrProxyProtoInvalid
 	}
 
@@ -63,16 +63,29 @@ func parseProxyV2(reader *bufio.Reader) (*ProxyHeader, error) {
 	}
 
 	if addrLen > 0 {
-		addrBuf := make([]byte, addrLen)
-		if _, err := io.ReadFull(reader, addrBuf); err != nil {
+		var addrBuf [proxyV2IPv6AddrLen]byte
+		readLen := addrLen
+		if readLen > proxyV2IPv6AddrLen {
+			readLen = proxyV2IPv6AddrLen
+		}
+
+		if _, err := io.ReadFull(reader, addrBuf[:readLen]); err != nil {
 			return nil, ErrProxyProtoInvalid
+		}
+
+		// Discard any remaining bytes beyond what we need
+		if addrLen > proxyV2IPv6AddrLen {
+			remaining := int(addrLen) - proxyV2IPv6AddrLen
+			if _, err := reader.Discard(remaining); err != nil {
+				return nil, ErrProxyProtoInvalid
+			}
 		}
 
 		if verCmd == proxyV2CmdLocal {
 			return &ProxyHeader{}, nil
 		}
 
-		return parseProxyV2Addresses(family, addrBuf)
+		return parseProxyV2Addresses(family, addrBuf[:readLen])
 	}
 
 	return &ProxyHeader{}, nil

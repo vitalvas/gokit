@@ -616,3 +616,36 @@ func BenchmarkCIDRMerge_WithGaps(b *testing.B) {
 		}
 	}
 }
+
+func FuzzCIDRMerge(f *testing.F) {
+	f.Add("192.168.0.0/25", "192.168.0.128/25")
+	f.Add("10.0.0.0/24", "10.0.1.0/24")
+	f.Add("2001:db8::/33", "2001:db8:8000::/33")
+	f.Add("invalid", "192.168.1.0/24")
+
+	f.Fuzz(func(_ *testing.T, cidr1, cidr2 string) {
+		var nets []net.IPNet
+
+		if _, ipNet, err := net.ParseCIDR(cidr1); err == nil {
+			nets = append(nets, *ipNet)
+		}
+		if _, ipNet, err := net.ParseCIDR(cidr2); err == nil {
+			nets = append(nets, *ipNet)
+		}
+
+		if len(nets) > 0 {
+			_ = CIDRMerge(nets)
+		}
+	})
+}
+
+func FuzzCIDRMergeString(f *testing.F) {
+	f.Add("192.168.0.0/25", "192.168.0.128/25")
+	f.Add("10.0.0.0/24", "10.0.1.0/24")
+	f.Add("2001:db8::/33", "2001:db8:8000::/33")
+	f.Add("invalid", "192.168.1.0/24")
+
+	f.Fuzz(func(_ *testing.T, cidr1, cidr2 string) {
+		_, _ = CIDRMergeString([]string{cidr1, cidr2})
+	})
+}

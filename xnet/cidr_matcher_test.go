@@ -281,3 +281,37 @@ func BenchmarkCIDRMatcher_Contains_1000(b *testing.B) {
 		_ = matcher.Contains(ip)
 	}
 }
+
+func FuzzCIDRMatcher_Contains(f *testing.F) {
+	f.Add("192.168.1.0/24", []byte{192, 168, 1, 10})
+	f.Add("10.0.0.0/8", []byte{10, 1, 2, 3})
+	f.Add("172.16.0.0/12", []byte{172, 31, 255, 255})
+	f.Add("2001:db8::/32", []byte{0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})
+
+	f.Fuzz(func(_ *testing.T, cidr string, ipBytes []byte) {
+		if len(ipBytes) != 4 && len(ipBytes) != 16 {
+			return
+		}
+
+		_, ipNet, err := net.ParseCIDR(cidr)
+		if err != nil {
+			return
+		}
+
+		matcher := NewCIDRMatcher([]net.IPNet{*ipNet})
+		ip := net.IP(ipBytes)
+		_ = matcher.Contains(ip)
+	})
+}
+
+func FuzzNewCIDRMatcherFromStrings(f *testing.F) {
+	f.Add("192.168.1.0/24")
+	f.Add("10.0.0.0/8")
+	f.Add("2001:db8::/32")
+	f.Add("invalid-cidr")
+	f.Add("")
+
+	f.Fuzz(func(_ *testing.T, cidr string) {
+		_, _ = NewCIDRMatcherFromStrings([]string{cidr})
+	})
+}

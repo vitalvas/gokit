@@ -394,3 +394,32 @@ func BenchmarkCIDRSplit_IPv4_8to16(b *testing.B) {
 		}
 	}
 }
+
+func FuzzCIDRSplit(f *testing.F) {
+	f.Add("192.168.0.0/16", 24)
+	f.Add("10.0.0.0/24", 26)
+	f.Add("2001:db8::/32", 48)
+	f.Add("invalid", 24)
+	f.Add("192.168.0.0/24", 16)
+
+	f.Fuzz(func(_ *testing.T, cidr string, targetPrefix int) {
+		_, ipNet, err := net.ParseCIDR(cidr)
+		if err != nil {
+			return
+		}
+
+		_, _ = CIDRSplit(*ipNet, targetPrefix)
+	})
+}
+
+func FuzzCIDRSplitString(f *testing.F) {
+	f.Add("192.168.0.0/16", 24)
+	f.Add("10.0.0.0/24", 26)
+	f.Add("2001:db8::/32", 48)
+	f.Add("invalid", 24)
+	f.Add("192.168.0.0/24", 16)
+
+	f.Fuzz(func(_ *testing.T, cidr string, targetPrefix int) {
+		_, _ = CIDRSplitString(cidr, targetPrefix)
+	})
+}

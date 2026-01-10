@@ -192,7 +192,48 @@ func BenchmarkCIDRContainsString_1000(b *testing.B) {
 	ip := net.IPv4(10, 1, 244, 1)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = CIDRContainsString(nets, ip)
 	}
+}
+
+func FuzzCIDRContains(f *testing.F) {
+	f.Add([]byte{192, 168, 1, 0}, 24, []byte{192, 168, 1, 10})
+	f.Add([]byte{10, 0, 0, 0}, 8, []byte{10, 1, 2, 3})
+	f.Add([]byte{172, 16, 0, 0}, 12, []byte{172, 31, 255, 255})
+	f.Add([]byte{0, 0, 0, 0}, 0, []byte{1, 2, 3, 4})
+
+	f.Fuzz(func(_ *testing.T, netBytes []byte, mask int, ipBytes []byte) {
+		if len(netBytes) != 4 || len(ipBytes) != 4 {
+			return
+		}
+		if mask < 0 || mask > 32 {
+			return
+		}
+
+		_, ipNet, err := net.ParseCIDR(net.IP(netBytes).String() + "/" + string(rune('0'+mask/10)) + string(rune('0'+mask%10)))
+		if err != nil {
+			return
+		}
+
+		nets := []net.IPNet{*ipNet}
+		ip := net.IP(ipBytes)
+		_ = CIDRContains(nets, ip)
+	})
+}
+
+func FuzzCIDRContainsString(f *testing.F) {
+	f.Add("192.168.1.0/24", []byte{192, 168, 1, 10})
+	f.Add("10.0.0.0/8", []byte{10, 1, 2, 3})
+	f.Add("172.16.0.0/12", []byte{172, 31, 255, 255})
+
+	f.Fuzz(func(_ *testing.T, cidr string, ipBytes []byte) {
+		if len(ipBytes) != 4 && len(ipBytes) != 16 {
+			return
+		}
+
+		nets := []string{cidr}
+		ip := net.IP(ipBytes)
+		_ = CIDRContainsString(nets, ip)
+	})
 }

@@ -189,3 +189,75 @@ func buildProxyV2Header(cmd, family byte, srcIP, dstIP net.IP, srcPort, dstPort 
 
 	return header
 }
+
+func BenchmarkIsProxyV2(b *testing.B) {
+	data := buildProxyV2Header(proxyV2CmdProxy, proxyV2FamilyTCPv4,
+		net.ParseIP("192.168.1.1").To4(),
+		net.ParseIP("192.168.1.2").To4(),
+		12345, 80)
+
+	for b.Loop() {
+		isProxyV2(data)
+	}
+}
+
+func BenchmarkParseProxyV2(b *testing.B) {
+	b.Run("TCP4", func(b *testing.B) {
+		data := buildProxyV2Header(proxyV2CmdProxy, proxyV2FamilyTCPv4,
+			net.ParseIP("192.168.1.1").To4(),
+			net.ParseIP("192.168.1.2").To4(),
+			12345, 80)
+
+		for b.Loop() {
+			reader := bufio.NewReader(bytes.NewReader(data))
+			_, _ = parseProxyV2(reader)
+		}
+	})
+
+	b.Run("TCP6", func(b *testing.B) {
+		data := buildProxyV2Header(proxyV2CmdProxy, proxyV2FamilyTCPv6,
+			net.ParseIP("2001:db8::1"),
+			net.ParseIP("2001:db8::2"),
+			12345, 443)
+
+		for b.Loop() {
+			reader := bufio.NewReader(bytes.NewReader(data))
+			_, _ = parseProxyV2(reader)
+		}
+	})
+
+	b.Run("LOCAL", func(b *testing.B) {
+		data := buildProxyV2Header(proxyV2CmdLocal, proxyV2FamilyTCPv4,
+			net.ParseIP("192.168.1.1").To4(),
+			net.ParseIP("192.168.1.2").To4(),
+			12345, 80)
+
+		for b.Loop() {
+			reader := bufio.NewReader(bytes.NewReader(data))
+			_, _ = parseProxyV2(reader)
+		}
+	})
+}
+
+func FuzzParseProxyV2(f *testing.F) {
+	f.Add(buildProxyV2Header(proxyV2CmdProxy, proxyV2FamilyTCPv4,
+		net.ParseIP("192.168.1.1").To4(),
+		net.ParseIP("192.168.1.2").To4(),
+		12345, 80))
+	f.Add(buildProxyV2Header(proxyV2CmdProxy, proxyV2FamilyTCPv6,
+		net.ParseIP("2001:db8::1"),
+		net.ParseIP("2001:db8::2"),
+		12345, 443))
+	f.Add(buildProxyV2Header(proxyV2CmdLocal, proxyV2FamilyTCPv4,
+		net.ParseIP("10.0.0.1").To4(),
+		net.ParseIP("10.0.0.2").To4(),
+		1, 65535))
+	f.Add([]byte{})
+	f.Add(proxyV2Signature)
+	f.Add([]byte("PROXY TCP4 192.168.1.1"))
+
+	f.Fuzz(func(_ *testing.T, data []byte) {
+		reader := bufio.NewReader(bytes.NewReader(data))
+		_, _ = parseProxyV2(reader)
+	})
+}

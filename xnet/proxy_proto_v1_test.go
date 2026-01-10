@@ -162,3 +162,58 @@ func TestParseProxyV1(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkIsProxyV1(b *testing.B) {
+	data := []byte("PROXY TCP4 192.168.1.1 192.168.1.2 12345 80\r\n")
+
+	for b.Loop() {
+		isProxyV1(data)
+	}
+}
+
+func BenchmarkParseProxyV1(b *testing.B) {
+	b.Run("TCP4", func(b *testing.B) {
+		data := []byte("PROXY TCP4 192.168.1.1 192.168.1.2 12345 80\r\n")
+
+		for b.Loop() {
+			reader := bufio.NewReader(bytes.NewReader(data))
+			_, _ = parseProxyV1(reader)
+		}
+	})
+
+	b.Run("TCP6", func(b *testing.B) {
+		data := []byte("PROXY TCP6 2001:db8::1 2001:db8::2 12345 443\r\n")
+
+		for b.Loop() {
+			reader := bufio.NewReader(bytes.NewReader(data))
+			_, _ = parseProxyV1(reader)
+		}
+	})
+
+	b.Run("UNKNOWN", func(b *testing.B) {
+		data := []byte("PROXY UNKNOWN\r\n")
+
+		for b.Loop() {
+			reader := bufio.NewReader(bytes.NewReader(data))
+			_, _ = parseProxyV1(reader)
+		}
+	})
+}
+
+func FuzzParseProxyV1(f *testing.F) {
+	f.Add([]byte("PROXY TCP4 192.168.1.1 192.168.1.2 12345 80\r\n"))
+	f.Add([]byte("PROXY TCP6 2001:db8::1 2001:db8::2 12345 443\r\n"))
+	f.Add([]byte("PROXY UNKNOWN\r\n"))
+	f.Add([]byte("PROXY TCP4 10.0.0.1 10.0.0.2 1 65535\r\n"))
+	f.Add([]byte("PROXY TCP4 0.0.0.0 255.255.255.255 0 0\r\n"))
+	f.Add([]byte(""))
+	f.Add([]byte("PROXY"))
+	f.Add([]byte("PROXY "))
+	f.Add([]byte("PROXY TCP4"))
+	f.Add([]byte("GET / HTTP/1.1\r\n"))
+
+	f.Fuzz(func(_ *testing.T, data []byte) {
+		reader := bufio.NewReader(bytes.NewReader(data))
+		_, _ = parseProxyV1(reader)
+	})
+}
