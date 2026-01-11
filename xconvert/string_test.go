@@ -7,22 +7,46 @@ import (
 )
 
 func TestStringToPointer(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"hello", "hello"},
-		{"", ""},
-		{"123", "123"},
-	}
-
-	for _, test := range tests {
-		result := StringToPointer(test.input)
-		if result == nil || *result != test.expected {
-			t.Errorf("StringToPointer(%q) = %v; want %v", test.input, result, test.expected)
-		}
-
+	t.Run("non-empty string", func(t *testing.T) {
+		result := StringToPointer("hello")
 		assert.NotNil(t, result)
-		assert.Equal(t, test.expected, *result)
+		assert.Equal(t, "hello", *result)
+	})
+
+	t.Run("empty string", func(t *testing.T) {
+		result := StringToPointer("")
+		assert.NotNil(t, result)
+		assert.Equal(t, "", *result)
+	})
+
+	t.Run("numeric string", func(t *testing.T) {
+		result := StringToPointer("123")
+		assert.NotNil(t, result)
+		assert.Equal(t, "123", *result)
+	})
+}
+
+func BenchmarkStringToPointer(b *testing.B) {
+	s := "hello world"
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = StringToPointer(s)
 	}
+}
+
+func FuzzStringToPointer(f *testing.F) {
+	f.Add("hello")
+	f.Add("")
+	f.Add("123")
+	f.Add("special chars: !@#$%")
+
+	f.Fuzz(func(t *testing.T, s string) {
+		result := StringToPointer(s)
+		if result == nil {
+			t.Error("result should not be nil")
+		}
+		if *result != s {
+			t.Error("result should equal input")
+		}
+	})
 }

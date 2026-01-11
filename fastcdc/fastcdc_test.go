@@ -1062,7 +1062,7 @@ func BenchmarkChunker_1MB(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		reader := bytes.NewReader(data)
 		chunker, _ := NewChunker(reader, config)
 		for {
@@ -1084,7 +1084,7 @@ func BenchmarkChunker_10MB(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		reader := bytes.NewReader(data)
 		chunker, _ := NewChunker(reader, config)
 		for {
@@ -1106,7 +1106,7 @@ func BenchmarkChunker_HashOnly_10MB(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		reader := bytes.NewReader(data)
 		chunker, _ := NewChunker(reader, config)
 		for {
@@ -1134,7 +1134,7 @@ func BenchmarkChunkBytes_1MB(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = ChunkBytes(data, config)
 	}
 }
@@ -1147,7 +1147,7 @@ func BenchmarkHashData_SHA256(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = HashData(data, HashSHA256)
 	}
 }
@@ -1160,7 +1160,7 @@ func BenchmarkHashData_SHA384(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = HashData(data, HashSHA384)
 	}
 }
@@ -1173,7 +1173,7 @@ func BenchmarkHashData_SHA512(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = HashData(data, HashSHA512)
 	}
 }
@@ -1188,7 +1188,7 @@ func BenchmarkFindBoundary(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = findBoundaryInSlice(data, 32*1024, 256*1024, 64*1024, maskS, maskL)
 	}
 }
@@ -1203,7 +1203,7 @@ func BenchmarkChunker_ForEach_10MB(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		reader := bytes.NewReader(data)
 		chunker, _ := NewChunker(reader, config)
 		_ = chunker.ForEach(func(_ *Chunk) error {
@@ -1222,7 +1222,7 @@ func BenchmarkChunker_ForEachHash_10MB(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		reader := bytes.NewReader(data)
 		chunker, _ := NewChunker(reader, config)
 		_ = chunker.ForEachHash(func(_ *Chunk) error {
@@ -1241,7 +1241,7 @@ func BenchmarkChunker_NextInto_10MB(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		reader := bytes.NewReader(data)
 		chunker, _ := NewChunker(reader, config)
 		chunk := &Chunk{Data: make([]byte, 0, config.MaxSize)}
@@ -1265,7 +1265,7 @@ func BenchmarkChunkBytesNoHash_10MB(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		offset := uint64(0)
 		remaining := len(data)
 
@@ -1312,7 +1312,7 @@ func BenchmarkChunkSizes(b *testing.B) {
 			b.SetBytes(int64(len(data)))
 			b.ResetTimer()
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				reader := bytes.NewReader(data)
 				chunker, _ := NewChunker(reader, config)
 				_ = chunker.ForEachHash(func(_ *Chunk) error {
@@ -1351,7 +1351,7 @@ func BenchmarkChunkSizesNoHash(b *testing.B) {
 			b.SetBytes(int64(len(data)))
 			b.ResetTimer()
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				offset := uint64(0)
 				remaining := len(data)
 
@@ -1386,7 +1386,7 @@ func BenchmarkPresetConfigs(b *testing.B) {
 			b.SetBytes(int64(len(data)))
 			b.ResetTimer()
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				reader := bytes.NewReader(data)
 				chunker, _ := NewChunker(reader, cfg.config)
 				_ = chunker.ForEachHash(func(_ *Chunk) error {
@@ -1395,4 +1395,37 @@ func BenchmarkPresetConfigs(b *testing.B) {
 			}
 		})
 	}
+}
+
+func FuzzChunker(f *testing.F) {
+	f.Add([]byte("hello world"))
+	f.Add([]byte(""))
+	f.Add(make([]byte, 1024))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) == 0 {
+			return
+		}
+		config := SmallChunkConfig()
+		reader := bytes.NewReader(data)
+		chunker, err := NewChunker(reader, config)
+		if err != nil {
+			return
+		}
+		var totalBytes uint64
+		for {
+			chunk, err := chunker.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+			totalBytes += chunk.Length
+		}
+		if totalBytes != uint64(len(data)) {
+			t.Errorf("total bytes %d != input length %d", totalBytes, len(data))
+		}
+	})
 }

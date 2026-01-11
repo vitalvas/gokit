@@ -323,7 +323,7 @@ func BenchmarkNewChain(b *testing.B) {
 	for _, order := range orders {
 		b.Run(fmt.Sprintf("Order_%d", order), func(b *testing.B) {
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_ = NewChain(order)
 			}
 		})
@@ -354,7 +354,7 @@ func BenchmarkChain_Add(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				chain.Add(seq.tokens)
 			}
 		})
@@ -378,7 +378,7 @@ func BenchmarkChain_RawAdd(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				chain.RawAdd(str.input)
 			}
 		})
@@ -405,7 +405,7 @@ func BenchmarkChain_Generate(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_, _ = chain.Generate(ngram)
 			}
 		})
@@ -425,7 +425,7 @@ func BenchmarkChain_TransitionProbability(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = chain.TransitionProbability("a", ngram)
 	}
 }
@@ -513,7 +513,7 @@ func BenchmarkChain_SequenceGeneration(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				tokens := make([]string, 0)
 				for j := 0; j < chain.Order; j++ {
 					tokens = append(tokens, StartToken)
@@ -537,7 +537,7 @@ func BenchmarkFullWorkflow(b *testing.B) {
 	b.Run("TrainAndGenerate", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			chain := NewChain(2)
 
 			for _, word := range words {
@@ -568,7 +568,7 @@ func BenchmarkChain_Export(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = chain.Export()
 	}
 }
@@ -586,7 +586,39 @@ func BenchmarkImportChain(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = ImportChain(data)
 	}
+}
+
+func FuzzChain_Add(f *testing.F) {
+	f.Add("hello")
+	f.Add("world")
+	f.Add("")
+	f.Add("test data with spaces")
+
+	f.Fuzz(func(t *testing.T, s string) {
+		chain := NewChain(2)
+		chain.RawAdd(s)
+	})
+}
+
+func FuzzChain_ExportImport(f *testing.F) {
+	f.Add("hello")
+	f.Add("world")
+	f.Add("test")
+
+	f.Fuzz(func(t *testing.T, s string) {
+		chain := NewChain(2)
+		chain.RawAdd(s)
+		data, err := chain.Export()
+		if err != nil {
+			t.Errorf("export failed: %v", err)
+			return
+		}
+		_, err = ImportChain(data)
+		if err != nil {
+			t.Errorf("import failed: %v", err)
+		}
+	})
 }

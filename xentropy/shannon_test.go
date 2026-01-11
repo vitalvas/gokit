@@ -216,58 +216,56 @@ func TestEdgeCases(t *testing.T) {
 	})
 }
 
-// Benchmarks
-
-//nolint:dupl // Benchmark structure similar to MinEntropy benchmarks is intentional
 func BenchmarkShannon(b *testing.B) {
-	small := []byte(strings.Repeat("The quick brown fox jumps over the lazy dog. ", 2))
-	medium := []byte(strings.Repeat("The quick brown fox jumps over the lazy dog. ", 12))
-	large := []byte(strings.Repeat("The quick brown fox jumps over the lazy dog. ", 120))
-
-	b.Run("Small_100B", func(b *testing.B) {
-		b.ResetTimer()
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			Shannon(small)
-		}
-	})
-
-	b.Run("Medium_500B", func(b *testing.B) {
-		b.ResetTimer()
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			Shannon(medium)
-		}
-	})
-
-	b.Run("Large_5KB", func(b *testing.B) {
-		b.ResetTimer()
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			Shannon(large)
-		}
-	})
+	data := []byte(strings.Repeat("The quick brown fox jumps over the lazy dog. ", 10))
+	b.ReportAllocs()
+	for b.Loop() {
+		Shannon(data)
+	}
 }
 
 func BenchmarkNormalized(b *testing.B) {
 	data := []byte(strings.Repeat("The quick brown fox jumps over the lazy dog. ", 10))
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		Normalized(data)
 	}
 }
 
 func BenchmarkIsRandom(b *testing.B) {
 	data := make([]byte, 256)
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		data[i] = byte(i)
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		IsRandom(data, 0.9)
 	}
+}
+
+func FuzzShannon(f *testing.F) {
+	f.Add([]byte("test"))
+	f.Add([]byte("hello world"))
+	f.Add([]byte{})
+	f.Add([]byte{0x00, 0x01, 0x02})
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		entropy := Shannon(data)
+		if len(data) > 0 && (entropy < 0 || entropy > 8) {
+			t.Errorf("entropy should be between 0 and 8, got %f", entropy)
+		}
+	})
+}
+
+func FuzzNormalized(f *testing.F) {
+	f.Add([]byte("test"))
+	f.Add([]byte("hello world"))
+	f.Add([]byte{})
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		entropy := Normalized(data)
+		if len(data) > 0 && (entropy < 0 || entropy > 1) {
+			t.Errorf("normalized entropy should be between 0 and 1, got %f", entropy)
+		}
+	})
 }

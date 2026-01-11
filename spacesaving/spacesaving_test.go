@@ -2,7 +2,6 @@ package spacesaving
 
 import (
 	"fmt"
-	"math/rand"
 	"sort"
 	"sync"
 	"testing"
@@ -462,48 +461,38 @@ func TestStableSort(t *testing.T) {
 	})
 }
 
-// Benchmarks
-
-func BenchmarkAdd(b *testing.B) {
+func BenchmarkSpaceSaving_Add(b *testing.B) {
 	ss := New(1000)
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		ss.Add(fmt.Sprintf("item-%d", i%100))
+	for b.Loop() {
+		ss.Add("item-50")
 	}
 }
 
-func BenchmarkCount(b *testing.B) {
+func BenchmarkSpaceSaving_Count(b *testing.B) {
 	ss := New(1000)
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		ss.Add(fmt.Sprintf("item-%d", i%100))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = ss.Count("item-50")
 	}
 }
 
-func BenchmarkTop(b *testing.B) {
+func BenchmarkSpaceSaving_Top(b *testing.B) {
 	ss := New(1000)
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		ss.Add(fmt.Sprintf("item-%d", i%100))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = ss.Top(10)
 	}
 }
 
-func BenchmarkConcurrentAdd(b *testing.B) {
+func BenchmarkSpaceSaving_ConcurrentAdd(b *testing.B) {
 	ss := New(1000)
-
-	b.ResetTimer()
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
@@ -514,43 +503,72 @@ func BenchmarkConcurrentAdd(b *testing.B) {
 	})
 }
 
-func BenchmarkExport(b *testing.B) {
+func BenchmarkSpaceSaving_Export(b *testing.B) {
 	ss := New(1000)
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		ss.Add(fmt.Sprintf("item-%d", i%100))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = ss.Export()
 	}
 }
 
-func BenchmarkImport(b *testing.B) {
+func BenchmarkSpaceSaving_Import(b *testing.B) {
 	ss := New(1000)
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		ss.Add(fmt.Sprintf("item-%d", i%100))
 	}
 	data, _ := ss.Export()
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = Import(data)
 	}
 }
 
-// Benchmark with realistic Zipf distribution
-func BenchmarkZipfAdd(b *testing.B) {
-	ss := New(1000)
-	r := rand.New(rand.NewSource(42))
+func FuzzSpaceSaving_Add(f *testing.F) {
+	f.Add("test")
+	f.Add("item-1")
+	f.Add("")
+	f.Add("a")
+	f.Add("very-long-item-name-for-testing")
 
-	b.ResetTimer()
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		// Zipf-like: few items very frequent, many items rare
-		item := fmt.Sprintf("item-%d", r.Intn(10000))
-		ss.Add(item)
-	}
+	f.Fuzz(func(t *testing.T, item string) {
+		ss := New(100)
+		count := ss.Add(item)
+		if count < 1 {
+			t.Error("count should be at least 1 after adding")
+		}
+		gotCount, _ := ss.Count(item)
+		if gotCount < 1 {
+			t.Error("item should be present after adding")
+		}
+	})
+}
+
+func FuzzSpaceSaving_ExportImport(f *testing.F) {
+	f.Add("a", "b", "c")
+	f.Add("test1", "test2", "test3")
+	f.Add("", "x", "y")
+
+	f.Fuzz(func(t *testing.T, s1, s2, s3 string) {
+		ss := New(100)
+		ss.Add(s1)
+		ss.Add(s2)
+		ss.Add(s3)
+
+		data, err := ss.Export()
+		if err != nil {
+			t.Fatalf("export failed: %v", err)
+		}
+
+		imported, err := Import(data)
+		if err != nil {
+			t.Fatalf("import failed: %v", err)
+		}
+
+		if imported.Size() != ss.Size() {
+			t.Error("imported size should match original")
+		}
+	})
 }

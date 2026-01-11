@@ -269,7 +269,7 @@ func BenchmarkMakePairs(b *testing.B) {
 	for _, order := range orders {
 		b.Run(fmt.Sprintf("Order_%d", order), func(b *testing.B) {
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_ = MakePairs(tokens, order)
 			}
 		})
@@ -291,7 +291,7 @@ func BenchmarkNGram_key(b *testing.B) {
 	for _, ng := range ngrams {
 		b.Run(ng.name, func(b *testing.B) {
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_ = ng.ngram.key()
 			}
 		})
@@ -311,7 +311,7 @@ func BenchmarkSparseArray_sum(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_ = arr.sum()
 			}
 		})

@@ -338,48 +338,38 @@ func TestRateTrackerEdgeCases(t *testing.T) {
 	})
 }
 
-// Benchmarks for RateTracker
-
-func BenchmarkRateTrackerTouch(b *testing.B) {
+func BenchmarkRateTracker_Touch(b *testing.B) {
 	rt := NewRateTracker(1000, 60*time.Second)
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		rt.Touch(fmt.Sprintf("item-%d", i%100))
+	for b.Loop() {
+		rt.Touch("item-50")
 	}
 }
 
-func BenchmarkRateTrackerRate(b *testing.B) {
+func BenchmarkRateTracker_Rate(b *testing.B) {
 	rt := NewRateTracker(1000, 60*time.Second)
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		rt.Touch(fmt.Sprintf("item-%d", i%100))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = rt.Rate("item-50")
 	}
 }
 
-func BenchmarkRateTrackerTop(b *testing.B) {
+func BenchmarkRateTracker_Top(b *testing.B) {
 	rt := NewRateTracker(1000, 60*time.Second)
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		rt.Touch(fmt.Sprintf("item-%d", i%100))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = rt.Top(10)
 	}
 }
 
-func BenchmarkRateTrackerConcurrentTouch(b *testing.B) {
+func BenchmarkRateTracker_ConcurrentTouch(b *testing.B) {
 	rt := NewRateTracker(1000, 60*time.Second)
-
-	b.ResetTimer()
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
@@ -390,29 +380,41 @@ func BenchmarkRateTrackerConcurrentTouch(b *testing.B) {
 	})
 }
 
-func BenchmarkRateTrackerExport(b *testing.B) {
+func BenchmarkRateTracker_Export(b *testing.B) {
 	rt := NewRateTracker(1000, 60*time.Second)
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		rt.Touch(fmt.Sprintf("item-%d", i%100))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = rt.Export()
 	}
 }
 
-func BenchmarkRateTrackerImport(b *testing.B) {
+func BenchmarkRateTracker_Import(b *testing.B) {
 	rt := NewRateTracker(1000, 60*time.Second)
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		rt.Touch(fmt.Sprintf("item-%d", i%100))
 	}
 	data, _ := rt.Export()
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = ImportRateTracker(data)
 	}
+}
+
+func FuzzRateTracker_Touch(f *testing.F) {
+	f.Add("test")
+	f.Add("item-1")
+	f.Add("")
+	f.Add("a")
+
+	f.Fuzz(func(t *testing.T, item string) {
+		rt := NewRateTracker(100, 60*time.Second)
+		rt.Touch(item)
+		rate, _ := rt.Rate(item)
+		if rate < 0 {
+			t.Error("rate should be non-negative")
+		}
+	})
 }

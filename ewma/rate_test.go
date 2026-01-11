@@ -365,7 +365,7 @@ func BenchmarkRateAdd(b *testing.B) {
 
 	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		r.Add(1.0)
 	}
 }
@@ -376,7 +376,7 @@ func BenchmarkRateRate(b *testing.B) {
 
 	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = r.Rate()
 	}
 }
@@ -387,7 +387,7 @@ func BenchmarkRateSnapshot(b *testing.B) {
 
 	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = r.Snapshot()
 	}
 }
@@ -414,5 +414,18 @@ func BenchmarkRateConcurrentRate(b *testing.B) {
 		for pb.Next() {
 			_ = r.Rate()
 		}
+	})
+}
+
+func FuzzRateAdd(f *testing.F) {
+	f.Add(1.0)
+	f.Add(0.0)
+	f.Add(-1.0)
+	f.Add(100.5)
+
+	f.Fuzz(func(t *testing.T, val float64) {
+		r := NewRate(60 * time.Second)
+		r.Add(val)
+		_ = r.Rate()
 	})
 }

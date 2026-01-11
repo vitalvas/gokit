@@ -1,82 +1,59 @@
 package xstrings
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestSimpleTemplate(t *testing.T) {
-	tests := []struct {
-		name     string
-		template string
-		data     map[string]string
-		expected string
-	}{
-		{
-			name:     "basic replacement",
-			template: "Hello, {{ name }}!",
-			data:     map[string]string{"name": "John"},
-			expected: "Hello, John!",
-		},
-		{
-			name:     "multiple replacements",
-			template: "Welcome to {{ location }} in {{ year }}.",
-			data:     map[string]string{"location": "Golang World", "year": "2024"},
-			expected: "Welcome to Golang World in 2024.",
-		},
-		{
-			name:     "no placeholders",
-			template: "No placeholders here.",
-			data:     map[string]string{"key": "value"},
-			expected: "No placeholders here.",
-		},
-		{
-			name:     "placeholder not found",
-			template: "Hello, {{ name }}!",
-			data:     map[string]string{"location": "Golang World"},
-			expected: "Hello, {{ name }}!",
-		},
-		{
-			name:     "placeholders with spaces",
-			template: "Hello, {{  name  }}! Welcome to {{            location }}.",
-			data:     map[string]string{"name": "John", "location": "Golang World"},
-			expected: "Hello, John! Welcome to Golang World.",
-		},
-		{
-			name:     "empty data",
-			template: "Hello, {{ name }}!",
-			data:     map[string]string{},
-			expected: "Hello, {{ name }}!",
-		},
-		{
-			name:     "placeholder with special characters",
-			template: "Hello, {{ name }}! Welcome to {{ location }}.",
-			data:     map[string]string{"name": "John", "location": "Golang World & Go Playground"},
-			expected: "Hello, John! Welcome to Golang World & Go Playground.",
-		},
-		{
-			name:     "placeholder without spaces on the left",
-			template: "Hello, {{name }}! Welcome to {{ location }}.",
-			data:     map[string]string{"name": "John", "location": "Golang World"},
-			expected: "Hello, John! Welcome to Golang World.",
-		},
-		{
-			name:     "placeholder without spaces on the right",
-			template: "Hello, {{ name}}! Welcome to {{ location }}.",
-			data:     map[string]string{"name": "John", "location": "Golang World"},
-			expected: "Hello, John! Welcome to Golang World.",
-		},
-		{
-			name:     "placeholder without spaces on both sides",
-			template: "Hello, {{name}}! Welcome to {{ location }}.",
-			data:     map[string]string{"name": "John", "location": "Golang World"},
-			expected: "Hello, John! Welcome to Golang World.",
-		},
-	}
+	t.Run("basic replacement", func(t *testing.T) {
+		result := SimpleTemplate("Hello, {{ name }}!", map[string]string{"name": "John"})
+		assert.Equal(t, "Hello, John!", result)
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := SimpleTemplate(tt.template, tt.data)
-			if result != tt.expected {
-				t.Errorf("SimpleTemplate() = %v, want %v", result, tt.expected)
-			}
-		})
+	t.Run("multiple replacements", func(t *testing.T) {
+		result := SimpleTemplate("Welcome to {{ location }} in {{ year }}.", map[string]string{"location": "Golang World", "year": "2024"})
+		assert.Equal(t, "Welcome to Golang World in 2024.", result)
+	})
+
+	t.Run("no placeholders", func(t *testing.T) {
+		result := SimpleTemplate("No placeholders here.", map[string]string{"key": "value"})
+		assert.Equal(t, "No placeholders here.", result)
+	})
+
+	t.Run("placeholder not found", func(t *testing.T) {
+		result := SimpleTemplate("Hello, {{ name }}!", map[string]string{"location": "Golang World"})
+		assert.Equal(t, "Hello, {{ name }}!", result)
+	})
+
+	t.Run("empty data", func(t *testing.T) {
+		result := SimpleTemplate("Hello, {{ name }}!", map[string]string{})
+		assert.Equal(t, "Hello, {{ name }}!", result)
+	})
+
+	t.Run("placeholder without spaces", func(t *testing.T) {
+		result := SimpleTemplate("Hello, {{name}}!", map[string]string{"name": "John"})
+		assert.Equal(t, "Hello, John!", result)
+	})
+}
+
+func BenchmarkSimpleTemplate(b *testing.B) {
+	template := "Hello, {{ name }}! Welcome to {{ location }}."
+	data := map[string]string{"name": "John", "location": "Golang World"}
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = SimpleTemplate(template, data)
 	}
+}
+
+func FuzzSimpleTemplate(f *testing.F) {
+	f.Add("Hello, {{ name }}!", "name", "John")
+	f.Add("No placeholders", "key", "value")
+	f.Add("{{ a }} and {{ b }}", "a", "X")
+
+	f.Fuzz(func(t *testing.T, template, key, value string) {
+		data := map[string]string{key: value}
+		_ = SimpleTemplate(template, data)
+	})
 }

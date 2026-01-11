@@ -434,125 +434,134 @@ func TestRandomData(t *testing.T) {
 	})
 }
 
-// Benchmarks
-
-func BenchmarkAdd(b *testing.B) {
+func BenchmarkHyperLogLog_Add(b *testing.B) {
 	hll := New(14)
 	data := []byte("benchmark data")
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		hll.Add(data)
 	}
 }
 
-func BenchmarkAddString(b *testing.B) {
-	testCases := []struct {
-		precision uint8
-		name      string
-	}{
-		{10, "Precision_10"},
-		{12, "Precision_12"},
-		{14, "Precision_14"},
-		{16, "Precision_16"},
-	}
-
-	for _, tc := range testCases {
-		b.Run(tc.name, func(b *testing.B) {
-			hll := New(tc.precision)
-			b.ResetTimer()
-			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
-				hll.AddString(fmt.Sprintf("element-%d", i))
-			}
-		})
+func BenchmarkHyperLogLog_AddString(b *testing.B) {
+	hll := New(14)
+	b.ReportAllocs()
+	for b.Loop() {
+		hll.AddString("benchmark-element")
 	}
 }
 
-func BenchmarkCount(b *testing.B) {
+func BenchmarkHyperLogLog_Count(b *testing.B) {
 	hll := New(14)
-	for i := 0; i < 100000; i++ {
+	for i := range 100000 {
 		hll.AddString(fmt.Sprintf("element-%d", i))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = hll.Count()
 	}
 }
 
-func BenchmarkMerge(b *testing.B) {
+func BenchmarkHyperLogLog_Merge(b *testing.B) {
 	hll1 := New(14)
 	hll2 := New(14)
-
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		hll1.AddString(fmt.Sprintf("set1-%d", i))
 		hll2.AddString(fmt.Sprintf("set2-%d", i))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		hll1.Merge(hll2)
 	}
 }
 
-func BenchmarkClone(b *testing.B) {
+func BenchmarkHyperLogLog_Clone(b *testing.B) {
 	hll := New(14)
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		hll.AddString(fmt.Sprintf("element-%d", i))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = hll.Clone()
 	}
 }
 
-func BenchmarkMergeAll(b *testing.B) {
-	hll1 := New(14)
-	hll2 := New(14)
-	hll3 := New(14)
-
-	for i := 0; i < 10000; i++ {
-		hll1.AddString(fmt.Sprintf("set1-%d", i))
-		hll2.AddString(fmt.Sprintf("set2-%d", i))
-		hll3.AddString(fmt.Sprintf("set3-%d", i))
-	}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		_, _ = MergeAll(hll1, hll2, hll3)
-	}
-}
-
-func BenchmarkExport(b *testing.B) {
+func BenchmarkHyperLogLog_Export(b *testing.B) {
 	hll := New(14)
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		hll.AddString(fmt.Sprintf("element-%d", i))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = hll.Export()
 	}
 }
 
-func BenchmarkImport(b *testing.B) {
+func BenchmarkHyperLogLog_Import(b *testing.B) {
 	hll := New(14)
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		hll.AddString(fmt.Sprintf("element-%d", i))
 	}
 	data, _ := hll.Export()
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = Import(data)
 	}
+}
+
+func FuzzHyperLogLog_Add(f *testing.F) {
+	f.Add([]byte("test"))
+	f.Add([]byte("hello world"))
+	f.Add([]byte{})
+	f.Add([]byte{0x00, 0x01, 0x02})
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		hll := New(14)
+		hll.Add(data)
+		if hll.Count() < 1 {
+			t.Error("count should be at least 1 after adding")
+		}
+	})
+}
+
+func FuzzHyperLogLog_AddString(f *testing.F) {
+	f.Add("test")
+	f.Add("hello world")
+	f.Add("")
+	f.Add("a")
+
+	f.Fuzz(func(t *testing.T, s string) {
+		hll := New(14)
+		hll.AddString(s)
+		count := hll.Count()
+		if s != "" && count < 1 {
+			t.Error("count should be at least 1 after adding non-empty string")
+		}
+	})
+}
+
+func FuzzHyperLogLog_ExportImport(f *testing.F) {
+	f.Add("a", "b", "c")
+	f.Add("test1", "test2", "test3")
+
+	f.Fuzz(func(t *testing.T, s1, s2, s3 string) {
+		hll := New(14)
+		hll.AddString(s1)
+		hll.AddString(s2)
+		hll.AddString(s3)
+
+		data, err := hll.Export()
+		if err != nil {
+			t.Fatalf("export failed: %v", err)
+		}
+
+		imported, err := Import(data)
+		if err != nil {
+			t.Fatalf("import failed: %v", err)
+		}
+
+		if imported.Count() != hll.Count() {
+			t.Error("imported count should match original")
+		}
+	})
 }

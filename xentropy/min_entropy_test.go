@@ -253,7 +253,7 @@ func BenchmarkMinEntropy(b *testing.B) {
 	b.Run("Small_100B", func(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			MinEntropy(small)
 		}
 	})
@@ -261,7 +261,7 @@ func BenchmarkMinEntropy(b *testing.B) {
 	b.Run("Medium_500B", func(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			MinEntropy(medium)
 		}
 	})
@@ -269,7 +269,7 @@ func BenchmarkMinEntropy(b *testing.B) {
 	b.Run("Large_5KB", func(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			MinEntropy(large)
 		}
 	})
@@ -280,20 +280,36 @@ func BenchmarkMinNormalized(b *testing.B) {
 
 	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		MinNormalized(data)
 	}
 }
 
 func BenchmarkIsSecure(b *testing.B) {
 	data := make([]byte, 256)
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		data[i] = byte(i)
 	}
 
 	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		IsSecure(data, 0.8)
 	}
+}
+
+func FuzzMinEntropy(f *testing.F) {
+	f.Add([]byte("hello world"))
+	f.Add([]byte("aaaaaaa"))
+	f.Add([]byte(""))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		entropy := MinEntropy(data)
+		if entropy < 0 {
+			t.Errorf("entropy should be non-negative, got %f", entropy)
+		}
+		if entropy > 8 {
+			t.Errorf("entropy should not exceed 8 bits, got %f", entropy)
+		}
+	})
 }

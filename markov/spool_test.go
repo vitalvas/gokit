@@ -337,8 +337,10 @@ func BenchmarkSpool_add(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		i := 0
+		for b.Loop() {
 			s.add(fmt.Sprintf("str%d", i))
+			i++
 		}
 	})
 
@@ -353,7 +355,7 @@ func BenchmarkSpool_add(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			s.add("test")
 		}
 	})
@@ -367,8 +369,10 @@ func BenchmarkSpool_add(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		i := 0
+		for b.Loop() {
 			s.add(fmt.Sprintf("str%d", i%100))
+			i++
 		}
 	})
 }
@@ -385,36 +389,38 @@ func BenchmarkSpool_get(b *testing.B) {
 
 	b.Run("Existing", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		i := 0
+		for b.Loop() {
 			s.get(fmt.Sprintf("str%d", i%1000))
+			i++
 		}
 	})
 
 	b.Run("NonExisting", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		i := 0
+		for b.Loop() {
 			s.get(fmt.Sprintf("nonexist%d", i))
+			i++
 		}
 	})
 }
 
 func BenchmarkSpool_ConcurrentAdd(b *testing.B) {
-	b.Run("Parallel", func(b *testing.B) {
-		s := &spool{
-			stringMap: make(map[string]int),
-			intMap:    make(map[int]string),
+	s := &spool{
+		stringMap: make(map[string]int),
+		intMap:    make(map[int]string),
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		i := 0
+		for pb.Next() {
+			s.add(fmt.Sprintf("str%d", i%100))
+			i++
 		}
-
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		b.RunParallel(func(pb *testing.PB) {
-			i := 0
-			for pb.Next() {
-				s.add(fmt.Sprintf("str%d", i%100))
-				i++
-			}
-		})
 	})
 }
 
@@ -428,16 +434,14 @@ func BenchmarkSpool_ConcurrentGet(b *testing.B) {
 		s.add(fmt.Sprintf("str%d", i))
 	}
 
-	b.Run("Parallel", func(b *testing.B) {
-		b.ReportAllocs()
-		b.ResetTimer()
+	b.ReportAllocs()
+	b.ResetTimer()
 
-		b.RunParallel(func(pb *testing.PB) {
-			i := 0
-			for pb.Next() {
-				s.get(fmt.Sprintf("str%d", i%1000))
-				i++
-			}
-		})
+	b.RunParallel(func(pb *testing.PB) {
+		i := 0
+		for pb.Next() {
+			s.get(fmt.Sprintf("str%d", i%1000))
+			i++
+		}
 	})
 }

@@ -358,44 +358,34 @@ func TestRateRealisticScenario(t *testing.T) {
 	})
 }
 
-// Benchmarks
-
-func BenchmarkRateAdd(b *testing.B) {
+func BenchmarkHyperLogLogRate_Add(b *testing.B) {
 	r := NewRate(60 * time.Second)
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		r.Add(1.0)
 	}
 }
 
-func BenchmarkRateRate(b *testing.B) {
+func BenchmarkHyperLogLogRate_Rate(b *testing.B) {
 	r := NewRate(60 * time.Second)
 	r.Set(100.0)
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = r.Rate()
 	}
 }
 
-func BenchmarkRateSnapshot(b *testing.B) {
+func BenchmarkHyperLogLogRate_Snapshot(b *testing.B) {
 	r := NewRate(60 * time.Second)
 	r.Set(100.0)
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = r.Snapshot()
 	}
 }
 
-func BenchmarkRateConcurrentAdd(b *testing.B) {
+func BenchmarkHyperLogLogRate_ConcurrentAdd(b *testing.B) {
 	r := NewRate(60 * time.Second)
-
-	b.ResetTimer()
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -404,11 +394,9 @@ func BenchmarkRateConcurrentAdd(b *testing.B) {
 	})
 }
 
-func BenchmarkRateConcurrentRate(b *testing.B) {
+func BenchmarkHyperLogLogRate_ConcurrentRate(b *testing.B) {
 	r := NewRate(60 * time.Second)
 	r.Set(100.0)
-
-	b.ResetTimer()
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {

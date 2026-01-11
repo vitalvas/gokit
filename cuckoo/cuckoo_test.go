@@ -2,7 +2,6 @@ package cuckoo
 
 import (
 	"fmt"
-	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -360,95 +359,109 @@ func TestConcurrentOperations(t *testing.T) {
 	})
 }
 
-// Benchmarks
-
-func BenchmarkInsert(b *testing.B) {
-	f := New(uint(b.N))
+func BenchmarkCuckoo_Insert(b *testing.B) {
+	f := New(100000)
 	data := []byte("benchmark data")
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		f.Insert(data)
 	}
 }
 
-func BenchmarkInsertUnique(b *testing.B) {
-	f := New(uint(b.N))
-
-	b.ResetTimer()
+func BenchmarkCuckoo_InsertUnique(b *testing.B) {
+	f := New(100000)
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	i := 0
+	for b.Loop() {
 		f.InsertUnique([]byte(fmt.Sprintf("element-%d", i)))
+		i++
 	}
 }
 
-func BenchmarkContains(b *testing.B) {
+func BenchmarkCuckoo_Contains(b *testing.B) {
 	f := New(100000)
-	for i := 0; i < 50000; i++ {
+	for i := range 50000 {
 		f.Insert([]byte(fmt.Sprintf("element-%d", i)))
 	}
 	data := []byte("element-25000")
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = f.Contains(data)
 	}
 }
 
-func BenchmarkDelete(b *testing.B) {
-	elements := make([][]byte, b.N)
-	f := New(uint(b.N))
-
-	for i := 0; i < b.N; i++ {
-		elements[i] = []byte(fmt.Sprintf("element-%d", i))
-		f.Insert(elements[i])
+func BenchmarkCuckoo_Delete(b *testing.B) {
+	f := New(100000)
+	data := []byte("benchmark-data")
+	for range 1000 {
+		f.Insert(data)
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		f.Delete(elements[i])
+	for b.Loop() {
+		f.Delete(data)
 	}
 }
 
-func BenchmarkExport(b *testing.B) {
+func BenchmarkCuckoo_Export(b *testing.B) {
 	f := New(10000)
-	for i := 0; i < 5000; i++ {
+	for i := range 5000 {
 		f.Insert([]byte(fmt.Sprintf("element-%d", i)))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = f.Export()
 	}
 }
 
-func BenchmarkImport(b *testing.B) {
+func BenchmarkCuckoo_Import(b *testing.B) {
 	f := New(10000)
-	for i := 0; i < 5000; i++ {
+	for i := range 5000 {
 		f.Insert([]byte(fmt.Sprintf("element-%d", i)))
 	}
 	data, _ := f.Export()
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = Import(data)
 	}
 }
 
-func BenchmarkRandom(b *testing.B) {
-	f := New(100000)
-	r := rand.New(rand.NewSource(42))
+func FuzzCuckoo_Insert(f *testing.F) {
+	f.Add([]byte("test"))
+	f.Add([]byte("hello world"))
+	f.Add([]byte{})
+	f.Add([]byte{0x00, 0x01, 0x02})
 
-	b.ResetTimer()
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		data := make([]byte, 16)
-		r.Read(data)
-		f.Insert(data)
-	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		cf := New(1000)
+		cf.Insert(data)
+		if !cf.Contains(data) {
+			t.Error("filter should contain inserted data")
+		}
+	})
+}
+
+func FuzzCuckoo_ExportImport(f *testing.F) {
+	f.Add([]byte("a"), []byte("b"), []byte("c"))
+	f.Add([]byte("test1"), []byte("test2"), []byte("test3"))
+
+	f.Fuzz(func(t *testing.T, d1, d2, d3 []byte) {
+		cf := New(1000)
+		cf.Insert(d1)
+		cf.Insert(d2)
+		cf.Insert(d3)
+
+		exported, err := cf.Export()
+		if err != nil {
+			t.Fatalf("export failed: %v", err)
+		}
+
+		imported, err := Import(exported)
+		if err != nil {
+			t.Fatalf("import failed: %v", err)
+		}
+
+		if !imported.Contains(d1) || !imported.Contains(d2) || !imported.Contains(d3) {
+			t.Error("imported filter should contain all inserted data")
+		}
+	})
 }

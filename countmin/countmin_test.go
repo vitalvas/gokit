@@ -484,46 +484,36 @@ func TestRealisticScenario(t *testing.T) {
 	})
 }
 
-// Benchmarks
-
-func BenchmarkAdd(b *testing.B) {
+func BenchmarkCountMin_Add(b *testing.B) {
 	cm := New(0.01, 0.01)
 	data := []byte("benchmark-item")
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		cm.Add(data, 1)
 	}
 }
 
-func BenchmarkAddString(b *testing.B) {
+func BenchmarkCountMin_AddString(b *testing.B) {
 	cm := New(0.01, 0.01)
 	str := "benchmark-item"
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		cm.AddString(str, 1)
 	}
 }
 
-func BenchmarkCount(b *testing.B) {
+func BenchmarkCountMin_Count(b *testing.B) {
 	cm := New(0.01, 0.01)
 	data := []byte("benchmark-item")
 	cm.Add(data, 100)
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = cm.Count(data)
 	}
 }
 
-func BenchmarkConcurrentAdd(b *testing.B) {
+func BenchmarkCountMin_ConcurrentAdd(b *testing.B) {
 	cm := New(0.01, 0.01)
-
-	b.ResetTimer()
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		data := []byte("benchmark-item")
@@ -533,62 +523,79 @@ func BenchmarkConcurrentAdd(b *testing.B) {
 	})
 }
 
-func BenchmarkConcurrentCount(b *testing.B) {
+func BenchmarkCountMin_Clone(b *testing.B) {
 	cm := New(0.01, 0.01)
-	data := []byte("benchmark-item")
-	cm.Add(data, 1000)
-
-	b.ResetTimer()
-	b.ReportAllocs()
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			_ = cm.Count(data)
-		}
-	})
-}
-
-func BenchmarkClone(b *testing.B) {
-	cm := New(0.01, 0.01)
-
-	// Pre-populate
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		cm.AddString(fmt.Sprintf("item-%d", i), uint64(i))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = cm.Clone()
 	}
 }
 
-func BenchmarkExport(b *testing.B) {
+func BenchmarkCountMin_Export(b *testing.B) {
 	cm := New(0.01, 0.01)
-
-	// Pre-populate
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		cm.AddString(fmt.Sprintf("item-%d", i), uint64(i))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = cm.Export()
 	}
 }
 
-func BenchmarkImport(b *testing.B) {
+func BenchmarkCountMin_Import(b *testing.B) {
 	cm := New(0.01, 0.01)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		cm.AddString(fmt.Sprintf("item-%d", i), uint64(i))
 	}
 	data, _ := cm.Export()
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = Import(data)
 	}
+}
+
+func FuzzCountMin_Add(f *testing.F) {
+	f.Add([]byte("test"), uint64(1))
+	f.Add([]byte("hello"), uint64(100))
+	f.Add([]byte{}, uint64(0))
+
+	f.Fuzz(func(t *testing.T, data []byte, count uint64) {
+		cm := New(0.01, 0.01)
+		cm.Add(data, count)
+		got := cm.Count(data)
+		if got < count {
+			t.Errorf("count should be at least %d, got %d", count, got)
+		}
+	})
+}
+
+func FuzzCountMin_ExportImport(f *testing.F) {
+	f.Add("a", "b", "c")
+	f.Add("test1", "test2", "test3")
+
+	f.Fuzz(func(t *testing.T, s1, s2, s3 string) {
+		cm := New(0.01, 0.01)
+		cm.AddString(s1, 1)
+		cm.AddString(s2, 2)
+		cm.AddString(s3, 3)
+
+		data, err := cm.Export()
+		if err != nil {
+			t.Fatalf("export failed: %v", err)
+		}
+
+		imported, err := Import(data)
+		if err != nil {
+			t.Fatalf("import failed: %v", err)
+		}
+
+		if imported.Total() != cm.Total() {
+			t.Error("imported total should match original")
+		}
+	})
 }
 
 func TestHashDistribution(t *testing.T) {

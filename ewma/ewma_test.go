@@ -409,86 +409,59 @@ func TestDecayBehavior(t *testing.T) {
 	})
 }
 
-// Benchmarks
-
-func BenchmarkAdd(b *testing.B) {
+func BenchmarkEWMA_Add(b *testing.B) {
 	e := NewWithAlpha(0.5)
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		e.Add(1)
 	}
 }
 
-func BenchmarkUpdate(b *testing.B) {
+func BenchmarkEWMA_Update(b *testing.B) {
 	e := NewWithAlpha(0.5)
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		e.Update()
 	}
 }
 
-func BenchmarkTick(b *testing.B) {
+func BenchmarkEWMA_Tick(b *testing.B) {
 	e := NewWithAlpha(0.5)
 	e.Add(100)
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		e.Tick()
 	}
 }
 
-func BenchmarkRate(b *testing.B) {
+func BenchmarkEWMA_Rate(b *testing.B) {
 	e := NewWithAlpha(0.5)
 	e.Set(100)
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = e.Rate()
 	}
 }
 
-func BenchmarkSnapshot(b *testing.B) {
+func BenchmarkEWMA_Snapshot(b *testing.B) {
 	e := NewWithAlpha(0.5)
 	e.Set(100)
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = e.Snapshot()
 	}
 }
 
-func BenchmarkMovingAverageAdd(b *testing.B) {
+func BenchmarkEWMA_MovingAverageAdd(b *testing.B) {
 	ma := NewMovingAverage()
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		ma.Add(1)
 	}
 }
 
-func BenchmarkMovingAverageTick(b *testing.B) {
-	ma := NewMovingAverage()
-	ma.Add(100)
-
-	b.ResetTimer()
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		ma.Tick()
-	}
-}
-
-func BenchmarkConcurrentAdd(b *testing.B) {
+func BenchmarkEWMA_ConcurrentAdd(b *testing.B) {
 	e := NewWithAlpha(0.5)
-
-	b.ResetTimer()
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -497,15 +470,29 @@ func BenchmarkConcurrentAdd(b *testing.B) {
 	})
 }
 
-func BenchmarkConcurrentRate(b *testing.B) {
+func BenchmarkEWMA_ConcurrentRate(b *testing.B) {
 	e := NewWithAlpha(0.5)
 	e.Set(100)
-
-	b.ResetTimer()
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			_ = e.Rate()
+		}
+	})
+}
+
+func FuzzEWMA_Add(f *testing.F) {
+	f.Add(uint64(1))
+	f.Add(uint64(0))
+	f.Add(uint64(100))
+	f.Add(uint64(1000))
+
+	f.Fuzz(func(t *testing.T, val uint64) {
+		e := NewWithAlpha(0.5)
+		e.Add(val)
+		rate := e.Rate()
+		if rate < 0 {
+			t.Error("rate should be non-negative")
 		}
 	})
 }

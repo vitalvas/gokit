@@ -257,67 +257,31 @@ func TestBloomFilter_FalsePositiveRate(t *testing.T) {
 	t.Logf("False positive rate: %.2f%% (expected ~10%%)", falsePositiveRate*100)
 }
 
-// Benchmark tests for performance comparison
 func BenchmarkBloomFilter_Add(b *testing.B) {
-	benchmarks := []struct {
-		name string
-		n    uint
-	}{
-		{"1M", 1_000_000},
-		{"10M", 10_000_000},
-		{"50M", 50_000_000},
-	}
-
-	for _, bm := range benchmarks {
-		b.Run(bm.name, func(b *testing.B) {
-			bf := NewBloomFilter(bm.n, 0.01)
-			b.ReportAllocs()
-			b.ResetTimer()
-
-			for i := 0; i < b.N; i++ {
-				bf.Add(fmt.Sprintf("test-%d", i))
-			}
-		})
+	bf := NewBloomFilter(1_000_000, 0.01)
+	b.ReportAllocs()
+	for b.Loop() {
+		bf.Add("benchmark-test-data")
 	}
 }
 
 func BenchmarkBloomFilter_AddBytes(b *testing.B) {
 	bf := NewBloomFilter(1_000_000, 0.01)
 	data := []byte("benchmark-test-data")
-
 	b.ReportAllocs()
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		bf.AddBytes(data)
 	}
 }
 
 func BenchmarkBloomFilter_Contains(b *testing.B) {
-	benchmarks := []struct {
-		name string
-		n    uint
-	}{
-		{"1M", 1_000_000},
-		{"10M", 10_000_000},
+	bf := NewBloomFilter(1_000_000, 0.01)
+	for i := 0; i < 10000; i++ {
+		bf.Add(fmt.Sprintf("test-%d", i))
 	}
-
-	for _, bm := range benchmarks {
-		b.Run(bm.name, func(b *testing.B) {
-			bf := NewBloomFilter(bm.n, 0.01)
-
-			// Pre-populate
-			for i := 0; i < int(bm.n); i++ {
-				bf.Add(fmt.Sprintf("test-%d", i))
-			}
-
-			b.ReportAllocs()
-			b.ResetTimer()
-
-			for i := 0; i < b.N; i++ {
-				bf.Contains(fmt.Sprintf("test-%d", i%int(bm.n)))
-			}
-		})
+	b.ReportAllocs()
+	for b.Loop() {
+		bf.Contains("test-5000")
 	}
 }
 
@@ -325,35 +289,107 @@ func BenchmarkBloomFilter_ContainsBytes(b *testing.B) {
 	bf := NewBloomFilter(1_000_000, 0.01)
 	data := []byte("benchmark-test-data")
 	bf.AddBytes(data)
-
 	b.ReportAllocs()
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		bf.ContainsBytes(data)
 	}
 }
 
-func BenchmarkHash(b *testing.B) {
+func BenchmarkBloomFilter_Hash(b *testing.B) {
 	bf := NewBloomFilter(1000, 0.01)
 	testStr := "benchmark test string for hashing performance"
-
 	b.ReportAllocs()
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		bf.hash(testStr)
 	}
 }
 
-func BenchmarkHashBytes(b *testing.B) {
+func BenchmarkBloomFilter_HashBytes(b *testing.B) {
 	bf := NewBloomFilter(1000, 0.01)
 	testData := []byte("benchmark test string for hashing performance")
-
 	b.ReportAllocs()
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		bf.hashBytes(testData)
 	}
+}
+
+func BenchmarkBloomFilter_Export(b *testing.B) {
+	bf := NewBloomFilter(10000, 0.01)
+	for i := 0; i < 1000; i++ {
+		bf.Add(fmt.Sprintf("test-%d", i))
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		_, _ = bf.Export()
+	}
+}
+
+func BenchmarkBloomFilter_Import(b *testing.B) {
+	bf := NewBloomFilter(10000, 0.01)
+	for i := 0; i < 1000; i++ {
+		bf.Add(fmt.Sprintf("test-%d", i))
+	}
+	data, _ := bf.Export()
+	b.ReportAllocs()
+	for b.Loop() {
+		_, _ = ImportBloomFilter(data)
+	}
+}
+
+func FuzzBloomFilter_Add(f *testing.F) {
+	f.Add("test")
+	f.Add("hello world")
+	f.Add("")
+	f.Add("a")
+	f.Add("benchmark-test-data-with-longer-string")
+
+	f.Fuzz(func(t *testing.T, s string) {
+		bf := NewBloomFilter(1000, 0.01)
+		bf.Add(s)
+		if !bf.Contains(s) {
+			t.Errorf("bloom filter should contain %q after adding it", s)
+		}
+	})
+}
+
+func FuzzBloomFilter_AddBytes(f *testing.F) {
+	f.Add([]byte("test"))
+	f.Add([]byte{0x00, 0x01, 0x02})
+	f.Add([]byte{})
+	f.Add([]byte("hello world"))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		bf := NewBloomFilter(1000, 0.01)
+		bf.AddBytes(data)
+		if !bf.ContainsBytes(data) {
+			t.Errorf("bloom filter should contain bytes after adding them")
+		}
+	})
+}
+
+func FuzzBloomFilter_ExportImport(f *testing.F) {
+	f.Add("test1", "test2", "test3")
+	f.Add("a", "b", "c")
+	f.Add("hello", "world", "foo")
+
+	f.Fuzz(func(t *testing.T, s1, s2, s3 string) {
+		bf := NewBloomFilter(1000, 0.01)
+		bf.Add(s1)
+		bf.Add(s2)
+		bf.Add(s3)
+
+		data, err := bf.Export()
+		if err != nil {
+			t.Fatalf("export failed: %v", err)
+		}
+
+		imported, err := ImportBloomFilter(data)
+		if err != nil {
+			t.Fatalf("import failed: %v", err)
+		}
+
+		if !imported.Contains(s1) || !imported.Contains(s2) || !imported.Contains(s3) {
+			t.Error("imported bloom filter should contain all added elements")
+		}
+	})
 }

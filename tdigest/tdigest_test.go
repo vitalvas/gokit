@@ -415,84 +415,112 @@ func TestEdgeCases(t *testing.T) {
 	})
 }
 
-// Benchmarks
-
-func BenchmarkAdd(b *testing.B) {
+func BenchmarkTDigest_Add(b *testing.B) {
 	td := New(100)
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	i := 0
+	for b.Loop() {
 		td.Add(float64(i))
+		i++
 	}
 }
 
-func BenchmarkQuantile(b *testing.B) {
+func BenchmarkTDigest_Quantile(b *testing.B) {
 	td := New(100)
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		td.Add(float64(i))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = td.Quantile(0.95)
 	}
 }
 
-func BenchmarkCDF(b *testing.B) {
+func BenchmarkTDigest_CDF(b *testing.B) {
 	td := New(100)
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		td.Add(float64(i))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = td.CDF(500)
 	}
 }
 
-func BenchmarkMerge(b *testing.B) {
+func BenchmarkTDigest_Merge(b *testing.B) {
 	td1 := New(100)
-	for i := 0; i < 500; i++ {
+	td2 := New(100)
+	for i := range 500 {
 		td1.Add(float64(i))
+		td2.Add(float64(i + 500))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		td2 := New(100)
-		for j := 500; j < 1000; j++ {
-			td2.Add(float64(j))
-		}
+	for b.Loop() {
 		td1.Merge(td2)
 	}
 }
 
-func BenchmarkExport(b *testing.B) {
+func BenchmarkTDigest_Export(b *testing.B) {
 	td := New(100)
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		td.Add(float64(i))
 	}
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = td.Export()
 	}
 }
 
-func BenchmarkImport(b *testing.B) {
+func BenchmarkTDigest_Import(b *testing.B) {
 	td := New(100)
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		td.Add(float64(i))
 	}
 	data, _ := td.Export()
-
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = Import(data)
 	}
+}
+
+func FuzzTDigest_Add(f *testing.F) {
+	f.Add(1.0)
+	f.Add(0.0)
+	f.Add(-1.0)
+	f.Add(100.5)
+	f.Add(999999.999)
+
+	f.Fuzz(func(t *testing.T, val float64) {
+		td := New(100)
+		td.Add(val)
+		if td.Count() < 1 {
+			t.Error("count should be at least 1 after adding")
+		}
+	})
+}
+
+func FuzzTDigest_ExportImport(f *testing.F) {
+	f.Add(1.0, 2.0, 3.0)
+	f.Add(0.0, 100.0, 200.0)
+
+	f.Fuzz(func(t *testing.T, v1, v2, v3 float64) {
+		td := New(100)
+		td.Add(v1)
+		td.Add(v2)
+		td.Add(v3)
+
+		data, err := td.Export()
+		if err != nil {
+			t.Fatalf("export failed: %v", err)
+		}
+
+		imported, err := Import(data)
+		if err != nil {
+			t.Fatalf("import failed: %v", err)
+		}
+
+		if imported.Count() != td.Count() {
+			t.Error("imported count should match original")
+		}
+	})
 }
