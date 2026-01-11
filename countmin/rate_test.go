@@ -423,7 +423,7 @@ func FuzzRateAdd(f *testing.F) {
 	f.Add(-1.0)
 	f.Add(100.5)
 
-	f.Fuzz(func(t *testing.T, val float64) {
+	f.Fuzz(func(_ *testing.T, val float64) {
 		r := NewRate(60 * time.Second)
 		r.Add(val)
 		_ = r.Rate()

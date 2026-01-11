@@ -72,7 +72,7 @@ func FuzzGetDomainFromHostname(f *testing.F) {
 	f.Add("")
 	f.Add("a.b.c.d.e.f")
 
-	f.Fuzz(func(t *testing.T, hostname string) {
+	f.Fuzz(func(_ *testing.T, hostname string) {
 		_ = GetDomainFromHostname(hostname)
 	})
 }

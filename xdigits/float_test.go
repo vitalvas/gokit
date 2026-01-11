@@ -74,7 +74,7 @@ func FuzzRound64(f *testing.F) {
 	f.Add(-12.345, 2)
 	f.Add(100.5, 1)
 
-	f.Fuzz(func(t *testing.T, val float64, precision int) {
+	f.Fuzz(func(_ *testing.T, val float64, precision int) {
 		if precision < 0 || precision > 10 {
 			return
 		}

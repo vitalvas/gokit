@@ -43,7 +43,7 @@ func FuzzStringToPointer(f *testing.F) {
 	f.Fuzz(func(t *testing.T, s string) {
 		result := StringToPointer(s)
 		if result == nil {
-			t.Error("result should not be nil")
+			t.Fatal("result should not be nil")
 		}
 		if *result != s {
 			t.Error("result should equal input")

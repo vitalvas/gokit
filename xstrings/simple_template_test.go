@@ -52,7 +52,7 @@ func FuzzSimpleTemplate(f *testing.F) {
 	f.Add("No placeholders", "key", "value")
 	f.Add("{{ a }} and {{ b }}", "a", "X")
 
-	f.Fuzz(func(t *testing.T, template, key, value string) {
+	f.Fuzz(func(_ *testing.T, template, key, value string) {
 		data := map[string]string{key: value}
 		_ = SimpleTemplate(template, data)
 	})

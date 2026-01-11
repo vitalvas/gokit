@@ -78,7 +78,7 @@ func FuzzReplaceMap(f *testing.F) {
 	f.Add("test", "x", "y")
 	f.Add("", "key", "value")
 
-	f.Fuzz(func(t *testing.T, payload, key, value string) {
+	f.Fuzz(func(_ *testing.T, payload, key, value string) {
 		data := map[string]string{key: value}
 		_ = ReplaceMap(payload, data)
 	})

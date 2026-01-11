@@ -597,7 +597,7 @@ func FuzzChain_Add(f *testing.F) {
 	f.Add("")
 	f.Add("test data with spaces")
 
-	f.Fuzz(func(t *testing.T, s string) {
+	f.Fuzz(func(_ *testing.T, s string) {
 		chain := NewChain(2)
 		chain.RawAdd(s)
 	})
