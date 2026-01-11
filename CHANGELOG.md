@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.22.0](https://github.com/vitalvas/gokit/compare/v0.21.0...v0.22.0) (2026-01-11)
+
+
+### Features
+
+* **fastcdc:** create fastcdc ([3dba0eb](https://github.com/vitalvas/gokit/commit/3dba0eb5fc58c9b48278ca3b7549e66647625c2d))
+* **xnet:** add PROXY protocol v1/v2 listener wrapper ([2107db7](https://github.com/vitalvas/gokit/commit/2107db7d5276bb51729d317f313ae9008f14440a))
+
+
+### Bug Fixes
+
+* fix prealloc linter warnings ([fab1905](https://github.com/vitalvas/gokit/commit/fab1905a4fa22ba6d5f54ec075856a939afbb0cf))
+* resolve linter warnings in fuzz tests ([bf89693](https://github.com/vitalvas/gokit/commit/bf8969356fcdfe4f5671fa9c42193a9fe19d221e))
+* **xnet:** fix prealloc linter warnings in tests ([f932658](https://github.com/vitalvas/gokit/commit/f932658b2128b54c6e4247f6a82f9f0a65749c61))
+
+
+### Performance Improvements
+
+* **wirefilter:** add benchmarks, fuzz tests and reduce allocations ([cb9f3c0](https://github.com/vitalvas/gokit/commit/cb9f3c0e379e72e206865fdda5577ca4e8641770))
+* **xnet:** add benchmarks, fuzz tests and reduce allocations ([cf0fa3c](https://github.com/vitalvas/gokit/commit/cf0fa3c3c01034f2a0df2e05fd765cda62172511))
+
 ## [0.21.0](https://github.com/vitalvas/gokit/compare/v0.20.0...v0.21.0) (2025-11-23)
 
 
