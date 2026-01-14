@@ -9,6 +9,36 @@ import (
 )
 
 func TestDotenv(t *testing.T) {
+	t.Run("default dotenv file", func(t *testing.T) {
+		originalDir, err := os.Getwd()
+		require.NoError(t, err)
+
+		tmpDir, err := os.MkdirTemp("", "dotenv-test-*")
+		require.NoError(t, err)
+		defer func() { _ = os.RemoveAll(tmpDir) }()
+
+		require.NoError(t, os.Chdir(tmpDir))
+		defer func() { _ = os.Chdir(originalDir) }()
+
+		content := `APP_DB_HOST=default_host
+APP_DB_PORT=5432`
+
+		err = os.WriteFile(".env", []byte(content), 0o600)
+		require.NoError(t, err)
+
+		defer func() {
+			_ = os.Unsetenv("APP_DB_HOST")
+			_ = os.Unsetenv("APP_DB_PORT")
+		}()
+
+		var cfg TestConfig
+		err = Load(&cfg, WithDotenv(), WithEnv("APP"))
+		require.NoError(t, err)
+
+		assert.Equal(t, "default_host", cfg.DB.Host)
+		assert.Equal(t, 5432, cfg.DB.Port)
+	})
+
 	t.Run("basic dotenv loading", func(t *testing.T) {
 		tmpFile, err := os.CreateTemp("", "test-*.env")
 		require.NoError(t, err)

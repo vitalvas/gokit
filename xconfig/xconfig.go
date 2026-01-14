@@ -14,22 +14,22 @@ const (
 	EnvSkipPrefix = "-"
 )
 
-var (
-	envMacroRegex = regexp.MustCompile(`\$\{env:([^}]+)\}`)
-)
-
 type Options struct {
 	dotenvFiles   []string
 	files         []string
 	dirs          []string
 	envPrefix     string
 	customDefault interface{}
+	envMacroRegex *regexp.Regexp
 }
 
 type Option func(*Options)
 
 func WithDotenv(filenames ...string) Option {
 	return func(o *Options) {
+		if len(filenames) == 0 {
+			filenames = []string{".env"}
+		}
 		o.dotenvFiles = append(o.dotenvFiles, filenames...)
 	}
 }
@@ -55,6 +55,16 @@ func WithEnv(prefix string) Option {
 func WithDefault(defaultConfig interface{}) Option {
 	return func(o *Options) {
 		o.customDefault = defaultConfig
+	}
+}
+
+func WithEnvMacroRegex(pattern ...string) Option {
+	return func(o *Options) {
+		p := `\$\{env:([^}]+)\}`
+		if len(pattern) > 0 && pattern[0] != "" {
+			p = pattern[0]
+		}
+		o.envMacroRegex = regexp.MustCompile(p)
 	}
 }
 
@@ -109,8 +119,12 @@ func Load(config interface{}, options ...Option) error {
 
 	// Expand macros in loaded configuration (if any files were loaded)
 	if len(opts.dirs) > 0 || len(opts.files) > 0 {
+		re := opts.envMacroRegex
+		if re == nil {
+			re = regexp.MustCompile(`\$\{env:([^}]+)\}`)
+		}
 		configValue := reflect.ValueOf(config).Elem()
-		expandMacrosInValue(configValue)
+		expandMacrosInValue(configValue, re)
 	}
 
 	if opts.envPrefix != "" {
@@ -122,10 +136,10 @@ func Load(config interface{}, options ...Option) error {
 	return nil
 }
 
-func expandMacros(value string) string {
-	return envMacroRegex.ReplaceAllStringFunc(value, func(match string) string {
-		// Extract the environment variable name from ${env:VAR_NAME}
-		envVar := envMacroRegex.FindStringSubmatch(match)[1]
+func expandMacros(value string, re *regexp.Regexp) string {
+	return re.ReplaceAllStringFunc(value, func(match string) string {
+		// Extract the environment variable name from the macro pattern
+		envVar := re.FindStringSubmatch(match)[1]
 		if envValue := os.Getenv(envVar); envValue != "" {
 			return envValue
 		}
@@ -134,7 +148,7 @@ func expandMacros(value string) string {
 	})
 }
 
-func expandMacrosInValue(v reflect.Value) {
+func expandMacrosInValue(v reflect.Value, re *regexp.Regexp) {
 	if !v.CanSet() {
 		return
 	}
@@ -142,39 +156,39 @@ func expandMacrosInValue(v reflect.Value) {
 	switch v.Kind() {
 	case reflect.String:
 		if v.String() != "" {
-			v.SetString(expandMacros(v.String()))
+			v.SetString(expandMacros(v.String(), re))
 		}
 	case reflect.Struct:
 		for i := 0; i < v.NumField(); i++ {
 			if field := v.Field(i); field.CanSet() {
-				expandMacrosInValue(field)
+				expandMacrosInValue(field, re)
 			}
 		}
 	case reflect.Slice:
 		for i := 0; i < v.Len(); i++ {
 			if elem := v.Index(i); elem.CanSet() {
-				expandMacrosInValue(elem)
+				expandMacrosInValue(elem, re)
 			}
 		}
 	case reflect.Map:
 		for _, key := range v.MapKeys() {
 			mapValue := v.MapIndex(key)
 			if mapValue.Kind() == reflect.String && mapValue.String() != "" {
-				v.SetMapIndex(key, reflect.ValueOf(expandMacros(mapValue.String())))
+				v.SetMapIndex(key, reflect.ValueOf(expandMacros(mapValue.String(), re)))
 			} else if mapValue.CanInterface() {
 				newValue := reflect.New(mapValue.Type()).Elem()
 				newValue.Set(mapValue)
-				expandMacrosInValue(newValue)
+				expandMacrosInValue(newValue, re)
 				v.SetMapIndex(key, newValue)
 			}
 		}
 	case reflect.Ptr:
 		if !v.IsNil() {
-			expandMacrosInValue(v.Elem())
+			expandMacrosInValue(v.Elem(), re)
 		}
 	case reflect.Interface:
 		if !v.IsNil() && v.Elem().CanSet() {
-			expandMacrosInValue(v.Elem())
+			expandMacrosInValue(v.Elem(), re)
 		}
 	}
 }

@@ -3,6 +3,7 @@ package xconfig
 import (
 	"os"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -647,16 +648,18 @@ db:
 }
 
 func TestExpandMacros(t *testing.T) {
+	defaultRegex := regexp.MustCompile(`\$\{env:([^}]+)\}`)
+
 	t.Run("basic string", func(t *testing.T) {
 		require.NoError(t, os.Setenv("TEST_VAR", "test_value"))
 		defer func() { _ = os.Unsetenv("TEST_VAR") }()
 
-		result := expandMacros("Hello ${env:TEST_VAR}!")
+		result := expandMacros("Hello ${env:TEST_VAR}!", defaultRegex)
 		assert.Equal(t, "Hello test_value!", result)
 	})
 
 	t.Run("undefined env var", func(t *testing.T) {
-		result := expandMacros("Hello ${env:UNDEFINED_VAR}!")
+		result := expandMacros("Hello ${env:UNDEFINED_VAR}!", defaultRegex)
 		assert.Equal(t, "Hello ${env:UNDEFINED_VAR}!", result)
 	})
 
@@ -668,7 +671,7 @@ func TestExpandMacros(t *testing.T) {
 			_ = os.Unsetenv("PORT")
 		}()
 
-		result := expandMacros("http://${env:HOST}:${env:PORT}/api")
+		result := expandMacros("http://${env:HOST}:${env:PORT}/api", defaultRegex)
 		assert.Equal(t, "http://localhost:8080/api", result)
 	})
 
@@ -697,6 +700,94 @@ api_host: "${env:API_HOST}"`
 
 		assert.Equal(t, "postgres://user:pass@dbserver:5432/db", cfg.DatabaseURL)
 		assert.Equal(t, "apiserver", cfg.APIHost)
+	})
+}
+
+func TestWithEnvMacroRegex(t *testing.T) {
+	t.Run("default pattern", func(t *testing.T) {
+		require.NoError(t, os.Setenv("DB_HOST", "dbserver"))
+		defer func() { _ = os.Unsetenv("DB_HOST") }()
+
+		tmpFile, err := os.CreateTemp("", "macro-default-*.yaml")
+		require.NoError(t, err)
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+		content := `database_url: "postgres://user:pass@${env:DB_HOST}:5432/db"`
+
+		_, err = tmpFile.WriteString(content)
+		require.NoError(t, err)
+		require.NoError(t, tmpFile.Close())
+
+		var cfg MacroConfig
+		err = Load(&cfg, WithFiles(tmpFile.Name()), WithEnvMacroRegex())
+		require.NoError(t, err)
+
+		assert.Equal(t, "postgres://user:pass@dbserver:5432/db", cfg.DatabaseURL)
+	})
+
+	t.Run("custom pattern", func(t *testing.T) {
+		require.NoError(t, os.Setenv("DB_HOST", "customserver"))
+		defer func() { _ = os.Unsetenv("DB_HOST") }()
+
+		tmpFile, err := os.CreateTemp("", "macro-custom-*.yaml")
+		require.NoError(t, err)
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+		// Custom pattern: {{VAR_NAME}}
+		content := `database_url: "postgres://user:pass@{{DB_HOST}}:5432/db"`
+
+		_, err = tmpFile.WriteString(content)
+		require.NoError(t, err)
+		require.NoError(t, tmpFile.Close())
+
+		var cfg MacroConfig
+		err = Load(&cfg, WithFiles(tmpFile.Name()), WithEnvMacroRegex(`\{\{([^}]+)\}\}`))
+		require.NoError(t, err)
+
+		assert.Equal(t, "postgres://user:pass@customserver:5432/db", cfg.DatabaseURL)
+	})
+
+	t.Run("custom pattern with dollar sign", func(t *testing.T) {
+		require.NoError(t, os.Setenv("API_HOST", "apiserver"))
+		defer func() { _ = os.Unsetenv("API_HOST") }()
+
+		tmpFile, err := os.CreateTemp("", "macro-dollar-*.yaml")
+		require.NoError(t, err)
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+		// Custom pattern: $VAR_NAME$
+		content := `api_host: "$API_HOST$"`
+
+		_, err = tmpFile.WriteString(content)
+		require.NoError(t, err)
+		require.NoError(t, tmpFile.Close())
+
+		var cfg MacroConfig
+		err = Load(&cfg, WithFiles(tmpFile.Name()), WithEnvMacroRegex(`\$([A-Z_]+)\$`))
+		require.NoError(t, err)
+
+		assert.Equal(t, "apiserver", cfg.APIHost)
+	})
+
+	t.Run("empty pattern uses default", func(t *testing.T) {
+		require.NoError(t, os.Setenv("DB_HOST", "defaultserver"))
+		defer func() { _ = os.Unsetenv("DB_HOST") }()
+
+		tmpFile, err := os.CreateTemp("", "macro-empty-*.yaml")
+		require.NoError(t, err)
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+		content := `database_url: "postgres://user:pass@${env:DB_HOST}:5432/db"`
+
+		_, err = tmpFile.WriteString(content)
+		require.NoError(t, err)
+		require.NoError(t, tmpFile.Close())
+
+		var cfg MacroConfig
+		err = Load(&cfg, WithFiles(tmpFile.Name()), WithEnvMacroRegex(""))
+		require.NoError(t, err)
+
+		assert.Equal(t, "postgres://user:pass@defaultserver:5432/db", cfg.DatabaseURL)
 	})
 }
 
@@ -961,37 +1052,39 @@ func TestHelpers(t *testing.T) {
 	})
 
 	t.Run("additional coverage tests", func(t *testing.T) {
+		defaultRegex := regexp.MustCompile(`\$\{env:([^}]+)\}`)
+
 		t.Run("expand macros edge cases", func(t *testing.T) {
 			// Test string expansion with env: format
 			testStr := "${env:HOME}/config/${env:USER}.json"
 			strVal := reflect.ValueOf(&testStr).Elem()
-			expandMacrosInValue(strVal)
+			expandMacrosInValue(strVal, defaultRegex)
 			expected := os.Getenv("HOME") + "/config/" + os.Getenv("USER") + ".json"
 			assert.Equal(t, expected, testStr)
 
 			// Test undefined macro
 			undefinedStr := "${env:UNDEFINED_VAR_123456}"
 			undefinedVal := reflect.ValueOf(&undefinedStr).Elem()
-			expandMacrosInValue(undefinedVal)
+			expandMacrosInValue(undefinedVal, defaultRegex)
 			assert.Equal(t, "${env:UNDEFINED_VAR_123456}", undefinedStr)
 
 			// Test mixed content
 			mixedStr := "prefix_${env:HOME}_suffix"
 			mixedVal := reflect.ValueOf(&mixedStr).Elem()
-			expandMacrosInValue(mixedVal)
+			expandMacrosInValue(mixedVal, defaultRegex)
 			expectedMixed := "prefix_" + os.Getenv("HOME") + "_suffix"
 			assert.Equal(t, expectedMixed, mixedStr)
 
 			// Test no macros
 			plainStr := "plain_text"
 			plainVal := reflect.ValueOf(&plainStr).Elem()
-			expandMacrosInValue(plainVal)
+			expandMacrosInValue(plainVal, defaultRegex)
 			assert.Equal(t, "plain_text", plainStr)
 
 			// Test slice of strings
 			testSlice := []string{"${env:HOME}/config", "plain"}
 			sliceVal := reflect.ValueOf(&testSlice).Elem()
-			expandMacrosInValue(sliceVal)
+			expandMacrosInValue(sliceVal, defaultRegex)
 			assert.Equal(t, os.Getenv("HOME")+"/config", testSlice[0])
 			assert.Equal(t, "plain", testSlice[1])
 		})
@@ -1168,11 +1261,13 @@ func TestHelpers(t *testing.T) {
 		})
 
 		t.Run("comprehensive_coverage_tests", func(t *testing.T) {
+			defaultRegex := regexp.MustCompile(`\$\{env:([^}]+)\}`)
+
 			t.Run("expand_macros_in_value_comprehensive", func(t *testing.T) {
 				// Test non-settable reflect.Value (should return without change)
 				testStr := "unchangeable"
 				nonSettableVal := reflect.ValueOf(testStr) // This is not settable
-				expandMacrosInValue(nonSettableVal)
+				expandMacrosInValue(nonSettableVal, defaultRegex)
 
 				// Test different types
 
@@ -1182,7 +1277,7 @@ func TestHelpers(t *testing.T) {
 				}
 				testStruct := TestStruct{Field: "${env:HOME}/path"}
 				structVal := reflect.ValueOf(&testStruct).Elem()
-				expandMacrosInValue(structVal)
+				expandMacrosInValue(structVal, defaultRegex)
 				assert.Equal(t, os.Getenv("HOME")+"/path", testStruct.Field)
 
 				// Test map with string values
@@ -1191,14 +1286,14 @@ func TestHelpers(t *testing.T) {
 					"key2": "plain_value",
 				}
 				mapVal := reflect.ValueOf(&testMap).Elem()
-				expandMacrosInValue(mapVal)
+				expandMacrosInValue(mapVal, defaultRegex)
 				assert.Equal(t, os.Getenv("HOME")+"/path1", testMap["key1"])
 				assert.Equal(t, "plain_value", testMap["key2"])
 
 				// Test slice with different element types
 				testSliceInt := []int{1, 2, 3}
 				sliceIntVal := reflect.ValueOf(&testSliceInt).Elem()
-				expandMacrosInValue(sliceIntVal) // Should not crash for non-string elements
+				expandMacrosInValue(sliceIntVal, defaultRegex) // Should not crash for non-string elements
 				assert.Equal(t, []int{1, 2, 3}, testSliceInt)
 			})
 
@@ -1297,6 +1392,8 @@ func TestHelpers(t *testing.T) {
 			})
 
 			t.Run("additional_edge_case_coverage", func(t *testing.T) {
+				edgeCaseRegex := regexp.MustCompile(`\$\{env:([^}]+)\}`)
+
 				t.Run("expand_macros_comprehensive_coverage", func(t *testing.T) {
 					// Test pointer to struct
 					type PtrStruct struct {
@@ -1304,19 +1401,19 @@ func TestHelpers(t *testing.T) {
 					}
 					ptrStruct := &PtrStruct{Field: "${env:HOME}/ptr_path"}
 					ptrVal := reflect.ValueOf(&ptrStruct).Elem()
-					expandMacrosInValue(ptrVal)
+					expandMacrosInValue(ptrVal, edgeCaseRegex)
 					assert.Equal(t, os.Getenv("HOME")+"/ptr_path", ptrStruct.Field)
 
 					// Test nil pointer
 					var nilPtr *PtrStruct
 					nilPtrVal := reflect.ValueOf(&nilPtr).Elem()
-					expandMacrosInValue(nilPtrVal) // Should not crash
+					expandMacrosInValue(nilPtrVal, edgeCaseRegex) // Should not crash
 					assert.Nil(t, nilPtr)
 
 					// Test empty string (should not be processed)
 					emptyStr := ""
 					emptyStrVal := reflect.ValueOf(&emptyStr).Elem()
-					expandMacrosInValue(emptyStrVal)
+					expandMacrosInValue(emptyStrVal, edgeCaseRegex)
 					assert.Equal(t, "", emptyStr)
 
 					// Test map with string values (the map interface{} test was too complex)
@@ -1325,7 +1422,7 @@ func TestHelpers(t *testing.T) {
 						"key2": "plain_value",
 					}
 					mapVal := reflect.ValueOf(&testMap).Elem()
-					expandMacrosInValue(mapVal)
+					expandMacrosInValue(mapVal, edgeCaseRegex)
 					assert.Equal(t, os.Getenv("HOME")+"/path1", testMap["key1"])
 					assert.Equal(t, "plain_value", testMap["key2"])
 				})
@@ -1485,6 +1582,8 @@ func TestHelpers(t *testing.T) {
 			})
 
 			t.Run("expandMacrosInValue_map_interface_complex", func(t *testing.T) {
+				mapInterfaceRegex := regexp.MustCompile(`\$\{env:([^}]+)\}`)
+
 				// Test map with interface{} values to hit lines 152-157
 				testMap := make(map[string]interface{})
 				testMap["str_key"] = "${env:HOME}/test"
@@ -1497,7 +1596,7 @@ func TestHelpers(t *testing.T) {
 				testMap["struct_key"] = NestedStruct{Field: "${env:USER}/nested"}
 
 				mapVal := reflect.ValueOf(&testMap).Elem()
-				expandMacrosInValue(mapVal)
+				expandMacrosInValue(mapVal, mapInterfaceRegex)
 
 				// Verify string expansion - the map interface{} expansion doesn't always work as expected
 				// Let's just verify the test runs without panicking
@@ -1508,18 +1607,20 @@ func TestHelpers(t *testing.T) {
 			})
 
 			t.Run("expandMacrosInValue_interface_nil", func(t *testing.T) {
+				interfaceRegex := regexp.MustCompile(`\$\{env:([^}]+)\}`)
+
 				// Test interface{} case with nil - lines 163-166
 				var testInterface interface{}
 				interfaceVal := reflect.ValueOf(&testInterface).Elem()
 
 				// Should not crash with nil interface
-				expandMacrosInValue(interfaceVal)
+				expandMacrosInValue(interfaceVal, interfaceRegex)
 				assert.Nil(t, testInterface)
 
 				// Test with settable interface value
 				testInterface = "${env:HOME}/interface_test"
 				interfaceVal = reflect.ValueOf(&testInterface).Elem()
-				expandMacrosInValue(interfaceVal)
+				expandMacrosInValue(interfaceVal, interfaceRegex)
 
 				// The interface expansion may not work as expected, just verify no panic
 				_ = testInterface
