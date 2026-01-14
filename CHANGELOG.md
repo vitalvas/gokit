@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.1](https://github.com/vitalvas/gokit/compare/v0.23.0...v0.23.1) (2026-01-14)
+
+
+### Bug Fixes
+
+* **xconfig:** strip quotes from dotenv values ([38ec71d](https://github.com/vitalvas/gokit/commit/38ec71d14d2222fa949b48c34a0d7151a1bfb401))
+
 ## [0.23.0](https://github.com/vitalvas/gokit/compare/v0.22.0...v0.23.0) (2026-01-14)
 
 
