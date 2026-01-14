@@ -41,10 +41,22 @@ func parseDotenvFile(filename string) (map[string]string, error) {
 			return nil, fmt.Errorf("invalid format at line %d: empty key", lineNum+1)
 		}
 
+		// Strip surrounding quotes (single or double)
+		value = stripQuotes(value)
+
 		envVars[key] = value
 	}
 
 	return envVars, nil
+}
+
+func stripQuotes(s string) string {
+	if len(s) >= 2 {
+		if (s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'') {
+			return s[1 : len(s)-1]
+		}
+	}
+	return s
 }
 
 func loadDotenvFiles(filenames []string) error {

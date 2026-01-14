@@ -274,7 +274,7 @@ NORMAL_KEY=normal_value`
 		assert.Equal(t, "normal_value", os.Getenv("NORMAL_KEY"))
 	})
 
-	t.Run("dotenv with complex values", func(t *testing.T) {
+	t.Run("dotenv with complex and quoted values", func(t *testing.T) {
 		tmpFile, err := os.CreateTemp("", "test-*.env")
 		require.NoError(t, err)
 		defer func() { _ = os.Remove(tmpFile.Name()) }()
@@ -283,7 +283,12 @@ NORMAL_KEY=normal_value`
 API_KEY=abc-123-def-456
 NUMBERS=123
 BOOLEAN=true
-SPECIAL_CHARS=!@#$%^&*()_+-=[]{}|;:,.<>?`
+SPECIAL_CHARS=!@#$%^&*()_+-=[]{}|;:,.<>?
+DOUBLE_QUOTED="postgres://user:pass@localhost:5432/db?sslmode=disable"
+SINGLE_QUOTED='single quoted value'
+EMPTY_DOUBLE=""
+EMPTY_SINGLE=''
+EMPTY_KEY=`
 
 		_, err = tmpFile.WriteString(content)
 		require.NoError(t, err)
@@ -295,39 +300,28 @@ SPECIAL_CHARS=!@#$%^&*()_+-=[]{}|;:,.<>?`
 			_ = os.Unsetenv("NUMBERS")
 			_ = os.Unsetenv("BOOLEAN")
 			_ = os.Unsetenv("SPECIAL_CHARS")
+			_ = os.Unsetenv("DOUBLE_QUOTED")
+			_ = os.Unsetenv("SINGLE_QUOTED")
+			_ = os.Unsetenv("EMPTY_DOUBLE")
+			_ = os.Unsetenv("EMPTY_SINGLE")
+			_ = os.Unsetenv("EMPTY_KEY")
 		}()
 
 		err = loadDotenvFiles([]string{tmpFile.Name()})
 		require.NoError(t, err)
 
+		// Unquoted complex values
 		assert.Equal(t, "postgres://user:pass@localhost:5432/db", os.Getenv("DATABASE_URL"))
 		assert.Equal(t, "abc-123-def-456", os.Getenv("API_KEY"))
 		assert.Equal(t, "123", os.Getenv("NUMBERS"))
 		assert.Equal(t, "true", os.Getenv("BOOLEAN"))
 		assert.Equal(t, "!@#$%^&*()_+-=[]{}|;:,.<>?", os.Getenv("SPECIAL_CHARS"))
-	})
-
-	t.Run("dotenv with empty value", func(t *testing.T) {
-		tmpFile, err := os.CreateTemp("", "test-*.env")
-		require.NoError(t, err)
-		defer func() { _ = os.Remove(tmpFile.Name()) }()
-
-		content := `EMPTY_KEY=
-NORMAL_KEY=normal_value`
-
-		_, err = tmpFile.WriteString(content)
-		require.NoError(t, err)
-		require.NoError(t, tmpFile.Close())
-
-		defer func() {
-			_ = os.Unsetenv("EMPTY_KEY")
-			_ = os.Unsetenv("NORMAL_KEY")
-		}()
-
-		err = loadDotenvFiles([]string{tmpFile.Name()})
-		require.NoError(t, err)
-
+		// Quoted values (quotes should be stripped)
+		assert.Equal(t, "postgres://user:pass@localhost:5432/db?sslmode=disable", os.Getenv("DOUBLE_QUOTED"))
+		assert.Equal(t, "single quoted value", os.Getenv("SINGLE_QUOTED"))
+		assert.Equal(t, "", os.Getenv("EMPTY_DOUBLE"))
+		assert.Equal(t, "", os.Getenv("EMPTY_SINGLE"))
 		assert.Equal(t, "", os.Getenv("EMPTY_KEY"))
-		assert.Equal(t, "normal_value", os.Getenv("NORMAL_KEY"))
 	})
+
 }
