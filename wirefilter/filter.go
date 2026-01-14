@@ -31,12 +31,17 @@
 //	fmt.Println(result) // true
 package wirefilter
 
-import "net"
+import (
+	"net"
+	"regexp"
+)
 
 // Filter represents a compiled filter expression that can be executed against an execution context.
 type Filter struct {
-	expr   Expression
-	schema *Schema
+	expr       Expression
+	schema     *Schema
+	regexCache map[string]*regexp.Regexp
+	cidrCache  map[string]*net.IPNet
 }
 
 // Compile parses and compiles a filter expression string into an executable Filter.
@@ -58,8 +63,10 @@ func Compile(filterStr string, schema *Schema) (*Filter, error) {
 	}
 
 	return &Filter{
-		expr:   expr,
-		schema: schema,
+		expr:       expr,
+		schema:     schema,
+		regexCache: make(map[string]*regexp.Regexp),
+		cidrCache:  make(map[string]*net.IPNet),
 	}, nil
 }
 
@@ -276,11 +283,24 @@ func (f *Filter) evaluateMatches(left, right Value) (Value, error) {
 	if left.Type() != TypeString || right.Type() != TypeString {
 		return BoolValue(false), nil
 	}
-	matched, err := MatchesRegex(string(left.(StringValue)), string(right.(StringValue)))
+	pattern := string(right.(StringValue))
+	re, err := f.getCompiledRegex(pattern)
 	if err != nil {
 		return BoolValue(false), err
 	}
-	return BoolValue(matched), nil
+	return BoolValue(re.MatchString(string(left.(StringValue)))), nil
+}
+
+func (f *Filter) getCompiledRegex(pattern string) (*regexp.Regexp, error) {
+	if re, ok := f.regexCache[pattern]; ok {
+		return re, nil
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+	f.regexCache[pattern] = re
+	return re, nil
 }
 
 func (f *Filter) evaluateIn(left, right Value) (Value, error) {
@@ -291,14 +311,26 @@ func (f *Filter) evaluateIn(left, right Value) (Value, error) {
 	if left.Type() == TypeIP && right.Type() == TypeString {
 		ipVal := left.(IPValue)
 		cidr := string(right.(StringValue))
-		inCIDR, err := IPInCIDR(ipVal.IP, cidr)
+		ipNet, err := f.getParsedCIDR(cidr)
 		if err != nil {
 			return BoolValue(false), err
 		}
-		return BoolValue(inCIDR), nil
+		return BoolValue(ipNet.Contains(ipVal.IP)), nil
 	}
 
 	return BoolValue(false), nil
+}
+
+func (f *Filter) getParsedCIDR(cidr string) (*net.IPNet, error) {
+	if ipNet, ok := f.cidrCache[cidr]; ok {
+		return ipNet, nil
+	}
+	_, ipNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return nil, err
+	}
+	f.cidrCache[cidr] = ipNet
+	return ipNet, nil
 }
 
 func (f *Filter) evaluateAllEqual(left, right Value) (Value, error) {

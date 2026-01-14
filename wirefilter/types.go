@@ -5,7 +5,6 @@ import (
 	"net"
 	"regexp"
 	"strings"
-	"sync"
 )
 
 // Type represents the data type of a value in the filter system.
@@ -136,9 +135,8 @@ func (a ArrayValue) Contains(v Value) bool {
 }
 
 // IPInCIDR checks if an IP address is within the specified CIDR range.
-// Uses caching to avoid repeated CIDR parsing.
 func IPInCIDR(ip net.IP, cidr string) (bool, error) {
-	ipNet, err := getParsedCIDR(cidr)
+	_, ipNet, err := net.ParseCIDR(cidr)
 	if err != nil {
 		return false, err
 	}
@@ -156,9 +154,8 @@ func IsIPv4(ip net.IP) bool {
 }
 
 // MatchesRegex checks if a value matches the specified regular expression pattern.
-// Uses caching to avoid repeated regex compilation.
 func MatchesRegex(value string, pattern string) (bool, error) {
-	re, err := getCompiledRegex(pattern)
+	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return false, err
 	}
@@ -168,40 +165,4 @@ func MatchesRegex(value string, pattern string) (bool, error) {
 // ContainsString checks if haystack contains needle as a substring.
 func ContainsString(haystack, needle string) bool {
 	return strings.Contains(haystack, needle)
-}
-
-// Caches for regex and CIDR to reduce allocations.
-var (
-	regexCache sync.Map // map[string]*regexp.Regexp
-	cidrCache  sync.Map // map[string]*net.IPNet
-)
-
-// getCompiledRegex returns a cached compiled regex or compiles and caches a new one.
-func getCompiledRegex(pattern string) (*regexp.Regexp, error) {
-	if cached, ok := regexCache.Load(pattern); ok {
-		return cached.(*regexp.Regexp), nil
-	}
-
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil, err
-	}
-
-	regexCache.Store(pattern, re)
-	return re, nil
-}
-
-// getParsedCIDR returns a cached parsed CIDR or parses and caches a new one.
-func getParsedCIDR(cidr string) (*net.IPNet, error) {
-	if cached, ok := cidrCache.Load(cidr); ok {
-		return cached.(*net.IPNet), nil
-	}
-
-	_, ipNet, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return nil, err
-	}
-
-	cidrCache.Store(cidr, ipNet)
-	return ipNet, nil
 }
