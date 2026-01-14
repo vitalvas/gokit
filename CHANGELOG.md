@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.23.0](https://github.com/vitalvas/gokit/compare/v0.22.0...v0.23.0) (2026-01-14)
+
+
+### Features
+
+* **xconfig:** add defaults for WithDotenv and WithEnvMacroRegex ([4103d37](https://github.com/vitalvas/gokit/commit/4103d374cc7b8ba0170e825c694ecdc7292f7410))
+
+
+### Bug Fixes
+
+* **wirefilter:** move regex and CIDR caches to Filter instance ([c6a31b2](https://github.com/vitalvas/gokit/commit/c6a31b26d87685afe987adcc8da09c8edf760ac7))
+
 ## [0.22.0](https://github.com/vitalvas/gokit/compare/v0.21.0...v0.22.0) (2026-01-11)
 
 
