@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func loadFromFile(config interface{}, filename string) error {
+func loadFromFile(config interface{}, filename string, strict bool) error {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -24,15 +24,23 @@ func loadFromFile(config interface{}, filename string) error {
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
 	case ".json":
-		return unmarshalJSON(data, config)
+		return unmarshalJSON(data, config, strict)
 	case ".yaml", ".yml":
-		return yaml.Unmarshal(data, config)
+		return unmarshalYAML(data, config, strict)
 	default:
 		return fmt.Errorf("unsupported file extension %s for file %s", ext, filename)
 	}
 }
 
-func unmarshalJSON(data []byte, config interface{}) error {
+func unmarshalYAML(data []byte, config interface{}, strict bool) error {
+	dec := yaml.NewDecoder(strings.NewReader(string(data)))
+	if strict {
+		dec.KnownFields(true)
+	}
+	return dec.Decode(config)
+}
+
+func unmarshalJSON(data []byte, config interface{}, strict bool) error {
 	// First, unmarshal into a map to find duration fields
 	var rawData map[string]interface{}
 	if err := json.Unmarshal(data, &rawData); err != nil {
@@ -50,6 +58,11 @@ func unmarshalJSON(data []byte, config interface{}) error {
 		return fmt.Errorf("failed to marshal processed data: %w", err)
 	}
 
+	if strict {
+		dec := json.NewDecoder(strings.NewReader(string(processedData)))
+		dec.DisallowUnknownFields()
+		return dec.Decode(config)
+	}
 	return json.Unmarshal(processedData, config)
 }
 
@@ -138,9 +151,9 @@ func isConfigFile(filename string) bool {
 	return ext == ".json" || ext == ".yaml" || ext == ".yml"
 }
 
-func loadFromFiles(config interface{}, filenames []string) error {
+func loadFromFiles(config interface{}, filenames []string, strict bool) error {
 	for _, filename := range filenames {
-		if err := loadFromFile(config, filename); err != nil {
+		if err := loadFromFile(config, filename, strict); err != nil {
 			return fmt.Errorf("failed to load file %s: %w", filename, err)
 		}
 	}

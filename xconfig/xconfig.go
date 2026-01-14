@@ -21,6 +21,7 @@ type Options struct {
 	envPrefix     string
 	customDefault interface{}
 	envMacroRegex *regexp.Regexp
+	strict        bool
 }
 
 type Option func(*Options)
@@ -68,6 +69,12 @@ func WithEnvMacroRegex(pattern ...string) Option {
 	}
 }
 
+func WithStrict(strict bool) Option {
+	return func(o *Options) {
+		o.strict = strict
+	}
+}
+
 func Load(config interface{}, options ...Option) error {
 	opts := &Options{}
 	for _, option := range options {
@@ -106,13 +113,13 @@ func Load(config interface{}, options ...Option) error {
 
 	// Load from directories first, then files
 	if len(opts.dirs) > 0 {
-		if err := loadFromDirs(config, opts.dirs); err != nil {
+		if err := loadFromDirs(config, opts.dirs, opts.strict); err != nil {
 			return fmt.Errorf("failed to load from directories: %w", err)
 		}
 	}
 
 	if len(opts.files) > 0 {
-		if err := loadFromFiles(config, opts.files); err != nil {
+		if err := loadFromFiles(config, opts.files, opts.strict); err != nil {
 			return fmt.Errorf("failed to load from files: %w", err)
 		}
 	}

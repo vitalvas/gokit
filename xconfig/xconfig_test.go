@@ -937,18 +937,18 @@ func TestHelpers(t *testing.T) {
 		require.NoError(t, os.WriteFile(tempDir+"/config.json", []byte(jsonContent), 0644))
 
 		var config TestConfig
-		err := loadFromDirs(&config, []string{tempDir})
+		err := loadFromDirs(&config, []string{tempDir}, false)
 		require.NoError(t, err)
 
 		assert.Equal(t, "debug", config.Logger.Level)
 		assert.Equal(t, ":9090", config.Health.Address)
 
 		// Test with non-existent directory (should not error, skips missing dirs)
-		err = loadFromDirs(&config, []string{"/non/existent/dir"})
+		err = loadFromDirs(&config, []string{"/non/existent/dir"}, false)
 		assert.NoError(t, err)
 
 		// Test with empty directory list
-		err = loadFromDirs(&config, []string{})
+		err = loadFromDirs(&config, []string{}, false)
 		require.NoError(t, err) // Should not error with no directories
 	})
 
@@ -1234,28 +1234,28 @@ func TestHelpers(t *testing.T) {
 		t.Run("error conditions", func(t *testing.T) {
 			// Test loading from non-existent file (should not error, returns nil)
 			var config TestConfig
-			err := loadFromFile(&config, "/non/existent/file.json")
+			err := loadFromFile(&config, "/non/existent/file.json", false)
 			assert.NoError(t, err) // Missing files are treated as optional
 
 			// Test loading invalid JSON
 			tempFile := t.TempDir() + "/invalid.json"
 			require.NoError(t, os.WriteFile(tempFile, []byte(`{invalid json`), 0644))
 
-			err = loadFromFile(&config, tempFile)
+			err = loadFromFile(&config, tempFile, false)
 			assert.Error(t, err)
 
 			// Test loading invalid YAML
 			tempFile = t.TempDir() + "/invalid.yaml"
 			require.NoError(t, os.WriteFile(tempFile, []byte("invalid: yaml: content: ["), 0644))
 
-			err = loadFromFile(&config, tempFile)
+			err = loadFromFile(&config, tempFile, false)
 			assert.Error(t, err)
 
 			// Test unsupported file extension
 			tempFile = t.TempDir() + "/config.txt"
 			require.NoError(t, os.WriteFile(tempFile, []byte(`some content`), 0644))
 
-			err = loadFromFile(&config, tempFile)
+			err = loadFromFile(&config, tempFile, false)
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "unsupported file extension")
 		})
@@ -1358,7 +1358,7 @@ func TestHelpers(t *testing.T) {
 				// Test loadFromFile with permission denied (simulate by trying to read a directory as file)
 				tempDir := t.TempDir()
 				var config TestConfig
-				err := loadFromFile(&config, tempDir) // Try to read directory as file
+				err := loadFromFile(&config, tempDir, false) // Try to read directory as file
 				// This might not always error depending on OS, so we just ensure it doesn't panic
 				_ = err
 
@@ -1534,7 +1534,7 @@ func TestHelpers(t *testing.T) {
 						defer os.Chmod(unreadableDir, 0755) // Restore for cleanup
 
 						var config TestConfig
-						err := loadFromDirs(&config, []string{unreadableDir})
+						err := loadFromDirs(&config, []string{unreadableDir}, false)
 						assert.Error(t, err)
 						assert.Contains(t, err.Error(), "failed to scan directory")
 					}
@@ -1575,7 +1575,7 @@ func TestHelpers(t *testing.T) {
 					require.NoError(t, os.Chmod(problemDir, 0000))
 					defer os.Chmod(problemDir, 0755) // Restore for cleanup
 
-					err := loadFromDirs(&config, []string{problemDir})
+					err := loadFromDirs(&config, []string{problemDir}, false)
 					assert.Error(t, err)
 					assert.Contains(t, err.Error(), "failed to scan directory")
 				}

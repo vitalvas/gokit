@@ -35,7 +35,7 @@ func scanDirectory(dirname string) ([]string, error) {
 	return configFiles, nil
 }
 
-func loadFromDirs(config interface{}, dirnames []string) error {
+func loadFromDirs(config interface{}, dirnames []string, strict bool) error {
 	var allFiles []string
 
 	for _, dirname := range dirnames {
@@ -46,5 +46,5 @@ func loadFromDirs(config interface{}, dirnames []string) error {
 		allFiles = append(allFiles, files...)
 	}
 
-	return loadFromFiles(config, allFiles)
+	return loadFromFiles(config, allFiles, strict)
 }

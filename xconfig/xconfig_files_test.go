@@ -70,7 +70,7 @@ db:
 
 	t.Run("nonexistent file", func(t *testing.T) {
 		var cfg TestConfig
-		err := loadFromFile(&cfg, "/nonexistent/path/config.yaml")
+		err := loadFromFile(&cfg, "/nonexistent/path/config.yaml", false)
 		require.NoError(t, err)
 	})
 
@@ -84,7 +84,7 @@ db:
 		require.NoError(t, tmpFile.Close())
 
 		var cfg TestConfig
-		err = loadFromFile(&cfg, tmpFile.Name())
+		err = loadFromFile(&cfg, tmpFile.Name(), false)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported file extension")
 	})
@@ -152,4 +152,178 @@ func TestIsConfigFile(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestUnmarshalFormats(t *testing.T) {
+	type unmarshalFunc func([]byte, interface{}, bool) error
+	type formatTestData struct {
+		valid         string
+		invalid       string
+		unknownField  string
+		nestedUnknown string
+		empty         string
+		expectedLevel string
+		expectedHost  string
+		expectedPort  int
+	}
+
+	formats := []struct {
+		name      string
+		unmarshal unmarshalFunc
+		data      formatTestData
+	}{
+		{
+			name:      "YAML",
+			unmarshal: unmarshalYAML,
+			data: formatTestData{
+				valid:         "logger:\n  level: \"info\"\ndb:\n  host: \"localhost\"\n  port: 5432",
+				invalid:       "invalid: yaml: syntax:",
+				unknownField:  "logger:\n  level: \"info\"\nunknown_field: \"value\"",
+				nestedUnknown: "logger:\n  level: \"info\"\n  unknown_nested: \"value\"",
+				empty:         "{}",
+				expectedLevel: "info",
+				expectedHost:  "localhost",
+				expectedPort:  5432,
+			},
+		},
+		{
+			name:      "JSON",
+			unmarshal: unmarshalJSON,
+			data: formatTestData{
+				valid:         `{"logger":{"level":"info"},"db":{"host":"localhost","port":5432}}`,
+				invalid:       `{invalid json}`,
+				unknownField:  `{"logger":{"level":"info"},"unknown_field":"value"}`,
+				nestedUnknown: `{"logger":{"level":"info","unknown_nested":"value"}}`,
+				empty:         `{}`,
+				expectedLevel: "info",
+				expectedHost:  "localhost",
+				expectedPort:  5432,
+			},
+		},
+	}
+
+	for _, f := range formats {
+		t.Run(f.name, func(t *testing.T) {
+			t.Run("valid", func(t *testing.T) {
+				var cfg TestConfig
+				err := f.unmarshal([]byte(f.data.valid), &cfg, false)
+				require.NoError(t, err)
+				assert.Equal(t, f.data.expectedLevel, cfg.Logger.Level)
+				assert.Equal(t, f.data.expectedHost, cfg.DB.Host)
+				assert.Equal(t, f.data.expectedPort, cfg.DB.Port)
+			})
+
+			t.Run("invalid syntax", func(t *testing.T) {
+				var cfg TestConfig
+				err := f.unmarshal([]byte(f.data.invalid), &cfg, false)
+				require.Error(t, err)
+			})
+
+			t.Run("strict mode with unknown field", func(t *testing.T) {
+				var cfg TestConfig
+				err := f.unmarshal([]byte(f.data.unknownField), &cfg, true)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "unknown")
+			})
+
+			t.Run("non-strict mode with unknown field", func(t *testing.T) {
+				var cfg TestConfig
+				err := f.unmarshal([]byte(f.data.unknownField), &cfg, false)
+				require.NoError(t, err)
+				assert.Equal(t, f.data.expectedLevel, cfg.Logger.Level)
+			})
+
+			t.Run("nested struct unknown field in strict mode", func(t *testing.T) {
+				var cfg TestConfig
+				err := f.unmarshal([]byte(f.data.nestedUnknown), &cfg, true)
+				require.Error(t, err)
+			})
+
+			t.Run("empty document", func(t *testing.T) {
+				var cfg TestConfig
+				err := f.unmarshal([]byte(f.data.empty), &cfg, false)
+				require.NoError(t, err)
+			})
+		})
+	}
+}
+
+func TestStrictMode(t *testing.T) {
+	t.Run("YAML strict mode rejects unknown fields", func(t *testing.T) {
+		tmpFile, err := os.CreateTemp("", "config-*.yaml")
+		require.NoError(t, err)
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+		content := `logger:
+  level: "debug"
+unknown_field: "should fail"`
+
+		_, err = tmpFile.WriteString(content)
+		require.NoError(t, err)
+		require.NoError(t, tmpFile.Close())
+
+		var cfg TestConfig
+		err = Load(&cfg, WithFiles(tmpFile.Name()), WithStrict(true))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unknown")
+	})
+
+	t.Run("YAML non-strict mode ignores unknown fields", func(t *testing.T) {
+		tmpFile, err := os.CreateTemp("", "config-*.yaml")
+		require.NoError(t, err)
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+		content := `logger:
+  level: "debug"
+unknown_field: "should be ignored"`
+
+		_, err = tmpFile.WriteString(content)
+		require.NoError(t, err)
+		require.NoError(t, tmpFile.Close())
+
+		var cfg TestConfig
+		err = Load(&cfg, WithFiles(tmpFile.Name()), WithStrict(false))
+		require.NoError(t, err)
+		assert.Equal(t, "debug", cfg.Logger.Level)
+	})
+
+	t.Run("JSON strict mode rejects unknown fields", func(t *testing.T) {
+		tmpFile, err := os.CreateTemp("", "config-*.json")
+		require.NoError(t, err)
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+		content := `{
+  "logger": {"level": "error"},
+  "unknown_field": "should fail"
+}`
+
+		_, err = tmpFile.WriteString(content)
+		require.NoError(t, err)
+		require.NoError(t, tmpFile.Close())
+
+		var cfg TestConfig
+		err = Load(&cfg, WithFiles(tmpFile.Name()), WithStrict(true))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unknown")
+	})
+
+	t.Run("JSON non-strict mode ignores unknown fields", func(t *testing.T) {
+		tmpFile, err := os.CreateTemp("", "config-*.json")
+		require.NoError(t, err)
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+		content := `{
+  "logger": {"level": "error"},
+  "unknown_field": "should be ignored"
+}`
+
+		_, err = tmpFile.WriteString(content)
+		require.NoError(t, err)
+		require.NoError(t, tmpFile.Close())
+
+		var cfg TestConfig
+		err = Load(&cfg, WithFiles(tmpFile.Name()), WithStrict(false))
+		require.NoError(t, err)
+		assert.Equal(t, "error", cfg.Logger.Level)
+	})
 }
