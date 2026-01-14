@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.0](https://github.com/vitalvas/gokit/compare/v0.23.1...v0.24.0) (2026-01-14)
+
+
+### Features
+
+* **xconfig:** add WithStrict option for strict JSON/YAML parsing ([03164af](https://github.com/vitalvas/gokit/commit/03164af05052211b1af935c48506e8a48ea70992))
+
 ## [0.23.1](https://github.com/vitalvas/gokit/compare/v0.23.0...v0.23.1) (2026-01-14)
 
 
