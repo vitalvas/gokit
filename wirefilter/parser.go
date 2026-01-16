@@ -149,7 +149,7 @@ func (p *Parser) parseBinaryExpression(left Expression) Expression {
 	operator := p.curToken.Type
 	precedence := p.curPrecedence()
 
-	if operator == TokenIn {
+	if operator == TokenIn || operator == TokenContains {
 		p.nextToken()
 		var right Expression
 		if p.curToken.Type == TokenLBrace {

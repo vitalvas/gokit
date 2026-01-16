@@ -786,4 +786,939 @@ func TestFilter(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, TypeIP, ipField.Type)
 	})
+
+	t.Run("field presence - string field present", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("http.host", TypeString)
+
+		filter, err := Compile(`http.host`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("http.host", "example.com")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("field presence - string field absent", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("http.host", TypeString)
+
+		filter, err := Compile(`http.host`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("field presence - int field present with zero", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("http.status", TypeInt)
+
+		filter, err := Compile(`http.status`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("http.status", 0)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("field presence - int field absent", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("http.status", TypeInt)
+
+		filter, err := Compile(`http.status`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("field presence - bool field present with false", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("http.secure", TypeBool)
+
+		filter, err := Compile(`http.secure`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetBoolField("http.secure", false)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("field presence - bool field present with true", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("http.secure", TypeBool)
+
+		filter, err := Compile(`http.secure`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetBoolField("http.secure", true)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("field absence - not operator on absent field", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("http.error", TypeString)
+
+		filter, err := Compile(`not http.error`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("field absence - not operator on present field", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("http.error", TypeString)
+
+		filter, err := Compile(`not http.error`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("http.error", "not found")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("field presence with and operator", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("http.host", TypeString).
+			AddField("http.status", TypeInt)
+
+		filter, err := Compile(`http.host and http.status == 200`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("http.host", "example.com").
+			SetIntField("http.status", 200)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetIntField("http.status", 200)
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("field presence with or operator", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("http.host", TypeString).
+			AddField("http.error", TypeString)
+
+		filter, err := Compile(`http.host or http.error`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("http.host", "example.com")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext()
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("field presence - IP field present", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("ip.src", TypeIP)
+
+		filter, err := Compile(`ip.src`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "192.168.1.1")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("field presence - IP field absent", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("ip.src", TypeIP)
+
+		filter, err := Compile(`ip.src`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("combined presence and absence check", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("http.host", TypeString).
+			AddField("http.error", TypeString)
+
+		filter, err := Compile(`http.host and not http.error`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("http.host", "example.com")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetStringField("http.host", "example.com").
+			SetStringField("http.error", "not found")
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("field presence - empty string is present", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("http.host", TypeString)
+
+		filter, err := Compile(`http.host`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("http.host", "")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array in array - OR logic - match found", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("user.groups", TypeArray)
+
+		filter, err := Compile(`user.groups in {"guest", "test"}`, schema)
+		assert.NoError(t, err)
+
+		groups := ArrayValue{
+			StringValue("admin"),
+			StringValue("guest"),
+			StringValue("user"),
+		}
+		ctx := NewExecutionContext().
+			SetField("user.groups", groups)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array in array - OR logic - no match", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("user.groups", TypeArray)
+
+		filter, err := Compile(`user.groups in {"foo", "bar"}`, schema)
+		assert.NoError(t, err)
+
+		groups := ArrayValue{
+			StringValue("admin"),
+			StringValue("guest"),
+			StringValue("user"),
+		}
+		ctx := NewExecutionContext().
+			SetField("user.groups", groups)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("array in array - OR logic - empty left array", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("user.groups", TypeArray)
+
+		filter, err := Compile(`user.groups in {"guest", "test"}`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetField("user.groups", ArrayValue{})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("array contains array - AND logic - all match", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("user.groups", TypeArray)
+
+		filter, err := Compile(`user.groups contains {"guest", "user"}`, schema)
+		assert.NoError(t, err)
+
+		groups := ArrayValue{
+			StringValue("admin"),
+			StringValue("guest"),
+			StringValue("user"),
+		}
+		ctx := NewExecutionContext().
+			SetField("user.groups", groups)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array contains array - AND logic - partial match", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("user.groups", TypeArray)
+
+		filter, err := Compile(`user.groups contains {"guest", "test"}`, schema)
+		assert.NoError(t, err)
+
+		groups := ArrayValue{
+			StringValue("admin"),
+			StringValue("guest"),
+			StringValue("user"),
+		}
+		ctx := NewExecutionContext().
+			SetField("user.groups", groups)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("array contains array - AND logic - empty right array", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("user.groups", TypeArray)
+
+		filter, err := Compile(`user.groups contains {}`, schema)
+		assert.NoError(t, err)
+
+		groups := ArrayValue{
+			StringValue("admin"),
+			StringValue("guest"),
+		}
+		ctx := NewExecutionContext().
+			SetField("user.groups", groups)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array in array - OR logic - int values", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("ports", TypeArray)
+
+		filter, err := Compile(`ports in {80, 443, 8080}`, schema)
+		assert.NoError(t, err)
+
+		ports := ArrayValue{
+			IntValue(22),
+			IntValue(443),
+			IntValue(3306),
+		}
+		ctx := NewExecutionContext().
+			SetField("ports", ports)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array contains array - AND logic - int values", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("ports", TypeArray)
+
+		filter, err := Compile(`ports contains {22, 443}`, schema)
+		assert.NoError(t, err)
+
+		ports := ArrayValue{
+			IntValue(22),
+			IntValue(443),
+			IntValue(3306),
+		}
+		ctx := NewExecutionContext().
+			SetField("ports", ports)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("parse error - invalid expression", func(t *testing.T) {
+		_, err := Compile(`http.host ==`, nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("parse error - unclosed parenthesis", func(t *testing.T) {
+		_, err := Compile(`(http.host == "test"`, nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("parse error - unclosed brace", func(t *testing.T) {
+		_, err := Compile(`status in {200, 201`, nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("schema validation - unknown field", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("http.host", TypeString)
+
+		_, err := Compile(`http.unknown == "test"`, schema)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unknown field")
+	})
+
+	t.Run("schema validation - nested unknown field", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("http.host", TypeString)
+
+		_, err := Compile(`http.host == "test" and http.unknown == "test"`, schema)
+		assert.Error(t, err)
+	})
+
+	t.Run("schema validation - unary expression", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("http.host", TypeString)
+
+		_, err := Compile(`not http.unknown`, schema)
+		assert.Error(t, err)
+	})
+
+	t.Run("range expression - non-int start", func(t *testing.T) {
+		filter, err := Compile(`status in {"a".."b"}`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("status", 200)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("range expression - start greater than end", func(t *testing.T) {
+		filter, err := Compile(`status in {10..1}`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("status", 5)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("invalid regex pattern", func(t *testing.T) {
+		filter, err := Compile(`http.path matches "[invalid"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("http.path", "/api/test")
+
+		_, err = filter.Execute(ctx)
+		assert.Error(t, err)
+	})
+
+	t.Run("invalid CIDR", func(t *testing.T) {
+		filter, err := Compile(`ip.src in "invalid-cidr"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "192.168.1.1")
+
+		_, err = filter.Execute(ctx)
+		assert.Error(t, err)
+	})
+
+	t.Run("comparison with non-int types", func(t *testing.T) {
+		filter, err := Compile(`http.host > "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("http.host", "example.com")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("contains with non-string non-array", func(t *testing.T) {
+		filter, err := Compile(`status contains 200`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("status", 200)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("matches with non-string types", func(t *testing.T) {
+		filter, err := Compile(`status matches "200"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("status", 200)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("ip equality with string", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("ip.src", TypeIP)
+
+		filter, err := Compile(`ip.src == "192.168.1.1"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "192.168.1.1")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("string equality with ip", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("ip.src", TypeIP).
+			AddField("str", TypeString)
+
+		filter, err := Compile(`str == ip.src`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "192.168.1.1").
+			SetStringField("str", "192.168.1.1")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("ip equality with invalid string", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("ip.src", TypeIP)
+
+		filter, err := Compile(`ip.src == "not-an-ip"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "192.168.1.1")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("string equality with invalid ip", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("ip.src", TypeIP).
+			AddField("str", TypeString)
+
+		filter, err := Compile(`str == ip.src`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "192.168.1.1").
+			SetStringField("str", "not-an-ip")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("in with non-array non-cidr", func(t *testing.T) {
+		filter, err := Compile(`status in 200`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("status", 200)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("all equal with empty array", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("tags", TypeArray)
+
+		filter, err := Compile(`tags === "test"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetField("tags", ArrayValue{})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("any not equal with empty array", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("tags", TypeArray)
+
+		filter, err := Compile(`tags !== "test"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetField("tags", ArrayValue{})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("context SetBytesField", func(t *testing.T) {
+		ctx := NewExecutionContext().
+			SetBytesField("data", []byte("test data"))
+
+		val, ok := ctx.GetField("data")
+		assert.True(t, ok)
+		assert.Equal(t, TypeBytes, val.Type())
+		assert.Equal(t, "test data", val.String())
+	})
+
+	t.Run("compile without schema", func(t *testing.T) {
+		filter, err := Compile(`http.host == "test"`, nil)
+		assert.NoError(t, err)
+		assert.NotNil(t, filter)
+	})
+
+	t.Run("execute returns error on nil result", func(t *testing.T) {
+		filter, err := Compile(`http.host`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("unary not on non-existent field", func(t *testing.T) {
+		filter, err := Compile(`not http.host`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("grouped expression", func(t *testing.T) {
+		filter, err := Compile(`(http.status == 200 or http.status == 201) and http.host == "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("http.status", 200).
+			SetStringField("http.host", "test")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("schema validation with range in array", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("status", TypeInt)
+
+		filter, err := Compile(`status in {200..299}`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("status", 250)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("cached regex pattern", func(t *testing.T) {
+		filter, err := Compile(`http.path matches "^/api/"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("http.path", "/api/v1")
+
+		result1, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result1)
+
+		result2, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result2)
+	})
+
+	t.Run("cached CIDR pattern", func(t *testing.T) {
+		filter, err := Compile(`ip.src in "192.168.0.0/16"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "192.168.1.1")
+
+		result1, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result1)
+
+		result2, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result2)
+	})
+
+	t.Run("nil values in and operation", func(t *testing.T) {
+		filter, err := Compile(`http.host and http.status == 200`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("http.status", 200)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("nil values in or operation", func(t *testing.T) {
+		filter, err := Compile(`http.host or http.status == 200`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("http.status", 200)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("nil left in equality", func(t *testing.T) {
+		filter, err := Compile(`http.host == "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("nil in contains", func(t *testing.T) {
+		filter, err := Compile(`http.host contains "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("nil in matches", func(t *testing.T) {
+		filter, err := Compile(`http.host matches "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("nil in comparison", func(t *testing.T) {
+		filter, err := Compile(`http.status > 200`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("nil in array membership", func(t *testing.T) {
+		filter, err := Compile(`http.status in {200, 201}`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("nil in all equal", func(t *testing.T) {
+		filter, err := Compile(`tags === "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("nil in any not equal", func(t *testing.T) {
+		filter, err := Compile(`tags !== "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("bytes contains", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("data", TypeBytes)
+
+		filter, err := Compile(`data contains "test"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetBytesField("data", []byte("this is test data"))
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("invalid IP field", func(t *testing.T) {
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "invalid-ip")
+
+		_, ok := ctx.GetField("ip.src")
+		assert.False(t, ok)
+	})
+
+	t.Run("array expr with range error", func(t *testing.T) {
+		filter, err := Compile(`status in {100, 200..299}`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("status", 250)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("inequality operator", func(t *testing.T) {
+		filter, err := Compile(`status != 200`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("status", 404)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("less than operator", func(t *testing.T) {
+		filter, err := Compile(`status < 300`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("status", 200)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("less than or equal operator", func(t *testing.T) {
+		filter, err := Compile(`status <= 200`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("status", 200)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array all equal true case", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("tags", TypeArray)
+
+		filter, err := Compile(`tags === "test"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetField("tags", ArrayValue{StringValue("test"), StringValue("test")})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array any not equal true case", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("tags", TypeArray)
+
+		filter, err := Compile(`tags !== "test"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetField("tags", ArrayValue{StringValue("test"), StringValue("other")})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array contains with string haystack", func(t *testing.T) {
+		filter, err := Compile(`tags contains "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetField("tags", ArrayValue{StringValue("test"), StringValue("other")})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("contains with nil right array", func(t *testing.T) {
+		filter, err := Compile(`tags contains otherfield`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetField("tags", ArrayValue{StringValue("test")})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
 }

@@ -276,6 +276,113 @@ func TestContainsString(t *testing.T) {
 	})
 }
 
+func TestValueTypeMismatch(t *testing.T) {
+	t.Run("string equal to non-string", func(t *testing.T) {
+		sv := StringValue("test")
+		iv := IntValue(42)
+		assert.False(t, sv.Equal(iv))
+	})
+
+	t.Run("int equal to non-int", func(t *testing.T) {
+		iv := IntValue(42)
+		sv := StringValue("42")
+		assert.False(t, iv.Equal(sv))
+	})
+
+	t.Run("bool equal to non-bool", func(t *testing.T) {
+		bv := BoolValue(true)
+		sv := StringValue("true")
+		assert.False(t, bv.Equal(sv))
+	})
+
+	t.Run("ip equal to non-ip", func(t *testing.T) {
+		ip := IPValue{IP: net.ParseIP("192.168.1.1")}
+		sv := StringValue("192.168.1.1")
+		assert.False(t, ip.Equal(sv))
+	})
+
+	t.Run("bytes equal to non-bytes", func(t *testing.T) {
+		bv := BytesValue([]byte("test"))
+		sv := StringValue("test")
+		assert.False(t, bv.Equal(sv))
+	})
+
+	t.Run("array equal to non-array", func(t *testing.T) {
+		av := ArrayValue{IntValue(1), IntValue(2)}
+		iv := IntValue(1)
+		assert.False(t, av.Equal(iv))
+	})
+
+	t.Run("array equal different lengths", func(t *testing.T) {
+		av1 := ArrayValue{IntValue(1), IntValue(2)}
+		av2 := ArrayValue{IntValue(1)}
+		assert.False(t, av1.Equal(av2))
+	})
+
+	t.Run("bytes equal different lengths", func(t *testing.T) {
+		bv1 := BytesValue([]byte("test"))
+		bv2 := BytesValue([]byte("te"))
+		assert.False(t, bv1.Equal(bv2))
+	})
+}
+
+func TestValueIsTruthy(t *testing.T) {
+	t.Run("string is truthy", func(t *testing.T) {
+		sv := StringValue("test")
+		assert.True(t, sv.IsTruthy())
+	})
+
+	t.Run("empty string is truthy", func(t *testing.T) {
+		sv := StringValue("")
+		assert.True(t, sv.IsTruthy())
+	})
+
+	t.Run("int is truthy", func(t *testing.T) {
+		iv := IntValue(42)
+		assert.True(t, iv.IsTruthy())
+	})
+
+	t.Run("zero int is truthy", func(t *testing.T) {
+		iv := IntValue(0)
+		assert.True(t, iv.IsTruthy())
+	})
+
+	t.Run("bool true is truthy", func(t *testing.T) {
+		bv := BoolValue(true)
+		assert.True(t, bv.IsTruthy())
+	})
+
+	t.Run("bool false is not truthy", func(t *testing.T) {
+		bv := BoolValue(false)
+		assert.False(t, bv.IsTruthy())
+	})
+
+	t.Run("ip is truthy", func(t *testing.T) {
+		ip := IPValue{IP: net.ParseIP("192.168.1.1")}
+		assert.True(t, ip.IsTruthy())
+	})
+
+	t.Run("bytes is truthy", func(t *testing.T) {
+		bv := BytesValue([]byte("test"))
+		assert.True(t, bv.IsTruthy())
+	})
+
+	t.Run("empty bytes is truthy", func(t *testing.T) {
+		bv := BytesValue([]byte{})
+		assert.True(t, bv.IsTruthy())
+	})
+
+	t.Run("array is truthy", func(t *testing.T) {
+		av := ArrayValue{IntValue(1)}
+		assert.True(t, av.IsTruthy())
+	})
+
+	t.Run("empty array is truthy", func(t *testing.T) {
+		av := ArrayValue{}
+		assert.True(t, av.IsTruthy())
+	})
+}
+
 func TestIPv6Support(t *testing.T) {
 	t.Run("parse ipv6 address", func(t *testing.T) {
 		ip := IPValue{IP: net.ParseIP("2001:db8::1")}
@@ -329,4 +436,10 @@ func TestIPv6Support(t *testing.T) {
 		ip := net.ParseIP("::ffff:192.168.1.1")
 		assert.NotNil(t, ip)
 	})
+}
+
+func TestBytesValueEqualSameLengthDifferentContent(t *testing.T) {
+	bv1 := BytesValue([]byte("test"))
+	bv2 := BytesValue([]byte("best"))
+	assert.False(t, bv1.Equal(bv2))
 }

@@ -10,6 +10,7 @@ inspired by Cloudflare's Wirefilter.
 - Comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
 - Array operators: `===` (all equal), `!==` (any not equal)
 - Membership operators: `in`, `contains`, `matches`
+- Field presence/absence checking
 - Range expressions: `{1..10}`
 - Multiple data types: string, int, bool, IP, bytes, arrays
 - IP/CIDR matching for IPv4 and IPv6
@@ -85,6 +86,21 @@ http.status == 404 or http.status == 500
 not (http.status >= 500)
 ```
 
+### Field Presence Checking
+
+Check if a field is present (has been set):
+
+```go
+http.host                    // true if http.host is set
+not http.error               // true if http.error is not set
+http.host and not http.error // true if host is set and error is not set
+```
+
+Presence checking uses existence-based truthiness:
+- Any field that exists is considered truthy (including zero values and empty strings)
+- Missing fields are considered falsy
+- For boolean fields, the actual boolean value is used
+
 ### IP and CIDR Matching
 
 ```go
@@ -98,6 +114,28 @@ ip.src in "2001:db8::/32"
 ```go
 http.status in {200, 201, 204}
 port in {80, 443, 8080}
+```
+
+### Array-to-Array Operations
+
+Check if an array field has any or all elements from a set:
+
+```go
+// OR logic: true if ANY element from user.groups is in the set
+user.groups in {"guest", "admin"}
+
+// AND logic: true if ALL elements from the set exist in user.groups
+user.groups contains {"guest", "admin"}
+```
+
+Example:
+```go
+groups := ["admin", "guest", "user"]
+
+groups in {"guest", "test"}       // true  (guest matches)
+groups in {"foo", "bar"}          // false (no match)
+groups contains {"guest", "user"} // true  (both exist in groups)
+groups contains {"guest", "test"} // false (test is missing)
 ```
 
 ### Range Expressions
@@ -235,8 +273,8 @@ if result {
 
 | Operator | Description | Example |
 |----------|-------------|---------|
-| `in` | Value in array or IP in CIDR | `port in {80, 443}` |
-| `contains` | String contains substring | `path contains "/api"` |
+| `in` | Value in array, IP in CIDR, or array ANY match | `port in {80, 443}` |
+| `contains` | String contains substring, or array ALL match | `path contains "/api"` |
 | `matches` | Regex match | `ua matches "^Mozilla"` |
 
 ### Array Operators

@@ -79,11 +79,11 @@ func (f *Filter) Execute(ctx *ExecutionContext) (bool, error) {
 		return false, err
 	}
 
-	if result.Type() != TypeBool {
+	if result == nil {
 		return false, nil
 	}
 
-	return bool(result.(BoolValue)), nil
+	return result.IsTruthy(), nil
 }
 
 func (f *Filter) evaluate(expr Expression, ctx *ExecutionContext) (Value, error) {
@@ -159,7 +159,7 @@ func (f *Filter) evaluateRangeExpr(expr *RangeExpr, ctx *ExecutionContext) (Valu
 func (f *Filter) evaluateFieldExpr(expr *FieldExpr, ctx *ExecutionContext) (Value, error) {
 	val, ok := ctx.GetField(expr.Name)
 	if !ok {
-		return BoolValue(false), nil
+		return nil, nil
 	}
 	return val, nil
 }
@@ -171,10 +171,10 @@ func (f *Filter) evaluateUnaryExpr(expr *UnaryExpr, ctx *ExecutionContext) (Valu
 	}
 
 	if expr.Operator == TokenNot {
-		if operand.Type() != TypeBool {
-			return BoolValue(false), nil
+		if operand == nil {
+			return BoolValue(true), nil
 		}
-		return BoolValue(!bool(operand.(BoolValue))), nil
+		return BoolValue(!operand.IsTruthy()), nil
 	}
 
 	return nil, nil
@@ -193,16 +193,14 @@ func (f *Filter) evaluateBinaryExpr(expr *BinaryExpr, ctx *ExecutionContext) (Va
 
 	switch expr.Operator {
 	case TokenAnd:
-		if left.Type() != TypeBool || right.Type() != TypeBool {
-			return BoolValue(false), nil
-		}
-		return BoolValue(bool(left.(BoolValue)) && bool(right.(BoolValue))), nil
+		leftTruthy := left != nil && left.IsTruthy()
+		rightTruthy := right != nil && right.IsTruthy()
+		return BoolValue(leftTruthy && rightTruthy), nil
 
 	case TokenOr:
-		if left.Type() != TypeBool || right.Type() != TypeBool {
-			return BoolValue(false), nil
-		}
-		return BoolValue(bool(left.(BoolValue)) || bool(right.(BoolValue))), nil
+		leftTruthy := left != nil && left.IsTruthy()
+		rightTruthy := right != nil && right.IsTruthy()
+		return BoolValue(leftTruthy || rightTruthy), nil
 
 	case TokenEq:
 		return f.evaluateEquality(left, right)
@@ -246,6 +244,9 @@ func (f *Filter) evaluateBinaryExpr(expr *BinaryExpr, ctx *ExecutionContext) (Va
 }
 
 func (f *Filter) evaluateEquality(left, right Value) (Value, error) {
+	if left == nil || right == nil {
+		return BoolValue(left == nil && right == nil), nil
+	}
 	if left.Type() == TypeIP && right.Type() == TypeString {
 		ip := net.ParseIP(string(right.(StringValue)))
 		if ip == nil {
@@ -263,6 +264,9 @@ func (f *Filter) evaluateEquality(left, right Value) (Value, error) {
 }
 
 func (f *Filter) evaluateComparison(left, right Value, cmp func(int64, int64) bool) (Value, error) {
+	if left == nil || right == nil {
+		return BoolValue(false), nil
+	}
 	if left.Type() != TypeInt || right.Type() != TypeInt {
 		return BoolValue(false), nil
 	}
@@ -270,16 +274,37 @@ func (f *Filter) evaluateComparison(left, right Value, cmp func(int64, int64) bo
 }
 
 func (f *Filter) evaluateContains(left, right Value) (Value, error) {
+	if left == nil || right == nil {
+		return BoolValue(false), nil
+	}
 	if left.Type() == TypeString && right.Type() == TypeString {
 		return BoolValue(ContainsString(string(left.(StringValue)), string(right.(StringValue)))), nil
 	}
 	if left.Type() == TypeArray {
-		return BoolValue(left.(ArrayValue).Contains(right)), nil
+		leftArr := left.(ArrayValue)
+		// Array contains Array: AND logic - all elements from right exist in left
+		if right.Type() == TypeArray {
+			rightArr := right.(ArrayValue)
+			if len(rightArr) == 0 {
+				return BoolValue(true), nil
+			}
+			for _, rightElem := range rightArr {
+				if !leftArr.Contains(rightElem) {
+					return BoolValue(false), nil
+				}
+			}
+			return BoolValue(true), nil
+		}
+		// Array contains single value
+		return BoolValue(leftArr.Contains(right)), nil
 	}
 	return BoolValue(false), nil
 }
 
 func (f *Filter) evaluateMatches(left, right Value) (Value, error) {
+	if left == nil || right == nil {
+		return BoolValue(false), nil
+	}
 	if left.Type() != TypeString || right.Type() != TypeString {
 		return BoolValue(false), nil
 	}
@@ -304,8 +329,23 @@ func (f *Filter) getCompiledRegex(pattern string) (*regexp.Regexp, error) {
 }
 
 func (f *Filter) evaluateIn(left, right Value) (Value, error) {
+	if left == nil || right == nil {
+		return BoolValue(false), nil
+	}
 	if right.Type() == TypeArray {
-		return BoolValue(right.(ArrayValue).Contains(left)), nil
+		rightArr := right.(ArrayValue)
+		// Array in Array: OR logic - any element from left exists in right
+		if left.Type() == TypeArray {
+			leftArr := left.(ArrayValue)
+			for _, leftElem := range leftArr {
+				if rightArr.Contains(leftElem) {
+					return BoolValue(true), nil
+				}
+			}
+			return BoolValue(false), nil
+		}
+		// Single value in Array
+		return BoolValue(rightArr.Contains(left)), nil
 	}
 
 	if left.Type() == TypeIP && right.Type() == TypeString {
@@ -334,6 +374,9 @@ func (f *Filter) getParsedCIDR(cidr string) (*net.IPNet, error) {
 }
 
 func (f *Filter) evaluateAllEqual(left, right Value) (Value, error) {
+	if left == nil || right == nil {
+		return BoolValue(false), nil
+	}
 	if left.Type() != TypeArray {
 		return BoolValue(false), nil
 	}
@@ -348,7 +391,7 @@ func (f *Filter) evaluateAllEqual(left, right Value) (Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !bool(result.(BoolValue)) {
+		if !result.IsTruthy() {
 			return BoolValue(false), nil
 		}
 	}
@@ -357,6 +400,9 @@ func (f *Filter) evaluateAllEqual(left, right Value) (Value, error) {
 }
 
 func (f *Filter) evaluateAnyNotEqual(left, right Value) (Value, error) {
+	if left == nil || right == nil {
+		return BoolValue(false), nil
+	}
 	if left.Type() != TypeArray {
 		return BoolValue(false), nil
 	}
@@ -371,7 +417,7 @@ func (f *Filter) evaluateAnyNotEqual(left, right Value) (Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !bool(result.(BoolValue)) {
+		if !result.IsTruthy() {
 			return BoolValue(true), nil
 		}
 	}

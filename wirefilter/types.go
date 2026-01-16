@@ -24,6 +24,7 @@ type Value interface {
 	Type() Type
 	Equal(other Value) bool
 	String() string
+	IsTruthy() bool
 }
 
 // StringValue represents a string value.
@@ -31,6 +32,7 @@ type StringValue string
 
 func (s StringValue) Type() Type     { return TypeString }
 func (s StringValue) String() string { return string(s) }
+func (s StringValue) IsTruthy() bool { return true }
 func (s StringValue) Equal(v Value) bool {
 	if v.Type() != TypeString {
 		return false
@@ -43,6 +45,7 @@ type IntValue int64
 
 func (i IntValue) Type() Type     { return TypeInt }
 func (i IntValue) String() string { return fmt.Sprintf("%d", i) }
+func (i IntValue) IsTruthy() bool { return true }
 func (i IntValue) Equal(v Value) bool {
 	if v.Type() != TypeInt {
 		return false
@@ -55,6 +58,7 @@ type BoolValue bool
 
 func (b BoolValue) Type() Type     { return TypeBool }
 func (b BoolValue) String() string { return fmt.Sprintf("%t", b) }
+func (b BoolValue) IsTruthy() bool { return bool(b) }
 func (b BoolValue) Equal(v Value) bool {
 	if v.Type() != TypeBool {
 		return false
@@ -69,6 +73,7 @@ type IPValue struct {
 
 func (ip IPValue) Type() Type     { return TypeIP }
 func (ip IPValue) String() string { return ip.IP.String() }
+func (ip IPValue) IsTruthy() bool { return true }
 func (ip IPValue) Equal(v Value) bool {
 	if v.Type() != TypeIP {
 		return false
@@ -81,6 +86,7 @@ type BytesValue []byte
 
 func (b BytesValue) Type() Type     { return TypeBytes }
 func (b BytesValue) String() string { return string(b) }
+func (b BytesValue) IsTruthy() bool { return true }
 func (b BytesValue) Equal(v Value) bool {
 	if v.Type() != TypeBytes {
 		return false
@@ -100,7 +106,8 @@ func (b BytesValue) Equal(v Value) bool {
 // ArrayValue represents an array of values.
 type ArrayValue []Value
 
-func (a ArrayValue) Type() Type { return TypeArray }
+func (a ArrayValue) Type() Type     { return TypeArray }
+func (a ArrayValue) IsTruthy() bool { return true }
 func (a ArrayValue) String() string {
 	parts := make([]string, len(a))
 	for i, v := range a {

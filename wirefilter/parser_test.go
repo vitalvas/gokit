@@ -174,4 +174,199 @@ func TestParser(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, TokenMatches, binExpr.Operator)
 	})
+
+	t.Run("parser errors method", func(t *testing.T) {
+		input := `field ==`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		_, err := parser.Parse()
+		assert.Error(t, err)
+		errors := parser.Errors()
+		assert.NotEmpty(t, errors)
+	})
+
+	t.Run("empty array expression", func(t *testing.T) {
+		input := `field in {}`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+		assert.NotNil(t, expr)
+
+		binExpr, ok := expr.(*BinaryExpr)
+		assert.True(t, ok)
+
+		arrayExpr, ok := binExpr.Right.(*ArrayExpr)
+		assert.True(t, ok)
+		assert.Empty(t, arrayExpr.Elements)
+	})
+
+	t.Run("range expression in array", func(t *testing.T) {
+		input := `status in {200..299}`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+		assert.NotNil(t, expr)
+
+		binExpr, ok := expr.(*BinaryExpr)
+		assert.True(t, ok)
+
+		arrayExpr, ok := binExpr.Right.(*ArrayExpr)
+		assert.True(t, ok)
+		assert.Equal(t, 1, len(arrayExpr.Elements))
+
+		rangeExpr, ok := arrayExpr.Elements[0].(*RangeExpr)
+		assert.True(t, ok)
+		assert.NotNil(t, rangeExpr.Start)
+		assert.NotNil(t, rangeExpr.End)
+	})
+
+	t.Run("mixed array with ranges", func(t *testing.T) {
+		input := `status in {100, 200..299, 400}`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+		assert.NotNil(t, expr)
+
+		binExpr, ok := expr.(*BinaryExpr)
+		assert.True(t, ok)
+
+		arrayExpr, ok := binExpr.Right.(*ArrayExpr)
+		assert.True(t, ok)
+		assert.Equal(t, 3, len(arrayExpr.Elements))
+	})
+
+	t.Run("ip token in expression", func(t *testing.T) {
+		input := `ip.src == ip.dst`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+		assert.NotNil(t, expr)
+	})
+
+	t.Run("precedence - or lower than and", func(t *testing.T) {
+		input := `a == 1 or b == 2 and c == 3`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+		assert.NotNil(t, expr)
+
+		binExpr, ok := expr.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenOr, binExpr.Operator)
+	})
+
+	t.Run("boolean literal true", func(t *testing.T) {
+		input := `active == true`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+
+		binExpr := expr.(*BinaryExpr)
+		literal := binExpr.Right.(*LiteralExpr)
+		assert.Equal(t, BoolValue(true), literal.Value)
+	})
+
+	t.Run("boolean literal false", func(t *testing.T) {
+		input := `active == false`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+
+		binExpr := expr.(*BinaryExpr)
+		literal := binExpr.Right.(*LiteralExpr)
+		assert.Equal(t, BoolValue(false), literal.Value)
+	})
+
+	t.Run("contains with array", func(t *testing.T) {
+		input := `tags contains {"a", "b"}`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+		assert.NotNil(t, expr)
+
+		binExpr, ok := expr.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenContains, binExpr.Operator)
+
+		arrayExpr, ok := binExpr.Right.(*ArrayExpr)
+		assert.True(t, ok)
+		assert.Equal(t, 2, len(arrayExpr.Elements))
+	})
+
+	t.Run("integer literal", func(t *testing.T) {
+		input := `status == 200`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+
+		binExpr := expr.(*BinaryExpr)
+		literal := binExpr.Right.(*LiteralExpr)
+		assert.Equal(t, IntValue(200), literal.Value)
+	})
+
+	t.Run("string literal", func(t *testing.T) {
+		input := `name == "test"`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+
+		binExpr := expr.(*BinaryExpr)
+		literal := binExpr.Right.(*LiteralExpr)
+		assert.Equal(t, StringValue("test"), literal.Value)
+	})
+
+	t.Run("in with string cidr", func(t *testing.T) {
+		input := `ip.src in "192.168.0.0/16"`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+
+		binExpr, ok := expr.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenIn, binExpr.Operator)
+
+		literal, ok := binExpr.Right.(*LiteralExpr)
+		assert.True(t, ok)
+		assert.Equal(t, StringValue("192.168.0.0/16"), literal.Value)
+	})
+
+	t.Run("contains with string", func(t *testing.T) {
+		input := `path contains "/api"`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+
+		binExpr, ok := expr.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenContains, binExpr.Operator)
+
+		literal, ok := binExpr.Right.(*LiteralExpr)
+		assert.True(t, ok)
+		assert.Equal(t, StringValue("/api"), literal.Value)
+	})
 }

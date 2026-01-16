@@ -194,4 +194,207 @@ func TestLexer(t *testing.T) {
 		tok = lexer.NextToken()
 		assert.Equal(t, TokenRBrace, tok.Type)
 	})
+
+	t.Run("string escape sequences", func(t *testing.T) {
+		input := `"hello\nworld\t\r\\\"test"`
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenString, tok.Type)
+		assert.Equal(t, "hello\nworld\t\r\\\"test", tok.Literal)
+	})
+
+	t.Run("string with unknown escape", func(t *testing.T) {
+		input := `"test\xvalue"`
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenString, tok.Type)
+		assert.Equal(t, "testxvalue", tok.Literal)
+	})
+
+	t.Run("unterminated string", func(t *testing.T) {
+		input := `"unterminated`
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenString, tok.Type)
+	})
+
+	t.Run("identifier with colon not ip", func(t *testing.T) {
+		input := "field:value"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "field:value", tok.Literal)
+	})
+
+	t.Run("identifier that looks like ip but isnt", func(t *testing.T) {
+		input := "abc:def:ghi"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+	})
+
+	t.Run("range token", func(t *testing.T) {
+		input := "1..10"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenInt, tok.Type)
+		assert.Equal(t, int64(1), tok.Value)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenRange, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenInt, tok.Type)
+		assert.Equal(t, int64(10), tok.Value)
+	})
+
+	t.Run("error method", func(t *testing.T) {
+		lexer := NewLexer("test")
+		err := lexer.Error("test error %s", "message")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "lexer error")
+		assert.Contains(t, err.Error(), "test error message")
+	})
+
+	t.Run("single dot not range", func(t *testing.T) {
+		input := "field.name"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "field.name", tok.Literal)
+	})
+
+	t.Run("looksLikeIP empty string", func(t *testing.T) {
+		input := `field == ""`
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+	})
+
+	t.Run("peek char at end", func(t *testing.T) {
+		input := "a"
+		lexer := NewLexer(input)
+		lexer.NextToken()
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenEOF, tok.Type)
+	})
+
+	t.Run("single ampersand", func(t *testing.T) {
+		input := "a & b"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenEOF, tok.Type)
+	})
+
+	t.Run("single pipe", func(t *testing.T) {
+		input := "a | b"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenEOF, tok.Type)
+	})
+
+	t.Run("single equals", func(t *testing.T) {
+		input := "a = b"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenEOF, tok.Type)
+	})
+
+	t.Run("single exclamation", func(t *testing.T) {
+		input := "a ! b"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenEOF, tok.Type)
+	})
+
+	t.Run("looksLikeIP with empty string check", func(t *testing.T) {
+		result := looksLikeIP("")
+		assert.False(t, result)
+	})
+
+	t.Run("looksLikeIP with letter only", func(t *testing.T) {
+		result := looksLikeIP("hostname")
+		assert.False(t, result)
+	})
+
+	t.Run("looksLikeIP with digit start", func(t *testing.T) {
+		result := looksLikeIP("192")
+		assert.True(t, result)
+	})
+
+	t.Run("looksLikeIP with colon", func(t *testing.T) {
+		result := looksLikeIP("abc:def")
+		assert.True(t, result)
+	})
+
+	t.Run("single dot", func(t *testing.T) {
+		input := "."
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenEOF, tok.Type)
+	})
+
+	t.Run("identifier with underscore", func(t *testing.T) {
+		input := "field_name"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "field_name", tok.Literal)
+	})
+
+	t.Run("identifier with hyphen", func(t *testing.T) {
+		input := "field-name"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "field-name", tok.Literal)
+	})
+
+	t.Run("identifier with slash", func(t *testing.T) {
+		input := "path/name"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "path/name", tok.Literal)
+	})
+
+	t.Run("uppercase keywords", func(t *testing.T) {
+		input := "AND OR NOT CONTAINS MATCHES IN TRUE FALSE"
+		lexer := NewLexer(input)
+
+		tests := []TokenType{TokenAnd, TokenOr, TokenNot, TokenContains, TokenMatches, TokenIn, TokenBool, TokenBool, TokenEOF}
+
+		for _, expected := range tests {
+			tok := lexer.NextToken()
+			assert.Equal(t, expected, tok.Type)
+		}
+	})
 }
