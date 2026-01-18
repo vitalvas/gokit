@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.0](https://github.com/vitalvas/gokit/compare/v0.24.0...v0.25.0) (2026-01-18)
+
+
+### Features
+
+* **wirefilter:** add field presence checking and array-to-array operations ([6b36711](https://github.com/vitalvas/gokit/commit/6b3671111fd82226321dccee96743cfd5b8ebb5f))
+
 ## [0.24.0](https://github.com/vitalvas/gokit/compare/v0.23.1...v0.24.0) (2026-01-14)
 
 
