@@ -32,10 +32,12 @@ const (
 	TokenIn       // in
 
 	// Delimiters
-	TokenLParen // (
-	TokenRParen // )
-	TokenLBrace // {
-	TokenRBrace // }
+	TokenLParen   // (
+	TokenRParen   // )
+	TokenLBrace   // {
+	TokenRBrace   // }
+	TokenLBracket // [
+	TokenRBracket // ]
 
 	// Separators
 	TokenComma // ,
@@ -67,6 +69,8 @@ var tokenNames = map[TokenType]string{
 	TokenRParen:   ")",
 	TokenLBrace:   "{",
 	TokenRBrace:   "}",
+	TokenLBracket: "[",
+	TokenRBracket: "]",
 	TokenComma:    ",",
 	TokenRange:    "..",
 }

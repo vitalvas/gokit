@@ -86,6 +86,10 @@ func (s *Schema) validateExpression(expr Expression) error {
 		if err := s.validateExpression(e.End); err != nil {
 			return err
 		}
+	case *IndexExpr:
+		if err := s.validateExpression(e.Object); err != nil {
+			return err
+		}
 	}
 	return nil
 }

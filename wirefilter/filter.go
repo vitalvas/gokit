@@ -100,6 +100,8 @@ func (f *Filter) evaluate(expr Expression, ctx *ExecutionContext) (Value, error)
 		return f.evaluateArrayExpr(e, ctx)
 	case *RangeExpr:
 		return f.evaluateRangeExpr(e, ctx)
+	case *IndexExpr:
+		return f.evaluateIndexExpr(e, ctx)
 	}
 	return nil, nil
 }
@@ -162,6 +164,35 @@ func (f *Filter) evaluateFieldExpr(expr *FieldExpr, ctx *ExecutionContext) (Valu
 		return nil, nil
 	}
 	return val, nil
+}
+
+func (f *Filter) evaluateIndexExpr(expr *IndexExpr, ctx *ExecutionContext) (Value, error) {
+	object, err := f.evaluate(expr.Object, ctx)
+	if err != nil {
+		return nil, err
+	}
+	if object == nil {
+		return nil, nil
+	}
+
+	index, err := f.evaluate(expr.Index, ctx)
+	if err != nil {
+		return nil, err
+	}
+	if index == nil {
+		return nil, nil
+	}
+
+	if object.Type() == TypeMap && index.Type() == TypeString {
+		mapVal := object.(MapValue)
+		key := string(index.(StringValue))
+		if val, ok := mapVal.Get(key); ok {
+			return val, nil
+		}
+		return nil, nil
+	}
+
+	return nil, nil
 }
 
 func (f *Filter) evaluateUnaryExpr(expr *UnaryExpr, ctx *ExecutionContext) (Value, error) {

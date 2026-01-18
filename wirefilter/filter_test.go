@@ -1721,4 +1721,270 @@ func TestFilter(t *testing.T) {
 		assert.NoError(t, err)
 		assert.False(t, result)
 	})
+
+	t.Run("map field access with bracket notation", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("user.attributes", TypeMap)
+
+		filter, err := Compile(`user.attributes["region"] == "us-west"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetMapField("user.attributes", map[string]string{"region": "us-west"})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetMapField("user.attributes", map[string]string{"region": "us-east"})
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("field-to-field comparison with map access", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("user.attributes", TypeMap).
+			AddField("device.vars", TypeMap)
+
+		filter, err := Compile(`user.attributes["region"] == device.vars["region"]`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetMapField("user.attributes", map[string]string{"region": "us-west"}).
+			SetMapField("device.vars", map[string]string{"region": "us-west"})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetMapField("user.attributes", map[string]string{"region": "us-west"}).
+			SetMapField("device.vars", map[string]string{"region": "us-east"})
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("field-to-field equality without bracket notation", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("user.region", TypeString).
+			AddField("device.region", TypeString)
+
+		filter, err := Compile(`user.region == device.region`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("user.region", "us-west").
+			SetStringField("device.region", "us-west")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetStringField("user.region", "us-west").
+			SetStringField("device.region", "us-east")
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("field-to-field comparison with int values", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("user.age", TypeInt).
+			AddField("limit.age", TypeInt)
+
+		filter, err := Compile(`user.age >= limit.age`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("user.age", 25).
+			SetIntField("limit.age", 18)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetIntField("user.age", 15).
+			SetIntField("limit.age", 18)
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("complex expression with field-to-field and map access", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("user.attributes", TypeMap).
+			AddField("device.vars", TypeMap).
+			AddField("user.active", TypeBool)
+
+		filter, err := Compile(`user.attributes["region"] == device.vars["region"] and user.active == true`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetMapField("user.attributes", map[string]string{"region": "us-west"}).
+			SetMapField("device.vars", map[string]string{"region": "us-west"}).
+			SetBoolField("user.active", true)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetMapField("user.attributes", map[string]string{"region": "us-west"}).
+			SetMapField("device.vars", map[string]string{"region": "us-west"}).
+			SetBoolField("user.active", false)
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("map access with missing key returns false", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("user.attributes", TypeMap)
+
+		filter, err := Compile(`user.attributes["region"] == "us-west"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetMapField("user.attributes", map[string]string{"other": "value"})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("map access with missing field returns false", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("user.attributes", TypeMap)
+
+		filter, err := Compile(`user.attributes["region"] == "us-west"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("map value equality", func(t *testing.T) {
+		ctx := NewExecutionContext().
+			SetMapField("attrs", map[string]string{"a": "1", "b": "2"})
+
+		val, ok := ctx.GetField("attrs")
+		assert.True(t, ok)
+		assert.Equal(t, TypeMap, val.Type())
+
+		mapVal := val.(MapValue)
+		v, exists := mapVal.Get("a")
+		assert.True(t, exists)
+		assert.Equal(t, StringValue("1"), v)
+
+		_, exists = mapVal.Get("missing")
+		assert.False(t, exists)
+	})
+
+	t.Run("map truthiness", func(t *testing.T) {
+		emptyMap := MapValue{}
+		assert.False(t, emptyMap.IsTruthy())
+
+		nonEmptyMap := MapValue{"key": StringValue("value")}
+		assert.True(t, nonEmptyMap.IsTruthy())
+	})
+
+	t.Run("map with int values", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("config", TypeMap)
+
+		filter, err := Compile(`config["port"] == 8080`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetMapFieldValues("config", map[string]Value{
+				"port": IntValue(8080),
+				"host": StringValue("localhost"),
+			})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("map with mixed value types comparison", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("user.settings", TypeMap).
+			AddField("default.settings", TypeMap)
+
+		filter, err := Compile(`user.settings["timeout"] == default.settings["timeout"]`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetMapFieldValues("user.settings", map[string]Value{
+				"timeout": IntValue(30),
+			}).
+			SetMapFieldValues("default.settings", map[string]Value{
+				"timeout": IntValue(30),
+			})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetMapFieldValues("user.settings", map[string]Value{
+				"timeout": IntValue(60),
+			}).
+			SetMapFieldValues("default.settings", map[string]Value{
+				"timeout": IntValue(30),
+			})
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("map with bool values", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("flags", TypeMap)
+
+		filter, err := Compile(`flags["enabled"] == true`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetMapFieldValues("flags", map[string]Value{
+				"enabled": BoolValue(true),
+			})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("map equality", func(t *testing.T) {
+		map1 := MapValue{"a": StringValue("1"), "b": StringValue("2")}
+		map2 := MapValue{"a": StringValue("1"), "b": StringValue("2")}
+		map3 := MapValue{"a": StringValue("1"), "b": StringValue("3")}
+		map4 := MapValue{"a": StringValue("1")}
+
+		assert.True(t, map1.Equal(map2))
+		assert.False(t, map1.Equal(map3))
+		assert.False(t, map1.Equal(map4))
+		assert.False(t, map1.Equal(StringValue("test")))
+	})
+
+	t.Run("map string representation", func(t *testing.T) {
+		m := MapValue{"key": StringValue("value")}
+		str := m.String()
+		assert.Contains(t, str, "key")
+		assert.Contains(t, str, "value")
+	})
 }

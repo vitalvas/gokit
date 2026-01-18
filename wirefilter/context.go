@@ -60,6 +60,25 @@ func (ctx *ExecutionContext) SetBytesField(name string, value []byte) *Execution
 	return ctx
 }
 
+// SetMapField sets a map field value in the execution context.
+// Accepts map[string]string and converts values to StringValue.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) SetMapField(name string, value map[string]string) *ExecutionContext {
+	m := make(MapValue, len(value))
+	for k, v := range value {
+		m[k] = StringValue(v)
+	}
+	ctx.fields[name] = m
+	return ctx
+}
+
+// SetMapFieldValues sets a map field with Value types in the execution context.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) SetMapFieldValues(name string, value map[string]Value) *ExecutionContext {
+	ctx.fields[name] = MapValue(value)
+	return ctx
+}
+
 // GetField retrieves a field value from the execution context.
 // Returns the value and true if found, or nil and false if not found.
 func (ctx *ExecutionContext) GetField(name string) (Value, bool) {

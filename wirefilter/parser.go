@@ -125,7 +125,38 @@ func (p *Parser) parseGroupedExpression() Expression {
 }
 
 func (p *Parser) parseFieldExpression() Expression {
-	return &FieldExpr{Name: p.curToken.Literal}
+	field := &FieldExpr{Name: p.curToken.Literal}
+
+	if p.peekToken.Type == TokenLBracket {
+		return p.parseIndexExpression(field)
+	}
+
+	return field
+}
+
+func (p *Parser) parseIndexExpression(object Expression) Expression {
+	p.nextToken() // consume [
+
+	p.nextToken() // move to the index expression
+	index := p.parseLiteralExpression()
+
+	if p.peekToken.Type != TokenRBracket {
+		p.addError("expected ], got %s", p.peekToken.Type)
+		return nil
+	}
+	p.nextToken() // consume ]
+
+	expr := &IndexExpr{
+		Object: object,
+		Index:  index,
+	}
+
+	// Support chained index expressions like field["a"]["b"]
+	if p.peekToken.Type == TokenLBracket {
+		return p.parseIndexExpression(expr)
+	}
+
+	return expr
 }
 
 func (p *Parser) parseLiteralExpression() Expression {

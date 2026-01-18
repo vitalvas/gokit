@@ -17,6 +17,7 @@ const (
 	TypeIP
 	TypeBytes
 	TypeArray
+	TypeMap
 )
 
 // Value is the interface that all value types must implement.
@@ -139,6 +140,42 @@ func (a ArrayValue) Contains(v Value) bool {
 		}
 	}
 	return false
+}
+
+// MapValue represents a map of string keys to Value.
+type MapValue map[string]Value
+
+func (m MapValue) Type() Type     { return TypeMap }
+func (m MapValue) IsTruthy() bool { return len(m) > 0 }
+func (m MapValue) String() string {
+	parts := make([]string, 0, len(m))
+	for k, v := range m {
+		parts = append(parts, fmt.Sprintf("%q: %s", k, v.String()))
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
+}
+func (m MapValue) Equal(v Value) bool {
+	if v.Type() != TypeMap {
+		return false
+	}
+	other := v.(MapValue)
+	if len(m) != len(other) {
+		return false
+	}
+	for k, val := range m {
+		otherVal, ok := other[k]
+		if !ok || !val.Equal(otherVal) {
+			return false
+		}
+	}
+	return true
+}
+
+// Get retrieves a value from the map by key.
+// Returns the value and true if found, or nil and false if not found.
+func (m MapValue) Get(key string) (Value, bool) {
+	val, ok := m[key]
+	return val, ok
 }
 
 // IPInCIDR checks if an IP address is within the specified CIDR range.

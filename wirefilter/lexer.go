@@ -104,6 +104,10 @@ func (l *Lexer) NextToken() Token {
 		tok = Token{Type: TokenLBrace, Literal: "{"}
 	case '}':
 		tok = Token{Type: TokenRBrace, Literal: "}"}
+	case '[':
+		tok = Token{Type: TokenLBracket, Literal: "["}
+	case ']':
+		tok = Token{Type: TokenRBracket, Literal: "]"}
 	case ',':
 		tok = Token{Type: TokenComma, Literal: ","}
 	case '.':

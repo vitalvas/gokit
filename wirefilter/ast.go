@@ -62,3 +62,12 @@ type RangeExpr struct {
 
 func (r *RangeExpr) node()       {}
 func (r *RangeExpr) expression() {}
+
+// IndexExpr represents an index expression for map access (e.g., user.attributes["region"]).
+type IndexExpr struct {
+	Object Expression // The object being indexed (typically a FieldExpr)
+	Index  Expression // The index key (typically a LiteralExpr with string value)
+}
+
+func (i *IndexExpr) node()       {}
+func (i *IndexExpr) expression() {}

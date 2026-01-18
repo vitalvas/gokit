@@ -12,7 +12,9 @@ inspired by Cloudflare's Wirefilter.
 - Membership operators: `in`, `contains`, `matches`
 - Field presence/absence checking
 - Range expressions: `{1..10}`
-- Multiple data types: string, int, bool, IP, bytes, arrays
+- Multiple data types: string, int, bool, IP, bytes, arrays, maps
+- Map field access with bracket notation
+- Field-to-field comparisons
 - IP/CIDR matching for IPv4 and IPv6
 - Regular expression matching
 - Schema validation for field references
@@ -84,6 +86,26 @@ http.user_agent matches "^Mozilla.*"
 http.host == "example.com" and http.status == 200
 http.status == 404 or http.status == 500
 not (http.status >= 500)
+```
+
+### Field-to-Field Comparisons
+
+Compare two fields directly:
+
+```go
+user.login == device.owner
+user.age >= minimum.age
+request.region == server.region
+```
+
+### Map Field Access
+
+Access values in map fields using bracket notation:
+
+```go
+user.attributes["region"] == "us-west"
+config["timeout"] == 30
+user.attributes["role"] == device.settings["required_role"]
 ```
 
 ### Field Presence Checking
@@ -222,6 +244,29 @@ ctx := wirefilter.NewExecutionContext().
     SetIPField("ip.src", "192.168.1.1")
 ```
 
+#### Setting Map Fields
+
+For map fields with string values:
+
+```go
+ctx := wirefilter.NewExecutionContext().
+    SetMapField("user.attributes", map[string]string{
+        "region": "us-west",
+        "role":   "admin",
+    })
+```
+
+For map fields with mixed value types:
+
+```go
+ctx := wirefilter.NewExecutionContext().
+    SetMapFieldValues("config", map[string]wirefilter.Value{
+        "timeout": wirefilter.IntValue(30),
+        "host":    wirefilter.StringValue("localhost"),
+        "enabled": wirefilter.BoolValue(true),
+    })
+```
+
 ### Executing a Filter
 
 Evaluate the filter against the context:
@@ -247,6 +292,7 @@ if result {
 | `TypeIP` | IP addresses (IPv4/IPv6) | `192.168.1.1`, `2001:db8::1` |
 | `TypeBytes` | Byte arrays | `[]byte("data")` |
 | `TypeArray` | Arrays of values | `{1, 2, 3}` |
+| `TypeMap` | Map of string keys to values | `map[string]string{"key": "value"}` |
 
 ## Operators
 
@@ -363,6 +409,32 @@ ctx := wirefilter.NewExecutionContext().
     SetStringField("environment", "production")
 
 matched, _ := filter.Execute(ctx)
+```
+
+### Field-to-Field and Map Access
+
+```go
+schema := wirefilter.NewSchema().
+    AddField("user.attributes", wirefilter.TypeMap).
+    AddField("device.vars", wirefilter.TypeMap).
+    AddField("user.login", wirefilter.TypeString).
+    AddField("device.owner", wirefilter.TypeString)
+
+// Compare map values from different fields
+expression := `
+    user.attributes["region"] == device.vars["region"] and
+    user.login == device.owner
+`
+
+filter, _ := wirefilter.Compile(expression, schema)
+
+ctx := wirefilter.NewExecutionContext().
+    SetMapField("user.attributes", map[string]string{"region": "us-west"}).
+    SetMapField("device.vars", map[string]string{"region": "us-west"}).
+    SetStringField("user.login", "john").
+    SetStringField("device.owner", "john")
+
+matched, _ := filter.Execute(ctx) // true
 ```
 
 ## Performance
