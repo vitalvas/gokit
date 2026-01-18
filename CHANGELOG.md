@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/vitalvas/gokit/compare/v0.25.0...v0.26.0) (2026-01-18)
+
+
+### Features
+
+* **wirefilter:** add map type support and field-to-field comparisons ([59a5c14](https://github.com/vitalvas/gokit/commit/59a5c14d364a5513b469ab7b1bb832ba5466d83f))
+
 ## [0.25.0](https://github.com/vitalvas/gokit/compare/v0.24.0...v0.25.0) (2026-01-18)
 
 
