@@ -26,10 +26,15 @@ const (
 	TokenOr  // or, ||
 	TokenNot // not
 
+	// Logical operators (additional)
+	TokenXor // xor, ^^
+
 	// Membership operators
-	TokenContains // contains
-	TokenMatches  // matches
-	TokenIn       // in
+	TokenContains       // contains
+	TokenMatches        // matches, ~
+	TokenIn             // in
+	TokenWildcard       // wildcard
+	TokenStrictWildcard // strict wildcard
 
 	// Delimiters
 	TokenLParen   // (
@@ -45,34 +50,37 @@ const (
 )
 
 var tokenNames = map[TokenType]string{
-	TokenEOF:      "EOF",
-	TokenIdent:    "IDENT",
-	TokenString:   "STRING",
-	TokenInt:      "INT",
-	TokenBool:     "BOOL",
-	TokenIP:       "IP",
-	TokenEq:       "==",
-	TokenNe:       "!=",
-	TokenAllEq:    "===",
-	TokenAnyNe:    "!==",
-	TokenLt:       "<",
-	TokenGt:       ">",
-	TokenLe:       "<=",
-	TokenGe:       ">=",
-	TokenAnd:      "&&",
-	TokenOr:       "||",
-	TokenNot:      "not",
-	TokenContains: "contains",
-	TokenMatches:  "matches",
-	TokenIn:       "in",
-	TokenLParen:   "(",
-	TokenRParen:   ")",
-	TokenLBrace:   "{",
-	TokenRBrace:   "}",
-	TokenLBracket: "[",
-	TokenRBracket: "]",
-	TokenComma:    ",",
-	TokenRange:    "..",
+	TokenEOF:            "EOF",
+	TokenIdent:          "IDENT",
+	TokenString:         "STRING",
+	TokenInt:            "INT",
+	TokenBool:           "BOOL",
+	TokenIP:             "IP",
+	TokenEq:             "==",
+	TokenNe:             "!=",
+	TokenAllEq:          "===",
+	TokenAnyNe:          "!==",
+	TokenLt:             "<",
+	TokenGt:             ">",
+	TokenLe:             "<=",
+	TokenGe:             ">=",
+	TokenAnd:            "&&",
+	TokenOr:             "||",
+	TokenNot:            "not",
+	TokenXor:            "^^",
+	TokenContains:       "contains",
+	TokenMatches:        "matches",
+	TokenIn:             "in",
+	TokenWildcard:       "wildcard",
+	TokenStrictWildcard: "strict wildcard",
+	TokenLParen:         "(",
+	TokenRParen:         ")",
+	TokenLBrace:         "{",
+	TokenRBrace:         "}",
+	TokenLBracket:       "[",
+	TokenRBracket:       "]",
+	TokenComma:          ",",
+	TokenRange:          "..",
 }
 
 // String returns the string representation of a token type.

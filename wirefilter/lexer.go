@@ -43,59 +43,80 @@ func (l *Lexer) skipWhitespace() {
 	}
 }
 
-// NextToken returns the next token from the input.
-func (l *Lexer) NextToken() Token {
-	l.skipWhitespace()
-
-	var tok Token
-
+// readOperatorToken handles multi-character operators.
+func (l *Lexer) readOperatorToken() (Token, bool) {
 	switch l.ch {
-	case 0:
-		tok = Token{Type: TokenEOF}
 	case '=':
 		if l.peekChar() == '=' {
 			l.readChar()
 			if l.peekChar() == '=' {
 				l.readChar()
-				tok = Token{Type: TokenAllEq, Literal: "==="}
-			} else {
-				tok = Token{Type: TokenEq, Literal: "=="}
+				return Token{Type: TokenAllEq, Literal: "==="}, true
 			}
+			return Token{Type: TokenEq, Literal: "=="}, true
 		}
 	case '!':
 		if l.peekChar() == '=' {
 			l.readChar()
 			if l.peekChar() == '=' {
 				l.readChar()
-				tok = Token{Type: TokenAnyNe, Literal: "!=="}
-			} else {
-				tok = Token{Type: TokenNe, Literal: "!="}
+				return Token{Type: TokenAnyNe, Literal: "!=="}, true
 			}
+			return Token{Type: TokenNe, Literal: "!="}, true
 		}
+		return Token{Type: TokenNot, Literal: "!"}, true
 	case '<':
 		if l.peekChar() == '=' {
 			l.readChar()
-			tok = Token{Type: TokenLe, Literal: "<="}
-		} else {
-			tok = Token{Type: TokenLt, Literal: "<"}
+			return Token{Type: TokenLe, Literal: "<="}, true
 		}
+		return Token{Type: TokenLt, Literal: "<"}, true
 	case '>':
 		if l.peekChar() == '=' {
 			l.readChar()
-			tok = Token{Type: TokenGe, Literal: ">="}
-		} else {
-			tok = Token{Type: TokenGt, Literal: ">"}
+			return Token{Type: TokenGe, Literal: ">="}, true
 		}
+		return Token{Type: TokenGt, Literal: ">"}, true
 	case '&':
 		if l.peekChar() == '&' {
 			l.readChar()
-			tok = Token{Type: TokenAnd, Literal: "&&"}
+			return Token{Type: TokenAnd, Literal: "&&"}, true
 		}
 	case '|':
 		if l.peekChar() == '|' {
 			l.readChar()
-			tok = Token{Type: TokenOr, Literal: "||"}
+			return Token{Type: TokenOr, Literal: "||"}, true
 		}
+	case '^':
+		if l.peekChar() == '^' {
+			l.readChar()
+			return Token{Type: TokenXor, Literal: "^^"}, true
+		}
+	case '.':
+		if l.peekChar() == '.' {
+			l.readChar()
+			return Token{Type: TokenRange, Literal: ".."}, true
+		}
+	}
+	return Token{}, false
+}
+
+// NextToken returns the next token from the input.
+func (l *Lexer) NextToken() Token {
+	l.skipWhitespace()
+
+	if tok, ok := l.readOperatorToken(); ok {
+		l.readChar()
+		return tok
+	}
+
+	var tok Token
+
+	switch l.ch {
+	case 0:
+		tok = Token{Type: TokenEOF}
+	case '~':
+		tok = Token{Type: TokenMatches, Literal: "~"}
 	case '(':
 		tok = Token{Type: TokenLParen, Literal: "("}
 	case ')':
@@ -110,11 +131,6 @@ func (l *Lexer) NextToken() Token {
 		tok = Token{Type: TokenRBracket, Literal: "]"}
 	case ',':
 		tok = Token{Type: TokenComma, Literal: ","}
-	case '.':
-		if l.peekChar() == '.' {
-			l.readChar()
-			tok = Token{Type: TokenRange, Literal: ".."}
-		}
 	case '"':
 		tok.Type = TokenString
 		tok.Literal = l.readString()
@@ -234,6 +250,37 @@ func (l *Lexer) readIdentifierToken() Token {
 		tok.Type = TokenMatches
 	case "in":
 		tok.Type = TokenIn
+	case "xor":
+		tok.Type = TokenXor
+	case "wildcard":
+		tok.Type = TokenWildcard
+	case "strict":
+		// Look ahead for "wildcard" to form "strict wildcard"
+		// Save position for potential rollback
+		savedPos := l.pos
+		savedCh := l.ch
+		l.skipWhitespace()
+		if l.ch != 0 && isLetter(l.ch) {
+			startPos := l.pos - 1
+			for isLetter(l.ch) || isDigit(l.ch) || l.ch == '.' || l.ch == '_' || l.ch == '-' || l.ch == ':' || l.ch == '/' {
+				l.readChar()
+			}
+			nextLiteral := l.input[startPos : l.pos-1]
+			if strings.ToLower(nextLiteral) == "wildcard" {
+				tok.Type = TokenStrictWildcard
+				tok.Literal = "strict wildcard"
+				return tok
+			}
+			// Not "wildcard", restore position and treat "strict" as identifier
+			l.pos = savedPos
+			l.ch = savedCh
+		} else {
+			// No following identifier, restore position
+			l.pos = savedPos
+			l.ch = savedCh
+		}
+		tok.Type = TokenIdent
+		tok.Value = literal
 	case "true":
 		tok.Type = TokenBool
 		tok.Value = true

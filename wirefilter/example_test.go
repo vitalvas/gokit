@@ -374,3 +374,129 @@ func Example_schemaWithMultipleFieldMaps() {
 	fmt.Println(result)
 	// Output: true
 }
+
+func Example_xorOperator() {
+	schema := wirefilter.NewSchema().
+		AddField("http.secure", wirefilter.TypeBool).
+		AddField("http.internal", wirefilter.TypeBool)
+
+	// XOR: true if exactly one condition is true
+	filter, _ := wirefilter.Compile(`http.secure xor http.internal`, schema)
+
+	ctx := wirefilter.NewExecutionContext().
+		SetBoolField("http.secure", true).
+		SetBoolField("http.internal", false)
+
+	result, _ := filter.Execute(ctx)
+	fmt.Println(result)
+	// Output: true
+}
+
+func Example_xorOperatorSymbol() {
+	schema := wirefilter.NewSchema().
+		AddField("a", wirefilter.TypeBool).
+		AddField("b", wirefilter.TypeBool)
+
+	// ^^ is alias for xor
+	filter, _ := wirefilter.Compile(`a ^^ b`, schema)
+
+	ctx := wirefilter.NewExecutionContext().
+		SetBoolField("a", false).
+		SetBoolField("b", true)
+
+	result, _ := filter.Execute(ctx)
+	fmt.Println(result)
+	// Output: true
+}
+
+func Example_wildcardOperator() {
+	schema := wirefilter.NewSchema().
+		AddField("http.host", wirefilter.TypeString)
+
+	// wildcard is case-insensitive glob matching
+	filter, _ := wirefilter.Compile(`http.host wildcard "*.example.com"`, schema)
+
+	ctx := wirefilter.NewExecutionContext().
+		SetStringField("http.host", "WWW.EXAMPLE.COM")
+
+	result, _ := filter.Execute(ctx)
+	fmt.Println(result)
+	// Output: true
+}
+
+func Example_strictWildcardOperator() {
+	schema := wirefilter.NewSchema().
+		AddField("http.host", wirefilter.TypeString)
+
+	// strict wildcard is case-sensitive glob matching
+	filter, _ := wirefilter.Compile(`http.host strict wildcard "*.Example.com"`, schema)
+
+	ctx := wirefilter.NewExecutionContext().
+		SetStringField("http.host", "www.Example.com")
+
+	result, _ := filter.Execute(ctx)
+	fmt.Println(result)
+	// Output: true
+}
+
+func Example_matchesTildeAlias() {
+	schema := wirefilter.NewSchema().
+		AddField("http.path", wirefilter.TypeString)
+
+	// ~ is alias for matches
+	filter, _ := wirefilter.Compile(`http.path ~ "^/api/v[0-9]+/"`, schema)
+
+	ctx := wirefilter.NewExecutionContext().
+		SetStringField("http.path", "/api/v2/users")
+
+	result, _ := filter.Execute(ctx)
+	fmt.Println(result)
+	// Output: true
+}
+
+func Example_notExclamationAlias() {
+	schema := wirefilter.NewSchema().
+		AddField("http.error", wirefilter.TypeBool)
+
+	// ! is alias for not
+	filter, _ := wirefilter.Compile(`! http.error`, schema)
+
+	ctx := wirefilter.NewExecutionContext().
+		SetBoolField("http.error", false)
+
+	result, _ := filter.Execute(ctx)
+	fmt.Println(result)
+	// Output: true
+}
+
+func Example_andDoubleAmpersandAlias() {
+	schema := wirefilter.NewSchema().
+		AddField("http.secure", wirefilter.TypeBool).
+		AddField("http.status", wirefilter.TypeInt)
+
+	// && is alias for and
+	filter, _ := wirefilter.Compile(`http.secure && http.status == 200`, schema)
+
+	ctx := wirefilter.NewExecutionContext().
+		SetBoolField("http.secure", true).
+		SetIntField("http.status", 200)
+
+	result, _ := filter.Execute(ctx)
+	fmt.Println(result)
+	// Output: true
+}
+
+func Example_orDoublePipeAlias() {
+	schema := wirefilter.NewSchema().
+		AddField("http.status", wirefilter.TypeInt)
+
+	// || is alias for or
+	filter, _ := wirefilter.Compile(`http.status == 404 || http.status == 500`, schema)
+
+	ctx := wirefilter.NewExecutionContext().
+		SetIntField("http.status", 404)
+
+	result, _ := filter.Execute(ctx)
+	fmt.Println(result)
+	// Output: true
+}

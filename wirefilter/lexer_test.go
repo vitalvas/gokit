@@ -74,12 +74,12 @@ func FuzzLexer(f *testing.F) {
 
 func TestLexer(t *testing.T) {
 	t.Run("operators", func(t *testing.T) {
-		input := "== != === !== < > <= >= && || and or not"
+		input := "== != === !== < > <= >= && || and or not ^^ xor ~ !"
 		lexer := NewLexer(input)
 
 		tests := []TokenType{
 			TokenEq, TokenNe, TokenAllEq, TokenAnyNe, TokenLt, TokenGt, TokenLe, TokenGe,
-			TokenAnd, TokenOr, TokenAnd, TokenOr, TokenNot, TokenEOF,
+			TokenAnd, TokenOr, TokenAnd, TokenOr, TokenNot, TokenXor, TokenXor, TokenMatches, TokenNot, TokenEOF,
 		}
 
 		for _, expected := range tests {
@@ -320,7 +320,7 @@ func TestLexer(t *testing.T) {
 		assert.Equal(t, TokenEOF, tok.Type)
 	})
 
-	t.Run("single exclamation", func(t *testing.T) {
+	t.Run("single exclamation as not operator", func(t *testing.T) {
 		input := "a ! b"
 		lexer := NewLexer(input)
 
@@ -328,7 +328,11 @@ func TestLexer(t *testing.T) {
 		assert.Equal(t, TokenIdent, tok.Type)
 
 		tok = lexer.NextToken()
-		assert.Equal(t, TokenEOF, tok.Type)
+		assert.Equal(t, TokenNot, tok.Type)
+		assert.Equal(t, "!", tok.Literal)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
 	})
 
 	t.Run("looksLikeIP with empty string check", func(t *testing.T) {
@@ -396,5 +400,131 @@ func TestLexer(t *testing.T) {
 			tok := lexer.NextToken()
 			assert.Equal(t, expected, tok.Type)
 		}
+	})
+
+	t.Run("tilde as matches alias", func(t *testing.T) {
+		input := `field ~ "pattern"`
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenMatches, tok.Type)
+		assert.Equal(t, "~", tok.Literal)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenString, tok.Type)
+	})
+
+	t.Run("xor operator symbol", func(t *testing.T) {
+		input := "a ^^ b"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenXor, tok.Type)
+		assert.Equal(t, "^^", tok.Literal)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+	})
+
+	t.Run("xor operator keyword", func(t *testing.T) {
+		input := "a xor b"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenXor, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+	})
+
+	t.Run("wildcard operator", func(t *testing.T) {
+		input := `field wildcard "*.example.com"`
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenWildcard, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenString, tok.Type)
+	})
+
+	t.Run("strict wildcard operator", func(t *testing.T) {
+		input := `field strict wildcard "*.Example.com"`
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "field", tok.Literal)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenStrictWildcard, tok.Type)
+		assert.Equal(t, "strict wildcard", tok.Literal)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenString, tok.Type)
+	})
+
+	t.Run("strict alone is identifier", func(t *testing.T) {
+		input := "strict"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "strict", tok.Literal)
+	})
+
+	t.Run("strict followed by non-wildcard is identifier", func(t *testing.T) {
+		input := "strict other"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "strict", tok.Literal)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "other", tok.Literal)
+	})
+
+	t.Run("single caret", func(t *testing.T) {
+		input := "a ^ b"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenEOF, tok.Type)
+	})
+
+	t.Run("uppercase wildcard keywords", func(t *testing.T) {
+		input := "WILDCARD XOR"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenWildcard, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenXor, tok.Type)
+	})
+
+	t.Run("strict wildcard case insensitive", func(t *testing.T) {
+		input := "STRICT WILDCARD"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenStrictWildcard, tok.Type)
 	})
 }

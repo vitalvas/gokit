@@ -2,12 +2,13 @@
 // It allows you to compile and evaluate filter expressions against runtime data.
 //
 // The filter language supports:
-//   - Logical operators: and, or, not, &&, ||
+//   - Logical operators: and, or, not, xor, &&, ||, !, ^^
 //   - Comparison operators: ==, !=, <, >, <=, >=
 //   - Array operators: === (all equal), !== (any not equal)
-//   - Membership operators: in, contains, matches
+//   - Membership operators: in, contains, matches (~)
+//   - Wildcard matching: wildcard, strict wildcard
 //   - Range expressions: {1..10}
-//   - Multiple data types: string, int, bool, IP, bytes, arrays
+//   - Multiple data types: string, int, bool, IP, bytes, arrays, maps
 //
 // Example:
 //
@@ -233,6 +234,11 @@ func (f *Filter) evaluateBinaryExpr(expr *BinaryExpr, ctx *ExecutionContext) (Va
 		rightTruthy := right != nil && right.IsTruthy()
 		return BoolValue(leftTruthy || rightTruthy), nil
 
+	case TokenXor:
+		leftTruthy := left != nil && left.IsTruthy()
+		rightTruthy := right != nil && right.IsTruthy()
+		return BoolValue(leftTruthy != rightTruthy), nil
+
 	case TokenEq:
 		return f.evaluateEquality(left, right)
 
@@ -269,6 +275,12 @@ func (f *Filter) evaluateBinaryExpr(expr *BinaryExpr, ctx *ExecutionContext) (Va
 
 	case TokenIn:
 		return f.evaluateIn(left, right)
+
+	case TokenWildcard:
+		return f.evaluateWildcard(left, right, false)
+
+	case TokenStrictWildcard:
+		return f.evaluateWildcard(left, right, true)
 	}
 
 	return BoolValue(false), nil
@@ -454,4 +466,49 @@ func (f *Filter) evaluateAnyNotEqual(left, right Value) (Value, error) {
 	}
 
 	return BoolValue(false), nil
+}
+
+func (f *Filter) evaluateWildcard(left, right Value, caseSensitive bool) (Value, error) {
+	if left == nil || right == nil {
+		return BoolValue(false), nil
+	}
+	if left.Type() != TypeString || right.Type() != TypeString {
+		return BoolValue(false), nil
+	}
+
+	pattern := string(right.(StringValue))
+	text := string(left.(StringValue))
+
+	regexPattern := globToRegex(pattern)
+	if !caseSensitive {
+		regexPattern = "(?i)" + regexPattern
+	}
+
+	re, err := f.getCompiledRegex(regexPattern)
+	if err != nil {
+		return BoolValue(false), err
+	}
+	return BoolValue(re.MatchString(text)), nil
+}
+
+func globToRegex(glob string) string {
+	var result []byte
+	result = append(result, '^')
+
+	for i := 0; i < len(glob); i++ {
+		ch := glob[i]
+		switch ch {
+		case '*':
+			result = append(result, '.', '*')
+		case '?':
+			result = append(result, '.')
+		case '.', '+', '^', '$', '(', ')', '[', ']', '{', '}', '|', '\\':
+			result = append(result, '\\', ch)
+		default:
+			result = append(result, ch)
+		}
+	}
+
+	result = append(result, '$')
+	return string(result)
 }

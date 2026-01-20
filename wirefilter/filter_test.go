@@ -1987,4 +1987,297 @@ func TestFilter(t *testing.T) {
 		assert.Contains(t, str, "key")
 		assert.Contains(t, str, "value")
 	})
+
+	t.Run("xor operator - truth table", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("a", TypeBool).
+			AddField("b", TypeBool)
+
+		filter, err := Compile(`a xor b`, schema)
+		assert.NoError(t, err)
+
+		testCases := []struct {
+			a, b     bool
+			expected bool
+		}{
+			{true, true, false},   // T xor T = F
+			{true, false, true},   // T xor F = T
+			{false, true, true},   // F xor T = T
+			{false, false, false}, // F xor F = F
+		}
+
+		for _, tc := range testCases {
+			ctx := NewExecutionContext().
+				SetBoolField("a", tc.a).
+				SetBoolField("b", tc.b)
+
+			result, err := filter.Execute(ctx)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expected, result, "a=%v xor b=%v", tc.a, tc.b)
+		}
+	})
+
+	t.Run("xor operator with symbol", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("a", TypeBool).
+			AddField("b", TypeBool)
+
+		filter, err := Compile(`a ^^ b`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetBoolField("a", true).
+			SetBoolField("b", false)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("wildcard operator - case insensitive", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("host", TypeString)
+
+		filter, err := Compile(`host wildcard "*.example.com"`, schema)
+		assert.NoError(t, err)
+
+		testCases := []struct {
+			host     string
+			expected bool
+		}{
+			{"www.example.com", true},
+			{"api.example.com", true},
+			{"WWW.EXAMPLE.COM", true}, // case insensitive
+			{"Api.Example.Com", true}, // case insensitive
+			{"example.com", false},    // no prefix
+			{"www.other.com", false},
+			{"www.example.org", false},
+		}
+
+		for _, tc := range testCases {
+			ctx := NewExecutionContext().
+				SetStringField("host", tc.host)
+
+			result, err := filter.Execute(ctx)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expected, result, "host=%s", tc.host)
+		}
+	})
+
+	t.Run("wildcard operator - multiple wildcards", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("path", TypeString)
+
+		filter, err := Compile(`path wildcard "/api/*/users/*"`, schema)
+		assert.NoError(t, err)
+
+		testCases := []struct {
+			path     string
+			expected bool
+		}{
+			{"/api/v1/users/123", true},
+			{"/api/v2/users/456", true},
+			{"/API/V1/USERS/789", true}, // case insensitive
+			{"/api/users/123", false},   // missing version segment
+			{"/web/v1/users/123", false},
+		}
+
+		for _, tc := range testCases {
+			ctx := NewExecutionContext().
+				SetStringField("path", tc.path)
+
+			result, err := filter.Execute(ctx)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expected, result, "path=%s", tc.path)
+		}
+	})
+
+	t.Run("strict wildcard operator - case sensitive", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("host", TypeString)
+
+		filter, err := Compile(`host strict wildcard "*.Example.com"`, schema)
+		assert.NoError(t, err)
+
+		testCases := []struct {
+			host     string
+			expected bool
+		}{
+			{"www.Example.com", true},
+			{"api.Example.com", true},
+			{"www.example.com", false}, // case sensitive - lowercase fails
+			{"WWW.EXAMPLE.COM", false}, // case sensitive - uppercase fails
+			{"www.Example.org", false},
+		}
+
+		for _, tc := range testCases {
+			ctx := NewExecutionContext().
+				SetStringField("host", tc.host)
+
+			result, err := filter.Execute(ctx)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expected, result, "host=%s", tc.host)
+		}
+	})
+
+	t.Run("wildcard with question mark", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("code", TypeString)
+
+		filter, err := Compile(`code wildcard "A?C"`, schema)
+		assert.NoError(t, err)
+
+		testCases := []struct {
+			code     string
+			expected bool
+		}{
+			{"ABC", true},
+			{"A1C", true},
+			{"abc", true}, // case insensitive
+			{"AC", false}, // missing char
+			{"ABBC", false},
+		}
+
+		for _, tc := range testCases {
+			ctx := NewExecutionContext().
+				SetStringField("code", tc.code)
+
+			result, err := filter.Execute(ctx)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expected, result, "code=%s", tc.code)
+		}
+	})
+
+	t.Run("wildcard with special regex chars escaped", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("path", TypeString)
+
+		filter, err := Compile(`path wildcard "/api/v1.0/*"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("path", "/api/v1.0/users")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		// Dot should be literal, not regex wildcard
+		ctx2 := NewExecutionContext().
+			SetStringField("path", "/api/v1X0/users")
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("matches with tilde alias", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("email", TypeString)
+
+		filter, err := Compile(`email ~ "^.*@example\\.com$"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("email", "user@example.com")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetStringField("email", "user@other.com")
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("not with exclamation alias", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("blocked", TypeBool)
+
+		filter, err := Compile(`! blocked`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetBoolField("blocked", false)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetBoolField("blocked", true)
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("wildcard with nil values", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("host", TypeString)
+
+		filter, err := Compile(`host wildcard "*.example.com"`, schema)
+		assert.NoError(t, err)
+
+		// Missing field
+		ctx := NewExecutionContext()
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("wildcard with non-string types", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("count", TypeInt)
+
+		filter, err := Compile(`count wildcard "123"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("count", 123)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result) // Non-string types should return false
+	})
+
+	t.Run("xor with nil values", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("a", TypeBool).
+			AddField("b", TypeBool)
+
+		filter, err := Compile(`a xor b`, schema)
+		assert.NoError(t, err)
+
+		// Only a is set
+		ctx := NewExecutionContext().
+			SetBoolField("a", true)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result) // true xor nil(false) = true
+	})
+
+	t.Run("globToRegex function", func(t *testing.T) {
+		testCases := []struct {
+			glob     string
+			expected string
+		}{
+			{"*", "^.*$"},
+			{"?", "^.$"},
+			{"*.txt", "^.*\\.txt$"},
+			{"file[1]", "^file\\[1\\]$"},
+			{"a+b", "^a\\+b$"},
+			{"test$var", "^test\\$var$"},
+		}
+
+		for _, tc := range testCases {
+			result := globToRegex(tc.glob)
+			assert.Equal(t, tc.expected, result, "glob=%s", tc.glob)
+		}
+	})
 }

@@ -6,10 +6,12 @@ import (
 )
 
 // Operator precedence levels for parsing expressions.
+// Precedence order (lowest to highest): OR < XOR < AND < EQUALS < COMPARE < MEMBERSHIP
 const (
 	_ int = iota
 	LOWEST
 	OR
+	XOR
 	AND
 	EQUALS
 	COMPARE
@@ -17,19 +19,22 @@ const (
 )
 
 var precedences = map[TokenType]int{
-	TokenOr:       OR,
-	TokenAnd:      AND,
-	TokenEq:       EQUALS,
-	TokenNe:       EQUALS,
-	TokenAllEq:    EQUALS,
-	TokenAnyNe:    EQUALS,
-	TokenLt:       COMPARE,
-	TokenGt:       COMPARE,
-	TokenLe:       COMPARE,
-	TokenGe:       COMPARE,
-	TokenContains: MEMBERSHIP,
-	TokenMatches:  MEMBERSHIP,
-	TokenIn:       MEMBERSHIP,
+	TokenOr:             OR,
+	TokenXor:            XOR,
+	TokenAnd:            AND,
+	TokenEq:             EQUALS,
+	TokenNe:             EQUALS,
+	TokenAllEq:          EQUALS,
+	TokenAnyNe:          EQUALS,
+	TokenLt:             COMPARE,
+	TokenGt:             COMPARE,
+	TokenLe:             COMPARE,
+	TokenGe:             COMPARE,
+	TokenContains:       MEMBERSHIP,
+	TokenMatches:        MEMBERSHIP,
+	TokenIn:             MEMBERSHIP,
+	TokenWildcard:       MEMBERSHIP,
+	TokenStrictWildcard: MEMBERSHIP,
 }
 
 // Parser parses tokens from a lexer into an abstract syntax tree.

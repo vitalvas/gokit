@@ -6,10 +6,11 @@ inspired by Cloudflare's Wirefilter.
 
 ## Features
 
-- Logical operators: `and`, `or`, `not`, `&&`, `||`
+- Logical operators: `and`, `or`, `not`, `xor`, `&&`, `||`, `!`, `^^`
 - Comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
 - Array operators: `===` (all equal), `!==` (any not equal)
-- Membership operators: `in`, `contains`, `matches`
+- Membership operators: `in`, `contains`, `matches` (`~`)
+- Wildcard matching: `wildcard` (case-insensitive), `strict wildcard` (case-sensitive)
 - Field presence/absence checking
 - Range expressions: `{1..10}`
 - Multiple data types: string, int, bool, IP, bytes, arrays, maps
@@ -78,14 +79,36 @@ http.status >= 500
 http.host == "example.com"
 http.path contains "/api"
 http.user_agent matches "^Mozilla.*"
+http.user_agent ~ "^Mozilla.*"              // ~ is alias for matches
 ```
+
+### Wildcard Matching
+
+Glob-style pattern matching with `*` (any chars) and `?` (single char):
+
+```go
+http.host wildcard "*.example.com"          // case-insensitive
+http.host wildcard "api?.example.com"       // ? matches single char
+http.host strict wildcard "*.Example.com"   // case-sensitive
+```
+
+Examples:
+- `"www.example.com" wildcard "*.example.com"` - true
+- `"WWW.EXAMPLE.COM" wildcard "*.example.com"` - true (case-insensitive)
+- `"WWW.Example.com" strict wildcard "*.Example.com"` - true
+- `"www.example.com" strict wildcard "*.Example.com"` - false (case-sensitive)
 
 ### Combining Conditions
 
 ```go
 http.host == "example.com" and http.status == 200
+http.host == "example.com" && http.status == 200   // && is alias for and
 http.status == 404 or http.status == 500
+http.status == 404 || http.status == 500           // || is alias for or
 not (http.status >= 500)
+! http.secure                                      // ! is alias for not
+http.secure xor http.authenticated                 // XOR: true if exactly one is true
+http.secure ^^ http.authenticated                  // ^^ is alias for xor
 ```
 
 ### Field-to-Field Comparisons
@@ -313,7 +336,8 @@ if result {
 |----------|-------------|---------|
 | `and`, `&&` | Logical AND | `a and b`, `a && b` |
 | `or`, `\|\|` | Logical OR | `a or b`, `a \|\| b` |
-| `not` | Logical NOT | `not a` |
+| `xor`, `^^` | Logical XOR (exclusive OR) | `a xor b`, `a ^^ b` |
+| `not`, `!` | Logical NOT | `not a`, `! a` |
 
 ### Membership Operators
 
@@ -321,7 +345,18 @@ if result {
 |----------|-------------|---------|
 | `in` | Value in array, IP in CIDR, or array ANY match | `port in {80, 443}` |
 | `contains` | String contains substring, or array ALL match | `path contains "/api"` |
-| `matches` | Regex match | `ua matches "^Mozilla"` |
+| `matches`, `~` | Regex match | `ua matches "^Mozilla"`, `ua ~ "^Mozilla"` |
+
+### Wildcard Operators
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `wildcard` | Glob pattern match (case-insensitive) | `host wildcard "*.example.com"` |
+| `strict wildcard` | Glob pattern match (case-sensitive) | `host strict wildcard "*.Example.com"` |
+
+Wildcard patterns support:
+- `*` matches any sequence of characters (including empty)
+- `?` matches any single character
 
 ### Array Operators
 
@@ -433,6 +468,46 @@ ctx := wirefilter.NewExecutionContext().
     SetMapField("device.vars", map[string]string{"region": "us-west"}).
     SetStringField("user.login", "john").
     SetStringField("device.owner", "john")
+
+matched, _ := filter.Execute(ctx) // true
+```
+
+### Wildcard Host Matching
+
+```go
+schema := wirefilter.NewSchema().
+    AddField("http.host", wirefilter.TypeString)
+
+// Case-insensitive wildcard matching
+filter, _ := wirefilter.Compile(`http.host wildcard "*.example.com"`, schema)
+
+ctx := wirefilter.NewExecutionContext().
+    SetStringField("http.host", "API.EXAMPLE.COM")
+
+matched, _ := filter.Execute(ctx) // true (case-insensitive)
+
+// Case-sensitive matching
+filterStrict, _ := wirefilter.Compile(`http.host strict wildcard "*.Example.com"`, schema)
+
+ctx2 := wirefilter.NewExecutionContext().
+    SetStringField("http.host", "api.Example.com")
+
+matched2, _ := filterStrict.Execute(ctx2) // true
+```
+
+### XOR Logic for Mutual Exclusion
+
+```go
+schema := wirefilter.NewSchema().
+    AddField("user.is_admin", wirefilter.TypeBool).
+    AddField("user.is_guest", wirefilter.TypeBool)
+
+// XOR: user must be either admin or guest, but not both
+filter, _ := wirefilter.Compile(`user.is_admin xor user.is_guest`, schema)
+
+ctx := wirefilter.NewExecutionContext().
+    SetBoolField("user.is_admin", true).
+    SetBoolField("user.is_guest", false)
 
 matched, _ := filter.Execute(ctx) // true
 ```

@@ -369,4 +369,116 @@ func TestParser(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, StringValue("/api"), literal.Value)
 	})
+
+	t.Run("xor expression with symbol", func(t *testing.T) {
+		input := `a == 1 ^^ b == 2`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+		assert.NotNil(t, expr)
+
+		binExpr, ok := expr.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenXor, binExpr.Operator)
+	})
+
+	t.Run("xor expression with keyword", func(t *testing.T) {
+		input := `a == 1 xor b == 2`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+		assert.NotNil(t, expr)
+
+		binExpr, ok := expr.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenXor, binExpr.Operator)
+	})
+
+	t.Run("precedence - xor between and and or", func(t *testing.T) {
+		// a or b xor c and d should parse as: a or ((b xor c) and d)
+		// which becomes: a or (b xor (c and d))
+		// Actually with OR < XOR < AND: a or (b xor (c and d))
+		input := `a == 1 or b == 2 xor c == 3 and d == 4`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+		assert.NotNil(t, expr)
+
+		// Top level should be OR (lowest precedence)
+		binExpr, ok := expr.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenOr, binExpr.Operator)
+
+		// Right side of OR should be XOR
+		rightBin, ok := binExpr.Right.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenXor, rightBin.Operator)
+
+		// Right side of XOR should be AND (highest precedence among these)
+		rightRightBin, ok := rightBin.Right.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenAnd, rightRightBin.Operator)
+	})
+
+	t.Run("matches with tilde alias", func(t *testing.T) {
+		input := `email ~ "^.*@example\\.com$"`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+		assert.NotNil(t, expr)
+
+		binExpr, ok := expr.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenMatches, binExpr.Operator)
+	})
+
+	t.Run("not with exclamation alias", func(t *testing.T) {
+		input := `! active`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+		assert.NotNil(t, expr)
+
+		unaryExpr, ok := expr.(*UnaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenNot, unaryExpr.Operator)
+	})
+
+	t.Run("wildcard expression", func(t *testing.T) {
+		input := `host wildcard "*.example.com"`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+		assert.NotNil(t, expr)
+
+		binExpr, ok := expr.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenWildcard, binExpr.Operator)
+	})
+
+	t.Run("strict wildcard expression", func(t *testing.T) {
+		input := `host strict wildcard "*.Example.com"`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+		assert.NotNil(t, expr)
+
+		binExpr, ok := expr.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenStrictWildcard, binExpr.Operator)
+	})
 }
