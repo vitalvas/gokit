@@ -41,6 +41,7 @@ func PeriodicRunWithSignal(
 	sigChan := make(chan os.Signal, 1)
 
 	signal.Notify(sigChan, signals...)
+	defer signal.Stop(sigChan)
 
 	for {
 		select {

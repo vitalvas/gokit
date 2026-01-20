@@ -195,7 +195,11 @@ func TestPeriodicRunWithSignal(t *testing.T) {
 
 		assert.GreaterOrEqual(t, finalCount, 1)
 
-		<-done
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Fatal("test cleanup timeout")
+		}
 	})
 
 	t.Run("stops on context cancellation", func(t *testing.T) {
@@ -258,15 +262,17 @@ func TestPeriodicRunWithSignal(t *testing.T) {
 	})
 
 	t.Run("handles multiple signals", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
 		counter := 0
 		var mu sync.Mutex
 		executed := make(chan struct{}, 3)
+		started := make(chan struct{})
 
 		done := make(chan error, 1)
 		go func() {
+			close(started)
 			done <- PeriodicRunWithSignal(ctx, func(_ context.Context) error {
 				mu.Lock()
 				counter++
@@ -276,8 +282,11 @@ func TestPeriodicRunWithSignal(t *testing.T) {
 				default:
 				}
 				return nil
-			}, 2*time.Second, syscall.SIGUSR1, syscall.SIGUSR2)
+			}, 10*time.Second, syscall.SIGUSR1, syscall.SIGUSR2)
 		}()
+
+		<-started
+		time.Sleep(50 * time.Millisecond)
 
 		proc, err := os.FindProcess(os.Getpid())
 		require.NoError(t, err)
@@ -285,14 +294,22 @@ func TestPeriodicRunWithSignal(t *testing.T) {
 		err = proc.Signal(syscall.SIGUSR1)
 		require.NoError(t, err)
 
-		<-executed
+		select {
+		case <-executed:
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("first signal execution timeout")
+		}
 
 		time.Sleep(50 * time.Millisecond)
 
 		err = proc.Signal(syscall.SIGUSR2)
 		require.NoError(t, err)
 
-		<-executed
+		select {
+		case <-executed:
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("second signal execution timeout")
+		}
 
 		mu.Lock()
 		count := counter
@@ -300,6 +317,12 @@ func TestPeriodicRunWithSignal(t *testing.T) {
 
 		assert.GreaterOrEqual(t, count, 2)
 
-		<-done
+		cancel()
+
+		select {
+		case <-done:
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("test cleanup timeout")
+		}
 	})
 }
