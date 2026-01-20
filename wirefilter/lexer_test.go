@@ -218,7 +218,7 @@ func TestLexer(t *testing.T) {
 		lexer := NewLexer(input)
 
 		tok := lexer.NextToken()
-		assert.Equal(t, TokenString, tok.Type)
+		assert.Equal(t, TokenError, tok.Type)
 	})
 
 	t.Run("identifier with colon not ip", func(t *testing.T) {
@@ -295,7 +295,7 @@ func TestLexer(t *testing.T) {
 		assert.Equal(t, TokenIdent, tok.Type)
 
 		tok = lexer.NextToken()
-		assert.Equal(t, TokenEOF, tok.Type)
+		assert.Equal(t, TokenError, tok.Type) // Unknown character
 	})
 
 	t.Run("single pipe", func(t *testing.T) {
@@ -306,7 +306,7 @@ func TestLexer(t *testing.T) {
 		assert.Equal(t, TokenIdent, tok.Type)
 
 		tok = lexer.NextToken()
-		assert.Equal(t, TokenEOF, tok.Type)
+		assert.Equal(t, TokenError, tok.Type) // Unknown character
 	})
 
 	t.Run("single equals", func(t *testing.T) {
@@ -317,7 +317,7 @@ func TestLexer(t *testing.T) {
 		assert.Equal(t, TokenIdent, tok.Type)
 
 		tok = lexer.NextToken()
-		assert.Equal(t, TokenEOF, tok.Type)
+		assert.Equal(t, TokenError, tok.Type) // Unknown character
 	})
 
 	t.Run("single exclamation as not operator", func(t *testing.T) {
@@ -360,7 +360,7 @@ func TestLexer(t *testing.T) {
 		lexer := NewLexer(input)
 
 		tok := lexer.NextToken()
-		assert.Equal(t, TokenEOF, tok.Type)
+		assert.Equal(t, TokenError, tok.Type) // Unknown character
 	})
 
 	t.Run("identifier with underscore", func(t *testing.T) {
@@ -506,7 +506,7 @@ func TestLexer(t *testing.T) {
 		assert.Equal(t, TokenIdent, tok.Type)
 
 		tok = lexer.NextToken()
-		assert.Equal(t, TokenEOF, tok.Type)
+		assert.Equal(t, TokenError, tok.Type) // Unknown character
 	})
 
 	t.Run("uppercase wildcard keywords", func(t *testing.T) {

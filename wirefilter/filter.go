@@ -37,14 +37,18 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // Filter represents a compiled filter expression that can be executed against an execution context.
+// Filter is safe for concurrent use across goroutines.
 type Filter struct {
 	expr       Expression
 	schema     *Schema
 	regexCache map[string]*regexp.Regexp
+	regexMu    sync.RWMutex
 	cidrCache  map[string]*net.IPNet
+	cidrMu     sync.RWMutex
 }
 
 // Compile parses and compiles a filter expression string into an executable Filter.
@@ -148,7 +152,7 @@ func (f *Filter) evaluateRangeExpr(expr *RangeExpr, ctx *ExecutionContext) (Valu
 		return nil, err
 	}
 
-	if start.Type() != TypeInt || end.Type() != TypeInt {
+	if start == nil || end == nil || start.Type() != TypeInt || end.Type() != TypeInt {
 		return ArrayValue([]Value{}), nil
 	}
 
@@ -255,12 +259,59 @@ func (f *Filter) evaluateUnaryExpr(expr *UnaryExpr, ctx *ExecutionContext) (Valu
 	return nil, nil
 }
 
+// evaluateLogicalOp handles short-circuit evaluation for logical operators (and, or, xor).
+// Returns (result, handled, error) where handled=true if this was a logical operator.
+func (f *Filter) evaluateLogicalOp(expr *BinaryExpr, left Value, ctx *ExecutionContext) (Value, bool, error) {
+	switch expr.Operator {
+	case TokenAnd:
+		leftTruthy := left != nil && left.IsTruthy()
+		if !leftTruthy {
+			return BoolValue(false), true, nil // Short-circuit: false and X = false
+		}
+		right, err := f.evaluate(expr.Right, ctx)
+		if err != nil {
+			return nil, true, err
+		}
+		rightTruthy := right != nil && right.IsTruthy()
+		return BoolValue(rightTruthy), true, nil
+
+	case TokenOr:
+		leftTruthy := left != nil && left.IsTruthy()
+		if leftTruthy {
+			return BoolValue(true), true, nil // Short-circuit: true or X = true
+		}
+		right, err := f.evaluate(expr.Right, ctx)
+		if err != nil {
+			return nil, true, err
+		}
+		rightTruthy := right != nil && right.IsTruthy()
+		return BoolValue(rightTruthy), true, nil
+
+	case TokenXor:
+		// XOR cannot short-circuit - both sides needed
+		right, err := f.evaluate(expr.Right, ctx)
+		if err != nil {
+			return nil, true, err
+		}
+		leftTruthy := left != nil && left.IsTruthy()
+		rightTruthy := right != nil && right.IsTruthy()
+		return BoolValue(leftTruthy != rightTruthy), true, nil
+	}
+	return nil, false, nil
+}
+
 func (f *Filter) evaluateBinaryExpr(expr *BinaryExpr, ctx *ExecutionContext) (Value, error) {
 	left, err := f.evaluate(expr.Left, ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	// Handle logical operators with short-circuit evaluation
+	if result, handled, err := f.evaluateLogicalOp(expr, left, ctx); handled {
+		return result, err
+	}
+
+	// For non-logical operators, evaluate right side
 	right, err := f.evaluate(expr.Right, ctx)
 	if err != nil {
 		return nil, err
@@ -272,21 +323,6 @@ func (f *Filter) evaluateBinaryExpr(expr *BinaryExpr, ctx *ExecutionContext) (Va
 	}
 
 	switch expr.Operator {
-	case TokenAnd:
-		leftTruthy := left != nil && left.IsTruthy()
-		rightTruthy := right != nil && right.IsTruthy()
-		return BoolValue(leftTruthy && rightTruthy), nil
-
-	case TokenOr:
-		leftTruthy := left != nil && left.IsTruthy()
-		rightTruthy := right != nil && right.IsTruthy()
-		return BoolValue(leftTruthy || rightTruthy), nil
-
-	case TokenXor:
-		leftTruthy := left != nil && left.IsTruthy()
-		rightTruthy := right != nil && right.IsTruthy()
-		return BoolValue(leftTruthy != rightTruthy), nil
-
 	case TokenEq:
 		return f.evaluateEquality(left, right)
 
@@ -460,14 +496,21 @@ func (f *Filter) evaluateMatches(left, right Value) (Value, error) {
 }
 
 func (f *Filter) getCompiledRegex(pattern string) (*regexp.Regexp, error) {
+	f.regexMu.RLock()
 	if re, ok := f.regexCache[pattern]; ok {
+		f.regexMu.RUnlock()
 		return re, nil
 	}
+	f.regexMu.RUnlock()
+
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return nil, err
 	}
+
+	f.regexMu.Lock()
 	f.regexCache[pattern] = re
+	f.regexMu.Unlock()
 	return re, nil
 }
 
@@ -505,14 +548,21 @@ func (f *Filter) evaluateIn(left, right Value) (Value, error) {
 }
 
 func (f *Filter) getParsedCIDR(cidr string) (*net.IPNet, error) {
+	f.cidrMu.RLock()
 	if ipNet, ok := f.cidrCache[cidr]; ok {
+		f.cidrMu.RUnlock()
 		return ipNet, nil
 	}
+	f.cidrMu.RUnlock()
+
 	_, ipNet, err := net.ParseCIDR(cidr)
 	if err != nil {
 		return nil, err
 	}
+
+	f.cidrMu.Lock()
 	f.cidrCache[cidr] = ipNet
+	f.cidrMu.Unlock()
 	return ipNet, nil
 }
 

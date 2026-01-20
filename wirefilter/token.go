@@ -52,6 +52,7 @@ const (
 	// Special tokens
 	TokenAsterisk // *
 	TokenListRef  // $list_name
+	TokenError    // lexer error
 )
 
 var tokenNames = map[TokenType]string{
@@ -89,6 +90,7 @@ var tokenNames = map[TokenType]string{
 	TokenRange:          "..",
 	TokenAsterisk:       "*",
 	TokenListRef:        "$",
+	TokenError:          "ERROR",
 }
 
 // String returns the string representation of a token type.

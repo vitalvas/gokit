@@ -1894,8 +1894,9 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("map truthiness", func(t *testing.T) {
+		// Maps are truthy when present (field presence semantics)
 		emptyMap := MapValue{}
-		assert.False(t, emptyMap.IsTruthy())
+		assert.True(t, emptyMap.IsTruthy())
 
 		nonEmptyMap := MapValue{"key": StringValue("value")}
 		assert.True(t, nonEmptyMap.IsTruthy())
@@ -3660,14 +3661,11 @@ func TestFilter(t *testing.T) {
 		assert.False(t, result)
 	})
 
-	t.Run("index with nil index", func(t *testing.T) {
-		filter, err := Compile(`tags[idx] == "test"`, nil)
-		assert.NoError(t, err)
-
-		ctx := NewExecutionContext().SetArrayField("tags", []string{"a", "b"})
-		result, err := filter.Execute(ctx)
-		assert.NoError(t, err)
-		assert.False(t, result)
+	t.Run("index with non-literal index rejected", func(t *testing.T) {
+		// Non-literal indices like tags[idx] are rejected at parse time
+		_, err := Compile(`tags[idx] == "test"`, nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "index must be a string or integer literal")
 	})
 
 	t.Run("unpack on nil array", func(t *testing.T) {
@@ -3698,5 +3696,149 @@ func TestFilter(t *testing.T) {
 		result, err := filter.Execute(ctx)
 		assert.NoError(t, err)
 		assert.False(t, result)
+	})
+
+	// Tests for report.md fixes
+
+	t.Run("range with nil start value", func(t *testing.T) {
+		filter, err := Compile(`x in {missing..10}`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("x", 5)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("range with nil end value", func(t *testing.T) {
+		filter, err := Compile(`x in {1..missing}`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("x", 5)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("short-circuit and - false and error", func(t *testing.T) {
+		// false and (error expression) should not evaluate right side
+		filter, err := Compile(`false and (name matches "[")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("name", "test")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("short-circuit or - true or error", func(t *testing.T) {
+		// true or (error expression) should not evaluate right side
+		filter, err := Compile(`true or (name matches "[")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("name", "test")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("xor evaluates both sides", func(t *testing.T) {
+		filter, err := Compile(`true xor false`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("lexer error - unterminated string", func(t *testing.T) {
+		_, err := Compile(`name == "unterminated`, nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("lexer error - integer overflow", func(t *testing.T) {
+		_, err := Compile(`x == 99999999999999999999999999999`, nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "integer overflow")
+	})
+
+	t.Run("lexer error - unknown character", func(t *testing.T) {
+		// A single @ at the start triggers lexer error
+		_, err := Compile(`@`, nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unexpected character")
+	})
+
+	t.Run("array with nil element string", func(t *testing.T) {
+		arr := ArrayValue{StringValue("a"), nil, StringValue("c")}
+		str := arr.String()
+		assert.Contains(t, str, "nil")
+	})
+
+	t.Run("array equal with nil elements", func(t *testing.T) {
+		arr1 := ArrayValue{StringValue("a"), nil}
+		arr2 := ArrayValue{StringValue("a"), nil}
+		assert.True(t, arr1.Equal(arr2))
+
+		arr3 := ArrayValue{StringValue("a"), StringValue("b")}
+		assert.False(t, arr1.Equal(arr3))
+	})
+
+	t.Run("array contains nil", func(t *testing.T) {
+		arr := ArrayValue{StringValue("a"), nil, StringValue("c")}
+		assert.True(t, arr.Contains(nil))
+		assert.True(t, arr.Contains(StringValue("a")))
+		assert.False(t, arr.Contains(StringValue("b")))
+	})
+
+	t.Run("map with nil value string", func(t *testing.T) {
+		m := MapValue{"a": StringValue("x"), "b": nil}
+		str := m.String()
+		assert.Contains(t, str, "nil")
+	})
+
+	t.Run("map equal with nil values", func(t *testing.T) {
+		m1 := MapValue{"a": nil}
+		m2 := MapValue{"a": nil}
+		assert.True(t, m1.Equal(m2))
+
+		m3 := MapValue{"a": StringValue("x")}
+		assert.False(t, m1.Equal(m3))
+	})
+
+	t.Run("unterminated raw string", func(t *testing.T) {
+		_, err := Compile(`name == r"unterminated`, nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unterminated raw string")
+	})
+
+	t.Run("trailing garbage - single ampersand", func(t *testing.T) {
+		// "a & b" should fail - single & is not a valid operator
+		_, err := Compile(`a & b`, nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("trailing garbage - unterminated string after valid expr", func(t *testing.T) {
+		// Should fail with lexer error in trailing position
+		_, err := Compile(`a "unterminated`, nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("trailing garbage - extra identifier", func(t *testing.T) {
+		_, err := Compile(`a b`, nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unexpected trailing token")
+	})
+
+	t.Run("function result indexing is valid", func(t *testing.T) {
+		// split(x, ",")[0] should be valid - indexing function result
+		filter, err := Compile(`split(name, ",")[0] == "a"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("name", "a,b,c")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
 	})
 }

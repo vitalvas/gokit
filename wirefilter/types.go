@@ -112,12 +112,16 @@ func (a ArrayValue) IsTruthy() bool { return true }
 func (a ArrayValue) String() string {
 	parts := make([]string, len(a))
 	for i, v := range a {
-		parts[i] = v.String()
+		if v == nil {
+			parts[i] = "nil"
+		} else {
+			parts[i] = v.String()
+		}
 	}
 	return "[" + strings.Join(parts, ", ") + "]"
 }
 func (a ArrayValue) Equal(v Value) bool {
-	if v.Type() != TypeArray {
+	if v == nil || v.Type() != TypeArray {
 		return false
 	}
 	other := v.(ArrayValue)
@@ -125,6 +129,12 @@ func (a ArrayValue) Equal(v Value) bool {
 		return false
 	}
 	for i := range a {
+		if a[i] == nil && other[i] == nil {
+			continue
+		}
+		if a[i] == nil || other[i] == nil {
+			return false
+		}
 		if !a[i].Equal(other[i]) {
 			return false
 		}
@@ -135,6 +145,15 @@ func (a ArrayValue) Equal(v Value) bool {
 // Contains checks if the array contains the specified value.
 func (a ArrayValue) Contains(v Value) bool {
 	for _, item := range a {
+		if item == nil {
+			if v == nil {
+				return true
+			}
+			continue
+		}
+		if v == nil {
+			continue // item is non-nil, v is nil - no match
+		}
 		if item.Equal(v) {
 			return true
 		}
@@ -146,16 +165,20 @@ func (a ArrayValue) Contains(v Value) bool {
 type MapValue map[string]Value
 
 func (m MapValue) Type() Type     { return TypeMap }
-func (m MapValue) IsTruthy() bool { return len(m) > 0 }
+func (m MapValue) IsTruthy() bool { return true } // Present maps are truthy (field presence semantics)
 func (m MapValue) String() string {
 	parts := make([]string, 0, len(m))
 	for k, v := range m {
-		parts = append(parts, fmt.Sprintf("%q: %s", k, v.String()))
+		if v == nil {
+			parts = append(parts, fmt.Sprintf("%q: nil", k))
+		} else {
+			parts = append(parts, fmt.Sprintf("%q: %s", k, v.String()))
+		}
 	}
 	return "{" + strings.Join(parts, ", ") + "}"
 }
 func (m MapValue) Equal(v Value) bool {
-	if v.Type() != TypeMap {
+	if v == nil || v.Type() != TypeMap {
 		return false
 	}
 	other := v.(MapValue)
@@ -164,7 +187,16 @@ func (m MapValue) Equal(v Value) bool {
 	}
 	for k, val := range m {
 		otherVal, ok := other[k]
-		if !ok || !val.Equal(otherVal) {
+		if !ok {
+			return false
+		}
+		if val == nil && otherVal == nil {
+			continue
+		}
+		if val == nil || otherVal == nil {
+			return false
+		}
+		if !val.Equal(otherVal) {
 			return false
 		}
 	}

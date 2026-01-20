@@ -68,9 +68,21 @@ func (p *Parser) addError(format string, args ...interface{}) {
 }
 
 // Parse parses the input and returns an expression tree.
-// Returns an error if parsing fails.
+// Returns an error if parsing fails or if there is trailing input.
 func (p *Parser) Parse() (Expression, error) {
 	expr := p.parseExpression(LOWEST)
+
+	// Check for trailing tokens (garbage after valid expression)
+	if p.peekToken.Type == TokenError {
+		if errMsg, ok := p.peekToken.Value.(string); ok {
+			p.addError("lexer error: %s", errMsg)
+		} else {
+			p.addError("lexer error at: %s", p.peekToken.Literal)
+		}
+	} else if p.peekToken.Type != TokenEOF {
+		p.addError("unexpected trailing token: %s", p.peekToken.Type)
+	}
+
 	if len(p.errors) > 0 {
 		return nil, fmt.Errorf("parse errors: %v", p.errors)
 	}
@@ -81,6 +93,14 @@ func (p *Parser) parseExpression(precedence int) Expression {
 	var left Expression
 
 	switch p.curToken.Type {
+	case TokenError:
+		// Propagate lexer error
+		if errMsg, ok := p.curToken.Value.(string); ok {
+			p.addError("lexer error: %s", errMsg)
+		} else {
+			p.addError("lexer error at: %s", p.curToken.Literal)
+		}
+		return nil
 	case TokenNot:
 		left = p.parseUnaryExpression()
 	case TokenLParen:
@@ -138,7 +158,12 @@ func (p *Parser) parseFieldExpression() Expression {
 
 	// Check if this is a function call (identifier followed by '(')
 	if p.peekToken.Type == TokenLParen {
-		return p.parseFunctionCallExpression(name)
+		expr := p.parseFunctionCallExpression(name)
+		// Check for array index on function result: func()[0]
+		if p.peekToken.Type == TokenLBracket {
+			return p.parseIndexExpression(expr)
+		}
+		return expr
 	}
 
 	field := &FieldExpr{Name: name}
@@ -195,6 +220,15 @@ func (p *Parser) parseIndexExpression(object Expression) Expression {
 		}
 		p.nextToken() // consume ]
 		return &UnpackExpr{Array: object}
+	}
+
+	// Validate index is a literal type (string or int)
+	switch p.curToken.Type {
+	case TokenString, TokenRawString, TokenInt:
+		// Valid index types
+	default:
+		p.addError("index must be a string or integer literal, got %s", p.curToken.Type)
+		return nil
 	}
 
 	index := p.parseLiteralExpression()

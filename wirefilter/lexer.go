@@ -132,9 +132,12 @@ func (l *Lexer) NextToken() Token {
 	case ',':
 		tok = Token{Type: TokenComma, Literal: ","}
 	case '"':
-		tok.Type = TokenString
-		tok.Literal = l.readString()
-		tok.Value = tok.Literal
+		tok.Literal, tok.Value = l.readString()
+		if tok.Value == nil {
+			tok.Type = TokenError
+		} else {
+			tok.Type = TokenString
+		}
 	case '*':
 		tok = Token{Type: TokenAsterisk, Literal: "*"}
 	case '$':
@@ -148,7 +151,7 @@ func (l *Lexer) NextToken() Token {
 		case isDigit(l.ch) || (l.ch == '-' && isDigit(l.peekChar())):
 			return l.readNumberToken()
 		default:
-			tok = Token{Type: TokenEOF, Literal: string(l.ch)}
+			tok = Token{Type: TokenError, Literal: string(l.ch), Value: "unexpected character: " + string(l.ch)}
 		}
 	}
 
@@ -156,7 +159,7 @@ func (l *Lexer) NextToken() Token {
 	return tok
 }
 
-func (l *Lexer) readString() string {
+func (l *Lexer) readString() (string, any) {
 	l.readChar()
 	start := l.pos - 1
 
@@ -170,9 +173,15 @@ func (l *Lexer) readString() string {
 		l.readChar()
 	}
 
+	// Check for unterminated string
+	if l.ch == 0 && !hasEscape {
+		return l.input[start : l.pos-1], nil // nil value indicates error
+	}
+
 	// If no escapes, return substring directly (zero allocation)
 	if !hasEscape {
-		return l.input[start : l.pos-1]
+		result := l.input[start : l.pos-1]
+		return result, result
 	}
 
 	// Slow path: handle escape sequences
@@ -205,7 +214,14 @@ func (l *Lexer) readString() string {
 		}
 		l.readChar()
 	}
-	return result.String()
+
+	// Check for unterminated string
+	if l.ch == 0 {
+		return result.String(), nil // nil value indicates error
+	}
+
+	str := result.String()
+	return str, str
 }
 
 func (l *Lexer) readIdentifier() string {
@@ -227,7 +243,7 @@ func (l *Lexer) readNumber() string {
 	return l.input[start : l.pos-1]
 }
 
-func (l *Lexer) readRawString() string {
+func (l *Lexer) readRawString() (string, bool) {
 	l.readChar() // consume opening "
 	start := l.pos - 1
 
@@ -235,7 +251,11 @@ func (l *Lexer) readRawString() string {
 		l.readChar()
 	}
 
-	return l.input[start : l.pos-1]
+	if l.ch == 0 {
+		return l.input[start : l.pos-1], false // unterminated
+	}
+
+	return l.input[start : l.pos-1], true
 }
 
 func (l *Lexer) readListName() string {
@@ -263,7 +283,14 @@ func (l *Lexer) readIdentifierToken() Token {
 	// Check for raw string r"..."
 	if l.ch == 'r' && l.peekChar() == '"' {
 		l.readChar() // consume 'r'
-		literal := l.readRawString()
+		literal, ok := l.readRawString()
+		if !ok {
+			return Token{
+				Type:    TokenError,
+				Literal: literal,
+				Value:   "unterminated raw string",
+			}
+		}
 		l.readChar() // consume closing "
 		return Token{
 			Type:    TokenRawString,
@@ -365,7 +392,14 @@ func looksLikeIP(s string) bool {
 
 func (l *Lexer) readNumberToken() Token {
 	literal := l.readNumber()
-	val, _ := strconv.ParseInt(literal, 10, 64)
+	val, err := strconv.ParseInt(literal, 10, 64)
+	if err != nil {
+		return Token{
+			Type:    TokenError,
+			Literal: literal,
+			Value:   "integer overflow: " + literal,
+		}
+	}
 	return Token{
 		Type:    TokenInt,
 		Literal: literal,
