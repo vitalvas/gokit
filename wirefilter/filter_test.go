@@ -2280,4 +2280,450 @@ func TestFilter(t *testing.T) {
 			assert.Equal(t, tc.expected, result, "glob=%s", tc.glob)
 		}
 	})
+
+	t.Run("raw string - no escape processing", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("path", TypeString)
+
+		filter, err := Compile(`path matches r"^C:\\Users\\.*"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("path", `C:\Users\admin`)
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("raw string - regex pattern", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("email", TypeString)
+
+		filter, err := Compile(`email matches r"^\w+@\w+\.\w+$"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("email", "user@example.com")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("raw string - empty", func(t *testing.T) {
+		filter, err := Compile(`field == r""`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("field", "")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array index - first element", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("tags", TypeArray)
+
+		filter, err := Compile(`tags[0] == "first"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{"first", "second", "third"})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array index - middle element", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("tags", TypeArray)
+
+		filter, err := Compile(`tags[1] == "second"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{"first", "second", "third"})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array index - out of bounds", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("tags", TypeArray)
+
+		filter, err := Compile(`tags[10] == "test"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{"first", "second"})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("array index - negative index", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("tags", TypeArray)
+
+		filter, err := Compile(`tags[-1] == "test"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{"first", "second"})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("array index - integer array", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("ports", TypeArray)
+
+		filter, err := Compile(`ports[0] == 80`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntArrayField("ports", []int64{80, 443, 8080})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array unpack - any element equals", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("tags", TypeArray)
+
+		filter, err := Compile(`tags[*] == "admin"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{"user", "admin", "guest"})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetArrayField("tags", []string{"user", "guest"})
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("array unpack - any element contains", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("tags", TypeArray)
+
+		filter, err := Compile(`tags[*] contains "test"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{"foo", "testing", "bar"})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetArrayField("tags", []string{"foo", "bar"})
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("array unpack - any element matches", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("emails", TypeArray)
+
+		filter, err := Compile(`emails[*] matches ".*@example\\.com$"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetArrayField("emails", []string{"foo@other.com", "bar@example.com"})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array unpack - comparison operators", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("ports", TypeArray)
+
+		filter, err := Compile(`ports[*] > 1000`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntArrayField("ports", []int64{80, 443, 8080})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetIntArrayField("ports", []int64{80, 443})
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("array unpack - empty array", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("tags", TypeArray)
+
+		filter, err := Compile(`tags[*] == "test"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("array unpack - not equal", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("tags", TypeArray)
+
+		filter, err := Compile(`tags[*] != "banned"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{"admin", "user"})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array unpack - wildcard", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("hosts", TypeArray)
+
+		filter, err := Compile(`hosts[*] wildcard "*.example.com"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetArrayField("hosts", []string{"other.com", "www.example.com"})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array unpack - in operator", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("roles", TypeArray)
+
+		filter, err := Compile(`roles[*] in {"admin", "superuser"}`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetArrayField("roles", []string{"user", "admin"})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("custom list - string list", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("role", TypeString)
+
+		filter, err := Compile(`role in $admin_roles`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("role", "superuser").
+			SetList("admin_roles", []string{"admin", "superuser", "root"})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetStringField("role", "guest").
+			SetList("admin_roles", []string{"admin", "superuser", "root"})
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("custom list - undefined list", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("role", TypeString)
+
+		filter, err := Compile(`role in $undefined_list`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("role", "admin")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("custom list - empty list", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("role", TypeString)
+
+		filter, err := Compile(`role in $empty_list`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("role", "admin").
+			SetList("empty_list", []string{})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("custom list - IP list", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("ip.src", TypeIP)
+
+		filter, err := Compile(`ip.src in $blocked_ips`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "192.168.1.100").
+			SetIPList("blocked_ips", []string{"10.0.0.1", "192.168.1.100", "172.16.0.1"})
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetIPField("ip.src", "8.8.8.8").
+			SetIPList("blocked_ips", []string{"10.0.0.1", "192.168.1.100", "172.16.0.1"})
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("context SetArrayField", func(t *testing.T) {
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{"a", "b", "c"})
+
+		val, ok := ctx.GetField("tags")
+		assert.True(t, ok)
+		assert.Equal(t, TypeArray, val.Type())
+
+		arr := val.(ArrayValue)
+		assert.Len(t, arr, 3)
+		assert.Equal(t, StringValue("a"), arr[0])
+		assert.Equal(t, StringValue("b"), arr[1])
+		assert.Equal(t, StringValue("c"), arr[2])
+	})
+
+	t.Run("context SetIntArrayField", func(t *testing.T) {
+		ctx := NewExecutionContext().
+			SetIntArrayField("ports", []int64{80, 443})
+
+		val, ok := ctx.GetField("ports")
+		assert.True(t, ok)
+		assert.Equal(t, TypeArray, val.Type())
+
+		arr := val.(ArrayValue)
+		assert.Len(t, arr, 2)
+		assert.Equal(t, IntValue(80), arr[0])
+		assert.Equal(t, IntValue(443), arr[1])
+	})
+
+	t.Run("context GetList", func(t *testing.T) {
+		ctx := NewExecutionContext().
+			SetList("roles", []string{"admin", "user"})
+
+		list, ok := ctx.GetList("roles")
+		assert.True(t, ok)
+		assert.Len(t, list, 2)
+		assert.Equal(t, StringValue("admin"), list[0])
+
+		_, ok = ctx.GetList("undefined")
+		assert.False(t, ok)
+	})
+
+	t.Run("schema validation - unpack expression", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("tags", TypeArray)
+
+		_, err := Compile(`tags[*] == "test"`, schema)
+		assert.NoError(t, err)
+
+		// Unknown field in unpack expression
+		_, err = Compile(`unknown[*] == "test"`, schema)
+		assert.Error(t, err)
+	})
+
+	t.Run("schema validation - list reference", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("role", TypeString)
+
+		// List references are validated at runtime, not compile time
+		_, err := Compile(`role in $any_list`, schema)
+		assert.NoError(t, err)
+	})
+
+	t.Run("array unpack - non-array field", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("name", TypeString)
+
+		filter, err := Compile(`name[*] == "test"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("name", "test")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("array unpack - missing field", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("tags", TypeArray)
+
+		filter, err := Compile(`tags[*] == "test"`, schema)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("UnpackedArrayValue methods", func(t *testing.T) {
+		uv := UnpackedArrayValue{Array: ArrayValue{StringValue("a"), StringValue("b")}}
+
+		assert.Equal(t, TypeArray, uv.Type())
+		assert.True(t, uv.IsTruthy())
+		assert.Contains(t, uv.String(), "a")
+
+		emptyUv := UnpackedArrayValue{Array: ArrayValue{}}
+		assert.False(t, emptyUv.IsTruthy())
+
+		uv2 := UnpackedArrayValue{Array: ArrayValue{StringValue("a"), StringValue("b")}}
+		assert.True(t, uv.Equal(uv2))
+
+		arr := ArrayValue{StringValue("a"), StringValue("b")}
+		assert.True(t, uv.Equal(arr))
+	})
 }

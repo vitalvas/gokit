@@ -71,3 +71,19 @@ type IndexExpr struct {
 
 func (i *IndexExpr) node()       {}
 func (i *IndexExpr) expression() {}
+
+// UnpackExpr represents an array unpack expression (e.g., tags[*]).
+type UnpackExpr struct {
+	Array Expression
+}
+
+func (u *UnpackExpr) node()       {}
+func (u *UnpackExpr) expression() {}
+
+// ListRefExpr represents a reference to a custom list (e.g., $blocked_ips).
+type ListRefExpr struct {
+	Name string
+}
+
+func (l *ListRefExpr) node()       {}
+func (l *ListRefExpr) expression() {}

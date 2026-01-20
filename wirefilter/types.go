@@ -210,3 +210,19 @@ func MatchesRegex(value string, pattern string) (bool, error) {
 func ContainsString(haystack, needle string) bool {
 	return strings.Contains(haystack, needle)
 }
+
+// UnpackedArrayValue wraps an ArrayValue to indicate it should be unpacked in operations.
+// When used in comparisons, the operation is applied to each element.
+type UnpackedArrayValue struct {
+	Array ArrayValue
+}
+
+func (u UnpackedArrayValue) Type() Type     { return TypeArray }
+func (u UnpackedArrayValue) String() string { return u.Array.String() }
+func (u UnpackedArrayValue) IsTruthy() bool { return len(u.Array) > 0 }
+func (u UnpackedArrayValue) Equal(v Value) bool {
+	if uv, ok := v.(UnpackedArrayValue); ok {
+		return u.Array.Equal(uv.Array)
+	}
+	return u.Array.Equal(v)
+}

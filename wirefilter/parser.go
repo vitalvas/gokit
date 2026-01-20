@@ -89,12 +89,16 @@ func (p *Parser) parseExpression(precedence int) Expression {
 		left = p.parseFieldExpression()
 	case TokenString:
 		left = p.parseLiteralExpression()
+	case TokenRawString:
+		left = p.parseLiteralExpression()
 	case TokenInt:
 		left = p.parseLiteralExpression()
 	case TokenBool:
 		left = p.parseLiteralExpression()
 	case TokenIP:
 		left = p.parseLiteralExpression()
+	case TokenListRef:
+		left = p.parseListRefExpression()
 	default:
 		p.addError("unexpected token: %s", p.curToken.Type)
 		return nil
@@ -143,6 +147,17 @@ func (p *Parser) parseIndexExpression(object Expression) Expression {
 	p.nextToken() // consume [
 
 	p.nextToken() // move to the index expression
+
+	// Check for array unpack [*]
+	if p.curToken.Type == TokenAsterisk {
+		if p.peekToken.Type != TokenRBracket {
+			p.addError("expected ], got %s", p.peekToken.Type)
+			return nil
+		}
+		p.nextToken() // consume ]
+		return &UnpackExpr{Array: object}
+	}
+
 	index := p.parseLiteralExpression()
 
 	if p.peekToken.Type != TokenRBracket {
@@ -170,6 +185,8 @@ func (p *Parser) parseLiteralExpression() Expression {
 	switch p.curToken.Type {
 	case TokenString:
 		value = StringValue(p.curToken.Literal)
+	case TokenRawString:
+		value = StringValue(p.curToken.Literal)
 	case TokenInt:
 		value = IntValue(p.curToken.Value.(int64))
 	case TokenBool:
@@ -179,6 +196,10 @@ func (p *Parser) parseLiteralExpression() Expression {
 	}
 
 	return &LiteralExpr{Value: value}
+}
+
+func (p *Parser) parseListRefExpression() Expression {
+	return &ListRefExpr{Name: p.curToken.Literal}
 }
 
 func (p *Parser) parseBinaryExpression(left Expression) Expression {

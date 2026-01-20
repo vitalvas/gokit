@@ -15,6 +15,10 @@ inspired by Cloudflare's Wirefilter.
 - Range expressions: `{1..10}`
 - Multiple data types: string, int, bool, IP, bytes, arrays, maps
 - Map field access with bracket notation
+- Array index access: `tags[0]`
+- Array unpack operations: `tags[*] == "value"` (ANY semantics)
+- Raw strings: `r"..."` (no escape processing)
+- Custom lists: `$list_name` for external list references
 - Field-to-field comparisons
 - IP/CIDR matching for IPv4 and IPv6
 - Regular expression matching
@@ -80,6 +84,20 @@ http.host == "example.com"
 http.path contains "/api"
 http.user_agent matches "^Mozilla.*"
 http.user_agent ~ "^Mozilla.*"              // ~ is alias for matches
+```
+
+### Raw Strings
+
+Raw strings use the `r"..."` syntax and do not process escape sequences.
+Useful for regex patterns and file paths:
+
+```go
+// Regular string (escape sequences processed)
+path matches "^C:\\Users\\.*"               // backslashes need escaping
+
+// Raw string (no escape processing)
+path matches r"^C:\Users\.*"                // backslashes preserved as-is
+email matches r"^\w+@\w+\.\w+$"             // cleaner regex patterns
 ```
 
 ### Wildcard Matching
@@ -160,6 +178,52 @@ ip.src in "2001:db8::/32"
 http.status in {200, 201, 204}
 port in {80, 443, 8080}
 ```
+
+### Array Index Access
+
+Access individual elements of an array by index (0-based):
+
+```go
+tags[0] == "first"                          // first element
+tags[1] == "second"                         // second element
+ports[0] > 1000                             // comparison on array element
+```
+
+Out-of-bounds or negative indices return no match (false).
+
+### Array Unpack
+
+Apply operations to all array elements with `[*]` syntax (ANY semantics):
+
+```go
+tags[*] == "admin"                          // true if ANY tag equals "admin"
+tags[*] contains "test"                     // true if ANY tag contains "test"
+tags[*] matches "^prod.*"                   // true if ANY tag matches pattern
+ports[*] > 1000                             // true if ANY port > 1000
+hosts[*] wildcard "*.example.com"           // true if ANY host matches
+roles[*] in {"admin", "superuser"}          // true if ANY role is in the set
+```
+
+Example:
+```go
+tags := ["user", "admin", "guest"]
+
+tags[*] == "admin"                          // true (admin matches)
+tags[*] == "root"                           // false (no match)
+tags[*] contains "min"                      // true (admin contains "min")
+```
+
+### Custom Lists
+
+Reference external lists defined at runtime with `$list_name` syntax:
+
+```go
+role in $admin_roles                        // check if role is in the admin_roles list
+ip.src in $blocked_ips                      // check if IP is in the blocked list
+http.host in $allowed_hosts                 // check if host is allowed
+```
+
+Lists are defined in the execution context (see API Reference below).
 
 ### Array-to-Array Operations
 
@@ -288,6 +352,44 @@ ctx := wirefilter.NewExecutionContext().
         "host":    wirefilter.StringValue("localhost"),
         "enabled": wirefilter.BoolValue(true),
     })
+```
+
+#### Setting Array Fields
+
+For array fields with string values:
+
+```go
+ctx := wirefilter.NewExecutionContext().
+    SetArrayField("tags", []string{"admin", "user", "guest"})
+```
+
+For array fields with integer values:
+
+```go
+ctx := wirefilter.NewExecutionContext().
+    SetIntArrayField("ports", []int64{80, 443, 8080})
+```
+
+#### Setting Custom Lists
+
+Custom lists are referenced in expressions with `$list_name` syntax:
+
+```go
+ctx := wirefilter.NewExecutionContext().
+    SetStringField("role", "admin").
+    SetList("admin_roles", []string{"admin", "superuser", "root"})
+
+// Expression: role in $admin_roles
+```
+
+For IP address lists:
+
+```go
+ctx := wirefilter.NewExecutionContext().
+    SetIPField("ip.src", "192.168.1.100").
+    SetIPList("blocked_ips", []string{"10.0.0.1", "192.168.1.100", "172.16.0.1"})
+
+// Expression: ip.src in $blocked_ips
 ```
 
 ### Executing a Filter
@@ -510,6 +612,72 @@ ctx := wirefilter.NewExecutionContext().
     SetBoolField("user.is_guest", false)
 
 matched, _ := filter.Execute(ctx) // true
+```
+
+### Array Index and Unpack Operations
+
+```go
+schema := wirefilter.NewSchema().
+    AddField("tags", wirefilter.TypeArray).
+    AddField("ports", wirefilter.TypeArray)
+
+// Access specific array element
+filter1, _ := wirefilter.Compile(`tags[0] == "primary"`, schema)
+
+// Check if ANY element matches (unpack)
+filter2, _ := wirefilter.Compile(`tags[*] contains "admin"`, schema)
+
+// Check if ANY port is in a dangerous range
+filter3, _ := wirefilter.Compile(`ports[*] > 1000 and ports[*] < 2000`, schema)
+
+ctx := wirefilter.NewExecutionContext().
+    SetArrayField("tags", []string{"primary", "admin-role", "active"}).
+    SetIntArrayField("ports", []int64{80, 443, 1500})
+
+matched1, _ := filter1.Execute(ctx) // true (tags[0] == "primary")
+matched2, _ := filter2.Execute(ctx) // true (admin-role contains "admin")
+matched3, _ := filter3.Execute(ctx) // true (1500 is between 1000 and 2000)
+```
+
+### Custom Lists for Dynamic Filtering
+
+```go
+schema := wirefilter.NewSchema().
+    AddField("user.role", wirefilter.TypeString).
+    AddField("ip.src", wirefilter.TypeIP)
+
+// Filter using custom lists
+expression := `user.role in $privileged_roles and not (ip.src in $blocked_ips)`
+
+filter, _ := wirefilter.Compile(expression, schema)
+
+// Lists can be updated at runtime without recompiling the filter
+ctx := wirefilter.NewExecutionContext().
+    SetStringField("user.role", "admin").
+    SetIPField("ip.src", "10.0.0.50").
+    SetList("privileged_roles", []string{"admin", "superuser", "operator"}).
+    SetIPList("blocked_ips", []string{"192.168.1.1", "10.0.0.100"})
+
+matched, _ := filter.Execute(ctx) // true (admin is privileged, IP not blocked)
+```
+
+### Raw Strings for Complex Patterns
+
+```go
+schema := wirefilter.NewSchema().
+    AddField("file.path", wirefilter.TypeString).
+    AddField("log.message", wirefilter.TypeString)
+
+// Raw strings make regex patterns cleaner
+filter1, _ := wirefilter.Compile(`file.path matches r"^C:\Windows\System32\.*\.dll$"`, schema)
+filter2, _ := wirefilter.Compile(`log.message matches r"error code: \d{4}"`, schema)
+
+ctx := wirefilter.NewExecutionContext().
+    SetStringField("file.path", `C:\Windows\System32\kernel32.dll`).
+    SetStringField("log.message", "error code: 1234")
+
+matched1, _ := filter1.Execute(ctx) // true
+matched2, _ := filter2.Execute(ctx) // true
 ```
 
 ## Performance

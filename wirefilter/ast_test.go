@@ -60,4 +60,31 @@ func TestASTNodeInterfaces(t *testing.T) {
 		var _ Expression = expr
 		assert.NotNil(t, expr)
 	})
+
+	t.Run("IndexExpr implements Node and Expression", func(t *testing.T) {
+		expr := &IndexExpr{}
+		expr.node()
+		expr.expression()
+		var _ Node = expr
+		var _ Expression = expr
+		assert.NotNil(t, expr)
+	})
+
+	t.Run("UnpackExpr implements Node and Expression", func(t *testing.T) {
+		expr := &UnpackExpr{}
+		expr.node()
+		expr.expression()
+		var _ Node = expr
+		var _ Expression = expr
+		assert.NotNil(t, expr)
+	})
+
+	t.Run("ListRefExpr implements Node and Expression", func(t *testing.T) {
+		expr := &ListRefExpr{}
+		expr.node()
+		expr.expression()
+		var _ Node = expr
+		var _ Expression = expr
+		assert.NotNil(t, expr)
+	})
 }

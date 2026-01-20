@@ -103,6 +103,10 @@ func (f *Filter) evaluate(expr Expression, ctx *ExecutionContext) (Value, error)
 		return f.evaluateRangeExpr(e, ctx)
 	case *IndexExpr:
 		return f.evaluateIndexExpr(e, ctx)
+	case *UnpackExpr:
+		return f.evaluateUnpackExpr(e, ctx)
+	case *ListRefExpr:
+		return f.evaluateListRefExpr(e, ctx)
 	}
 	return nil, nil
 }
@@ -184,6 +188,7 @@ func (f *Filter) evaluateIndexExpr(expr *IndexExpr, ctx *ExecutionContext) (Valu
 		return nil, nil
 	}
 
+	// Map access with string key
 	if object.Type() == TypeMap && index.Type() == TypeString {
 		mapVal := object.(MapValue)
 		key := string(index.(StringValue))
@@ -193,7 +198,41 @@ func (f *Filter) evaluateIndexExpr(expr *IndexExpr, ctx *ExecutionContext) (Valu
 		return nil, nil
 	}
 
+	// Array access with integer index
+	if object.Type() == TypeArray && index.Type() == TypeInt {
+		arr := object.(ArrayValue)
+		idx := int(index.(IntValue))
+		if idx < 0 || idx >= len(arr) {
+			return nil, nil // Out of bounds
+		}
+		return arr[idx], nil
+	}
+
 	return nil, nil
+}
+
+func (f *Filter) evaluateUnpackExpr(expr *UnpackExpr, ctx *ExecutionContext) (Value, error) {
+	arr, err := f.evaluate(expr.Array, ctx)
+	if err != nil {
+		return nil, err
+	}
+	if arr == nil {
+		return nil, nil
+	}
+
+	if arr.Type() != TypeArray {
+		return nil, nil
+	}
+
+	return UnpackedArrayValue{Array: arr.(ArrayValue)}, nil
+}
+
+func (f *Filter) evaluateListRefExpr(expr *ListRefExpr, ctx *ExecutionContext) (Value, error) {
+	list, ok := ctx.GetList(expr.Name)
+	if !ok {
+		return nil, nil
+	}
+	return list, nil
 }
 
 func (f *Filter) evaluateUnaryExpr(expr *UnaryExpr, ctx *ExecutionContext) (Value, error) {
@@ -221,6 +260,11 @@ func (f *Filter) evaluateBinaryExpr(expr *BinaryExpr, ctx *ExecutionContext) (Va
 	right, err := f.evaluate(expr.Right, ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	// Handle UnpackedArrayValue - apply operation to each element (ANY semantics)
+	if uv, ok := left.(UnpackedArrayValue); ok {
+		return f.evaluateUnpackedBinaryExpr(uv, expr.Operator, right)
 	}
 
 	switch expr.Operator {
@@ -281,6 +325,58 @@ func (f *Filter) evaluateBinaryExpr(expr *BinaryExpr, ctx *ExecutionContext) (Va
 
 	case TokenStrictWildcard:
 		return f.evaluateWildcard(left, right, true)
+	}
+
+	return BoolValue(false), nil
+}
+
+func (f *Filter) evaluateUnpackedBinaryExpr(uv UnpackedArrayValue, op TokenType, right Value) (Value, error) {
+	if len(uv.Array) == 0 {
+		return BoolValue(false), nil
+	}
+
+	// Apply operation to each element, return true if ANY matches
+	for _, elem := range uv.Array {
+		var result Value
+		var err error
+
+		switch op {
+		case TokenEq:
+			result, err = f.evaluateEquality(elem, right)
+		case TokenNe:
+			eqResult, eqErr := f.evaluateEquality(elem, right)
+			if eqErr != nil {
+				return nil, eqErr
+			}
+			result = BoolValue(!bool(eqResult.(BoolValue)))
+		case TokenLt:
+			result, err = f.evaluateComparison(elem, right, func(a, b int64) bool { return a < b })
+		case TokenGt:
+			result, err = f.evaluateComparison(elem, right, func(a, b int64) bool { return a > b })
+		case TokenLe:
+			result, err = f.evaluateComparison(elem, right, func(a, b int64) bool { return a <= b })
+		case TokenGe:
+			result, err = f.evaluateComparison(elem, right, func(a, b int64) bool { return a >= b })
+		case TokenContains:
+			result, err = f.evaluateContains(elem, right)
+		case TokenMatches:
+			result, err = f.evaluateMatches(elem, right)
+		case TokenWildcard:
+			result, err = f.evaluateWildcard(elem, right, false)
+		case TokenStrictWildcard:
+			result, err = f.evaluateWildcard(elem, right, true)
+		case TokenIn:
+			result, err = f.evaluateIn(elem, right)
+		default:
+			continue
+		}
+
+		if err != nil {
+			return nil, err
+		}
+		if result != nil && result.IsTruthy() {
+			return BoolValue(true), nil
+		}
 	}
 
 	return BoolValue(false), nil

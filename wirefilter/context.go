@@ -5,12 +5,14 @@ import "net"
 // ExecutionContext holds the runtime values for fields that are evaluated during filter execution.
 type ExecutionContext struct {
 	fields map[string]Value
+	lists  map[string]ArrayValue
 }
 
 // NewExecutionContext creates a new empty execution context.
 func NewExecutionContext() *ExecutionContext {
 	return &ExecutionContext{
 		fields: make(map[string]Value),
+		lists:  make(map[string]ArrayValue),
 	}
 }
 
@@ -83,5 +85,59 @@ func (ctx *ExecutionContext) SetMapFieldValues(name string, value map[string]Val
 // Returns the value and true if found, or nil and false if not found.
 func (ctx *ExecutionContext) GetField(name string) (Value, bool) {
 	val, ok := ctx.fields[name]
+	return val, ok
+}
+
+// SetArrayField sets an array of string values as an ArrayValue field.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) SetArrayField(name string, values []string) *ExecutionContext {
+	arr := make(ArrayValue, len(values))
+	for i, v := range values {
+		arr[i] = StringValue(v)
+	}
+	ctx.fields[name] = arr
+	return ctx
+}
+
+// SetIntArrayField sets an array of integer values as an ArrayValue field.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) SetIntArrayField(name string, values []int64) *ExecutionContext {
+	arr := make(ArrayValue, len(values))
+	for i, v := range values {
+		arr[i] = IntValue(v)
+	}
+	ctx.fields[name] = arr
+	return ctx
+}
+
+// SetList sets a string list in the execution context.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) SetList(name string, values []string) *ExecutionContext {
+	arr := make(ArrayValue, len(values))
+	for i, v := range values {
+		arr[i] = StringValue(v)
+	}
+	ctx.lists[name] = arr
+	return ctx
+}
+
+// SetIPList sets an IP address list in the execution context.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) SetIPList(name string, ips []string) *ExecutionContext {
+	arr := make(ArrayValue, 0, len(ips))
+	for _, ipStr := range ips {
+		ip := net.ParseIP(ipStr)
+		if ip != nil {
+			arr = append(arr, IPValue{IP: ip})
+		}
+	}
+	ctx.lists[name] = arr
+	return ctx
+}
+
+// GetList retrieves a list from the execution context.
+// Returns the list and true if found, or nil and false if not found.
+func (ctx *ExecutionContext) GetList(name string) (ArrayValue, bool) {
+	val, ok := ctx.lists[name]
 	return val, ok
 }

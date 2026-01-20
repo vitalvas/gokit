@@ -36,8 +36,13 @@ func TestTokenTypeString(t *testing.T) {
 			{TokenRParen, ")"},
 			{TokenLBrace, "{"},
 			{TokenRBrace, "}"},
+			{TokenLBracket, "["},
+			{TokenRBracket, "]"},
 			{TokenComma, ","},
 			{TokenRange, ".."},
+			{TokenRawString, "RAWSTRING"},
+			{TokenAsterisk, "*"},
+			{TokenListRef, "$"},
 		}
 
 		for _, tt := range tests {

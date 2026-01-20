@@ -7,6 +7,7 @@ const (
 	TokenEOF TokenType = iota
 	TokenIdent
 	TokenString
+	TokenRawString // r"..."
 	TokenInt
 	TokenBool
 	TokenIP
@@ -47,12 +48,17 @@ const (
 	// Separators
 	TokenComma // ,
 	TokenRange // ..
+
+	// Special tokens
+	TokenAsterisk // *
+	TokenListRef  // $list_name
 )
 
 var tokenNames = map[TokenType]string{
 	TokenEOF:            "EOF",
 	TokenIdent:          "IDENT",
 	TokenString:         "STRING",
+	TokenRawString:      "RAWSTRING",
 	TokenInt:            "INT",
 	TokenBool:           "BOOL",
 	TokenIP:             "IP",
@@ -81,6 +87,8 @@ var tokenNames = map[TokenType]string{
 	TokenRBracket:       "]",
 	TokenComma:          ",",
 	TokenRange:          "..",
+	TokenAsterisk:       "*",
+	TokenListRef:        "$",
 }
 
 // String returns the string representation of a token type.
@@ -95,5 +103,5 @@ func (t TokenType) String() string {
 type Token struct {
 	Type    TokenType
 	Literal string
-	Value   interface{}
+	Value   any
 }

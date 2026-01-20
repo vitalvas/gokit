@@ -90,6 +90,12 @@ func (s *Schema) validateExpression(expr Expression) error {
 		if err := s.validateExpression(e.Object); err != nil {
 			return err
 		}
+	case *UnpackExpr:
+		if err := s.validateExpression(e.Array); err != nil {
+			return err
+		}
+	case *ListRefExpr:
+		// List references are validated at runtime
 	}
 	return nil
 }

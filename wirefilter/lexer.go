@@ -135,6 +135,12 @@ func (l *Lexer) NextToken() Token {
 		tok.Type = TokenString
 		tok.Literal = l.readString()
 		tok.Value = tok.Literal
+	case '*':
+		tok = Token{Type: TokenAsterisk, Literal: "*"}
+	case '$':
+		tok.Type = TokenListRef
+		tok.Literal = l.readListName()
+		tok.Value = tok.Literal
 	default:
 		switch {
 		case isLetter(l.ch):
@@ -221,6 +227,28 @@ func (l *Lexer) readNumber() string {
 	return l.input[start : l.pos-1]
 }
 
+func (l *Lexer) readRawString() string {
+	l.readChar() // consume opening "
+	start := l.pos - 1
+
+	for l.ch != '"' && l.ch != 0 {
+		l.readChar()
+	}
+
+	return l.input[start : l.pos-1]
+}
+
+func (l *Lexer) readListName() string {
+	l.readChar() // consume $
+	start := l.pos - 1
+
+	for isLetter(l.ch) || isDigit(l.ch) || l.ch == '_' || l.ch == '-' {
+		l.readChar()
+	}
+
+	return l.input[start : l.pos-1]
+}
+
 // isLetter checks if the byte is an ASCII letter (fast path for common case).
 func isLetter(ch byte) bool {
 	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
@@ -232,6 +260,18 @@ func isDigit(ch byte) bool {
 }
 
 func (l *Lexer) readIdentifierToken() Token {
+	// Check for raw string r"..."
+	if l.ch == 'r' && l.peekChar() == '"' {
+		l.readChar() // consume 'r'
+		literal := l.readRawString()
+		l.readChar() // consume closing "
+		return Token{
+			Type:    TokenRawString,
+			Literal: literal,
+			Value:   literal,
+		}
+	}
+
 	literal := l.readIdentifier()
 	tok := Token{Literal: literal}
 

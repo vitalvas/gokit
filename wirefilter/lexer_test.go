@@ -527,4 +527,97 @@ func TestLexer(t *testing.T) {
 		tok := lexer.NextToken()
 		assert.Equal(t, TokenStrictWildcard, tok.Type)
 	})
+
+	t.Run("raw string basic", func(t *testing.T) {
+		input := `r"path\to\file"`
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenRawString, tok.Type)
+		assert.Equal(t, `path\to\file`, tok.Literal)
+		assert.Equal(t, `path\to\file`, tok.Value)
+	})
+
+	t.Run("raw string with regex", func(t *testing.T) {
+		input := `r"^\d+\.\d+\.\d+\.\d+$"`
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenRawString, tok.Type)
+		assert.Equal(t, `^\d+\.\d+\.\d+\.\d+$`, tok.Literal)
+	})
+
+	t.Run("raw string empty", func(t *testing.T) {
+		input := `r""`
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenRawString, tok.Type)
+		assert.Equal(t, "", tok.Literal)
+	})
+
+	t.Run("asterisk token", func(t *testing.T) {
+		input := "*"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenAsterisk, tok.Type)
+		assert.Equal(t, "*", tok.Literal)
+	})
+
+	t.Run("list reference basic", func(t *testing.T) {
+		input := "$blocked_ips"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenListRef, tok.Type)
+		assert.Equal(t, "blocked_ips", tok.Literal)
+		assert.Equal(t, "blocked_ips", tok.Value)
+	})
+
+	t.Run("list reference with hyphen", func(t *testing.T) {
+		input := "$admin-roles"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenListRef, tok.Type)
+		assert.Equal(t, "admin-roles", tok.Literal)
+	})
+
+	t.Run("array unpack syntax", func(t *testing.T) {
+		input := "tags[*]"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "tags", tok.Literal)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenLBracket, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenAsterisk, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenRBracket, tok.Type)
+	})
+
+	t.Run("array index syntax", func(t *testing.T) {
+		input := "tags[0]"
+		lexer := NewLexer(input)
+
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "tags", tok.Literal)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenLBracket, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenInt, tok.Type)
+		assert.Equal(t, int64(0), tok.Value)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenRBracket, tok.Type)
+	})
 }
