@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.27.0](https://github.com/vitalvas/gokit/compare/v0.26.0...v0.27.0) (2026-01-20)
+
+
+### Features
+
+* **wirefilter:** add cidr() and cidr6() functions for IP masking ([b7d1716](https://github.com/vitalvas/gokit/commit/b7d17169bcee75b887ca20716048d32816807e80))
+* **wirefilter:** add function control and improve test coverage ([9393082](https://github.com/vitalvas/gokit/commit/93930820f64838d70a61159bb187712225d5899f))
+* **wirefilter:** add missing operators and aliases ([a980bd3](https://github.com/vitalvas/gokit/commit/a980bd3888e6f929418ce324b1936bcb263cbcfc))
+* **wirefilter:** add missing operators and Cloudflare compatibility tests ([9d7cbdc](https://github.com/vitalvas/gokit/commit/9d7cbdc142e4a09dc29f10aa2ea00bcbb64d6844))
+* **wirefilter:** add raw strings, array index, array unpack, and custom lists ([830a984](https://github.com/vitalvas/gokit/commit/830a984b239fc62964fbf1e4ca109f1828c29bce))
+* **wirefilter:** add transformation functions ([8919979](https://github.com/vitalvas/gokit/commit/8919979bc5485ed6e8c4f17e928c5aeca8e74979))
+
+
+### Bug Fixes
+
+* **wirefilter:** address correctness and safety issues from review ([e8e7d14](https://github.com/vitalvas/gokit/commit/e8e7d140454799bb233adc5f367acece57989777))
+* **xcmd:** prevent test timeout in PeriodicRunWithSignal ([e12681d](https://github.com/vitalvas/gokit/commit/e12681d517983c20a13d2e626c54042561d57fbf))
+
 ## [0.26.0](https://github.com/vitalvas/gokit/compare/v0.25.0...v0.26.0) (2026-01-18)
 
 
