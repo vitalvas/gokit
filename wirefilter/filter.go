@@ -518,8 +518,38 @@ func (f *Filter) evaluateIn(left, right Value) (Value, error) {
 	if left == nil || right == nil {
 		return BoolValue(false), nil
 	}
+
+	// Handle IP in CIDR directly: ip.src in 192.168.0.0/24
+	if left.Type() == TypeIP && right.Type() == TypeCIDR {
+		ipVal := left.(IPValue)
+		cidrVal := right.(CIDRValue)
+		return BoolValue(cidrVal.Contains(ipVal.IP)), nil
+	}
+
 	if right.Type() == TypeArray {
 		rightArr := right.(ArrayValue)
+
+		// IP in Array: check if IP matches any element (IP equality or CIDR containment)
+		if left.Type() == TypeIP {
+			ipVal := left.(IPValue)
+			for _, elem := range rightArr {
+				if elem == nil {
+					continue
+				}
+				switch elem.Type() {
+				case TypeIP:
+					if ipVal.IP.Equal(elem.(IPValue).IP) {
+						return BoolValue(true), nil
+					}
+				case TypeCIDR:
+					if elem.(CIDRValue).Contains(ipVal.IP) {
+						return BoolValue(true), nil
+					}
+				}
+			}
+			return BoolValue(false), nil
+		}
+
 		// Array in Array: OR logic - any element from left exists in right
 		if left.Type() == TypeArray {
 			leftArr := left.(ArrayValue)
@@ -534,6 +564,7 @@ func (f *Filter) evaluateIn(left, right Value) (Value, error) {
 		return BoolValue(rightArr.Contains(left)), nil
 	}
 
+	// Legacy: IP in CIDR as string (keep for backwards compatibility)
 	if left.Type() == TypeIP && right.Type() == TypeString {
 		ipVal := left.(IPValue)
 		cidr := string(right.(StringValue))

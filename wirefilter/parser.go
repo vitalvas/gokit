@@ -6,13 +6,15 @@ import (
 )
 
 // Operator precedence levels for parsing expressions.
-// Precedence order (lowest to highest): OR < XOR < AND < EQUALS < COMPARE < MEMBERSHIP
+// Precedence order (lowest to highest): OR < XOR < AND < PREFIX < EQUALS < COMPARE < MEMBERSHIP
+// PREFIX is used for NOT operator - it binds tighter than AND/OR/XOR but looser than comparisons.
 const (
 	_ int = iota
 	LOWEST
 	OR
 	XOR
 	AND
+	PREFIX // NOT operator precedence - higher than AND so "not A and B" parses as "(not A) and B"
 	EQUALS
 	COMPARE
 	MEMBERSHIP
@@ -117,6 +119,8 @@ func (p *Parser) parseExpression(precedence int) Expression {
 		left = p.parseLiteralExpression()
 	case TokenIP:
 		left = p.parseLiteralExpression()
+	case TokenCIDR:
+		left = p.parseLiteralExpression()
 	case TokenListRef:
 		left = p.parseListRefExpression()
 	default:
@@ -135,7 +139,7 @@ func (p *Parser) parseExpression(precedence int) Expression {
 func (p *Parser) parseUnaryExpression() Expression {
 	operator := p.curToken.Type
 	p.nextToken()
-	operand := p.parseExpression(LOWEST)
+	operand := p.parseExpression(PREFIX)
 	return &UnaryExpr{
 		Operator: operator,
 		Operand:  operand,
@@ -266,6 +270,8 @@ func (p *Parser) parseLiteralExpression() Expression {
 		value = BoolValue(p.curToken.Value.(bool))
 	case TokenIP:
 		value = IPValue{IP: p.curToken.Value.(net.IP)}
+	case TokenCIDR:
+		value = CIDRValue{IPNet: p.curToken.Value.(*net.IPNet)}
 	}
 
 	return &LiteralExpr{Value: value}

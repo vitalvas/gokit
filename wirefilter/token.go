@@ -11,6 +11,7 @@ const (
 	TokenInt
 	TokenBool
 	TokenIP
+	TokenCIDR // 192.168.0.0/24, 2001:db8::/32
 
 	// Comparison operators
 	TokenEq    // ==
@@ -63,6 +64,7 @@ var tokenNames = map[TokenType]string{
 	TokenInt:            "INT",
 	TokenBool:           "BOOL",
 	TokenIP:             "IP",
+	TokenCIDR:           "CIDR",
 	TokenEq:             "==",
 	TokenNe:             "!=",
 	TokenAllEq:          "===",

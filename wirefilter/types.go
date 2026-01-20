@@ -15,6 +15,7 @@ const (
 	TypeInt
 	TypeBool
 	TypeIP
+	TypeCIDR
 	TypeBytes
 	TypeArray
 	TypeMap
@@ -80,6 +81,27 @@ func (ip IPValue) Equal(v Value) bool {
 		return false
 	}
 	return ip.IP.Equal(v.(IPValue).IP)
+}
+
+// CIDRValue represents a CIDR network range (e.g., 192.168.0.0/24).
+type CIDRValue struct {
+	IPNet *net.IPNet
+}
+
+func (c CIDRValue) Type() Type     { return TypeCIDR }
+func (c CIDRValue) String() string { return c.IPNet.String() }
+func (c CIDRValue) IsTruthy() bool { return true }
+func (c CIDRValue) Equal(v Value) bool {
+	if v.Type() != TypeCIDR {
+		return false
+	}
+	other := v.(CIDRValue)
+	return c.IPNet.IP.Equal(other.IPNet.IP) && c.IPNet.Mask.String() == other.IPNet.Mask.String()
+}
+
+// Contains checks if an IP address is within this CIDR range.
+func (c CIDRValue) Contains(ip net.IP) bool {
+	return c.IPNet.Contains(ip)
 }
 
 // BytesValue represents a byte array value.

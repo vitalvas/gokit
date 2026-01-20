@@ -232,17 +232,6 @@ func (l *Lexer) readIdentifier() string {
 	return l.input[start : l.pos-1]
 }
 
-func (l *Lexer) readNumber() string {
-	start := l.pos - 1
-	if l.ch == '-' {
-		l.readChar()
-	}
-	for isDigit(l.ch) {
-		l.readChar()
-	}
-	return l.input[start : l.pos-1]
-}
-
 func (l *Lexer) readRawString() (string, bool) {
 	l.readChar() // consume opening "
 	start := l.pos - 1
@@ -277,6 +266,11 @@ func isLetter(ch byte) bool {
 // isDigit checks if the byte is an ASCII digit (fast path for common case).
 func isDigit(ch byte) bool {
 	return ch >= '0' && ch <= '9'
+}
+
+// isHexChar checks if the byte is a hex character (a-f, A-F).
+func isHexChar(ch byte) bool {
+	return (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')
 }
 
 func (l *Lexer) readIdentifierToken() Token {
@@ -355,7 +349,15 @@ func (l *Lexer) readIdentifierToken() Token {
 		tok.Type = TokenBool
 		tok.Value = false
 	default:
-		// Only try to parse as IP if it looks like one (starts with digit or contains colon for IPv6)
+		// Try to parse as CIDR first (e.g., 192.168.0.0/24, 2001:db8::/32)
+		if looksLikeCIDR(literal) {
+			if _, ipNet, err := net.ParseCIDR(literal); err == nil {
+				tok.Type = TokenCIDR
+				tok.Value = ipNet
+				return tok
+			}
+		}
+		// Try to parse as IP if it looks like one (starts with digit or contains colon for IPv6)
 		if looksLikeIP(literal) {
 			if ip := net.ParseIP(literal); ip != nil {
 				tok.Type = TokenIP
@@ -367,6 +369,23 @@ func (l *Lexer) readIdentifierToken() Token {
 		tok.Value = literal
 	}
 	return tok
+}
+
+// looksLikeCIDR returns true if the literal might be a CIDR notation (contains /).
+func looksLikeCIDR(s string) bool {
+	// CIDR must contain a / and start with a digit or hex char (for IPv6)
+	hasSlash := false
+	for i := 0; i < len(s); i++ {
+		if s[i] == '/' {
+			hasSlash = true
+			break
+		}
+	}
+	if !hasSlash {
+		return false
+	}
+	// Must start with a digit (IPv4) or contain colon (IPv6)
+	return looksLikeIP(s)
 }
 
 // looksLikeIP returns true if the literal might be an IP address.
@@ -391,13 +410,87 @@ func looksLikeIP(s string) bool {
 }
 
 func (l *Lexer) readNumberToken() Token {
-	literal := l.readNumber()
+	// Read potential IP/CIDR/Number (digits, dots, colons, slashes, hex for IPv6)
+	start := l.pos - 1
+	if l.ch == '-' {
+		l.readChar()
+	}
+
+	hasColon := false
+	// Read all characters that could form IP/CIDR/Number
+	for {
+		if isDigit(l.ch) {
+			l.readChar()
+			continue
+		}
+		// Stop at '..' (range operator) - don't consume second dot
+		if l.ch == '.' && l.peekChar() != '.' {
+			l.readChar()
+			continue
+		}
+		if l.ch == ':' {
+			hasColon = true
+			l.readChar()
+			continue
+		}
+		if l.ch == '/' {
+			l.readChar()
+			continue
+		}
+		// Allow hex characters for IPv6 (only after seeing a colon)
+		if hasColon && isHexChar(l.ch) {
+			l.readChar()
+			continue
+		}
+		break
+	}
+	literal := l.input[start : l.pos-1]
+
+	// Try to parse as CIDR first (contains /)
+	if looksLikeCIDR(literal) {
+		if _, ipNet, err := net.ParseCIDR(literal); err == nil {
+			return Token{
+				Type:    TokenCIDR,
+				Literal: literal,
+				Value:   ipNet,
+			}
+		}
+	}
+
+	// Try to parse as IP (contains . or :)
+	if looksLikeIP(literal) {
+		if ip := net.ParseIP(literal); ip != nil {
+			return Token{
+				Type:    TokenIP,
+				Literal: literal,
+				Value:   ip,
+			}
+		}
+	}
+
+	// Fall back to integer
 	val, err := strconv.ParseInt(literal, 10, 64)
 	if err != nil {
+		// Check if it looks like a pure integer (overflow) vs invalid IP
+		isDigitsOnly := true
+		start := 0
+		if len(literal) > 0 && literal[0] == '-' {
+			start = 1
+		}
+		for i := start; i < len(literal); i++ {
+			if !isDigit(literal[i]) {
+				isDigitsOnly = false
+				break
+			}
+		}
+		errMsg := "invalid number or IP: " + literal
+		if isDigitsOnly {
+			errMsg = "integer overflow: " + literal
+		}
 		return Token{
 			Type:    TokenError,
 			Literal: literal,
-			Value:   "integer overflow: " + literal,
+			Value:   errMsg,
 		}
 	}
 	return Token{
@@ -408,6 +501,6 @@ func (l *Lexer) readNumberToken() Token {
 }
 
 // Error creates a formatted error with the current lexer position.
-func (l *Lexer) Error(format string, args ...interface{}) error {
+func (l *Lexer) Error(format string, args ...any) error {
 	return fmt.Errorf("lexer error at position %d: %s", l.pos, fmt.Sprintf(format, args...))
 }

@@ -1496,6 +1496,44 @@ func TestFilter(t *testing.T) {
 		assert.True(t, result2)
 	})
 
+	t.Run("CIDR without quotes", func(t *testing.T) {
+		filter, err := Compile(`ip.src in 192.168.0.0/16`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "192.168.1.1")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetIPField("ip.src", "10.0.0.1")
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("IP without quotes", func(t *testing.T) {
+		filter, err := Compile(`ip.src == 192.168.1.1`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "192.168.1.1")
+
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetIPField("ip.src", "192.168.1.2")
+
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
 	t.Run("nil values in and operation", func(t *testing.T) {
 		filter, err := Compile(`http.host and http.status == 200`, nil)
 		assert.NoError(t, err)
