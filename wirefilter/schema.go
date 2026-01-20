@@ -1,6 +1,20 @@
 package wirefilter
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
+
+// FunctionMode defines how function availability is controlled.
+type FunctionMode int
+
+const (
+	// FunctionModeBlocklist allows all functions except those explicitly disabled.
+	// This is the default mode.
+	FunctionModeBlocklist FunctionMode = iota
+	// FunctionModeAllowlist allows only functions that are explicitly enabled.
+	FunctionModeAllowlist
+)
 
 // Field represents a named field with a specific type in a schema.
 type Field struct {
@@ -11,16 +25,21 @@ type Field struct {
 // Schema defines the structure of fields that can be used in filter expressions.
 // It provides validation to ensure that filter expressions only reference defined fields.
 type Schema struct {
-	fields map[string]Field
+	fields        map[string]Field
+	functionMode  FunctionMode
+	functionRules map[string]bool // true = enabled, false = disabled
 }
 
 // NewSchema creates a new schema.
 // If fields are provided, initializes the schema with those fields.
 // Multiple field maps can be provided and will be merged.
 // Otherwise, creates an empty schema.
+// Default function mode is Blocklist (all functions allowed).
 func NewSchema(fields ...map[string]Type) *Schema {
 	s := &Schema{
-		fields: make(map[string]Field),
+		fields:        make(map[string]Field),
+		functionMode:  FunctionModeBlocklist,
+		functionRules: make(map[string]bool),
 	}
 	for _, fieldMap := range fields {
 		for name, fieldType := range fieldMap {
@@ -31,6 +50,59 @@ func NewSchema(fields ...map[string]Type) *Schema {
 		}
 	}
 	return s
+}
+
+// SetFunctionMode sets the function availability mode.
+// In Blocklist mode (default), all functions are allowed except those disabled.
+// In Allowlist mode, only explicitly enabled functions are allowed.
+// Returns the schema to allow method chaining.
+func (s *Schema) SetFunctionMode(mode FunctionMode) *Schema {
+	s.functionMode = mode
+	return s
+}
+
+// EnableFunctions enables one or more functions by name.
+// In Allowlist mode, this allows the functions to be used.
+// In Blocklist mode, this removes the functions from the disabled list.
+// Function names are case-insensitive.
+// Returns the schema to allow method chaining.
+func (s *Schema) EnableFunctions(names ...string) *Schema {
+	for _, name := range names {
+		s.functionRules[strings.ToLower(name)] = true
+	}
+	return s
+}
+
+// DisableFunctions disables one or more functions by name.
+// In Blocklist mode, this prevents the functions from being used.
+// In Allowlist mode, this removes the functions from the enabled list.
+// Function names are case-insensitive.
+// Returns the schema to allow method chaining.
+func (s *Schema) DisableFunctions(names ...string) *Schema {
+	for _, name := range names {
+		s.functionRules[strings.ToLower(name)] = false
+	}
+	return s
+}
+
+// IsFunctionAllowed checks if a function is allowed based on the current mode and rules.
+// Function names are case-insensitive.
+func (s *Schema) IsFunctionAllowed(name string) bool {
+	name = strings.ToLower(name)
+	enabled, hasRule := s.functionRules[name]
+
+	switch s.functionMode {
+	case FunctionModeAllowlist:
+		// In allowlist mode, function must be explicitly enabled
+		return hasRule && enabled
+	case FunctionModeBlocklist:
+		// In blocklist mode, function is allowed unless explicitly disabled
+		if hasRule {
+			return enabled
+		}
+		return true
+	}
+	return true
 }
 
 // AddField adds a field to the schema with the specified name and type.
@@ -97,6 +169,9 @@ func (s *Schema) validateExpression(expr Expression) error {
 	case *ListRefExpr:
 		// List references are validated at runtime
 	case *FunctionCallExpr:
+		if !s.IsFunctionAllowed(e.Name) {
+			return fmt.Errorf("function not allowed: %s", e.Name)
+		}
 		for _, arg := range e.Arguments {
 			if err := s.validateExpression(arg); err != nil {
 				return err

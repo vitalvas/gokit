@@ -19,7 +19,7 @@ inspired by Cloudflare's Wirefilter.
 - Array unpack operations: `tags[*] == "value"` (ANY semantics)
 - Raw strings: `r"..."` (no escape processing)
 - Custom lists: `$list_name` for external list references
-- Built-in functions: `lower()`, `upper()`, `len()`, `starts_with()`, `ends_with()`, and more
+- Built-in functions: `lower()`, `upper()`, `len()`, `starts_with()`, and more
 - Field-to-field comparisons
 - IP/CIDR matching for IPv4 and IPv6
 - Regular expression matching
@@ -112,10 +112,11 @@ http.host strict wildcard "*.Example.com"   // case-sensitive
 ```
 
 Examples:
+
 - `"www.example.com" wildcard "*.example.com"` - true
 - `"WWW.EXAMPLE.COM" wildcard "*.example.com"` - true (case-insensitive)
 - `"WWW.Example.com" strict wildcard "*.Example.com"` - true
-- `"www.example.com" strict wildcard "*.Example.com"` - false (case-sensitive)
+- `"www.example.com" strict wildcard "*.Example.com"` - false
 
 ### Combining Conditions
 
@@ -126,7 +127,7 @@ http.status == 404 or http.status == 500
 http.status == 404 || http.status == 500           // || is alias for or
 not (http.status >= 500)
 ! http.secure                                      // ! is alias for not
-http.secure xor http.authenticated                 // XOR: true if exactly one is true
+http.secure xor http.authenticated                 // XOR: exactly one true
 http.secure ^^ http.authenticated                  // ^^ is alias for xor
 ```
 
@@ -161,7 +162,8 @@ http.host and not http.error // true if host is set and error is not set
 ```
 
 Presence checking uses existence-based truthiness:
-- Any field that exists is considered truthy (including zero values and empty strings)
+
+- Any field that exists is truthy (including zero values and empty strings)
 - Missing fields are considered falsy
 - For boolean fields, the actual boolean value is used
 
@@ -206,6 +208,7 @@ roles[*] in {"admin", "superuser"}          // true if ANY role is in the set
 ```
 
 Example:
+
 ```go
 tags := ["user", "admin", "guest"]
 
@@ -219,9 +222,9 @@ tags[*] contains "min"                      // true (admin contains "min")
 Reference external lists defined at runtime with `$list_name` syntax:
 
 ```go
-role in $admin_roles                        // check if role is in the admin_roles list
-ip.src in $blocked_ips                      // check if IP is in the blocked list
-http.host in $allowed_hosts                 // check if host is allowed
+role in $admin_roles         // check if role is in the admin_roles list
+ip.src in $blocked_ips       // check if IP is in the blocked list
+http.host in $allowed_hosts  // check if host is allowed
 ```
 
 Lists are defined in the execution context (see API Reference below).
@@ -239,6 +242,7 @@ user.groups contains {"guest", "admin"}
 ```
 
 Example:
+
 ```go
 groups := ["admin", "guest", "user"]
 
@@ -306,6 +310,46 @@ networkFields := map[string]wirefilter.Type{
 
 schema := wirefilter.NewSchema(httpFields, networkFields)
 ```
+
+### Controlling Function Availability
+
+You can control which functions are available in filter expressions
+using allowlist or blocklist modes.
+
+#### Blocklist Mode (Default)
+
+All functions are allowed by default. Disable specific functions:
+
+```go
+schema := wirefilter.NewSchema().
+    AddField("name", wirefilter.TypeString).
+    DisableFunctions("lower", "upper", "concat")
+
+// This will fail: lower is disabled
+_, err := wirefilter.Compile(`lower(name) == "test"`, schema)
+// Error: function not allowed: lower
+```
+
+#### Allowlist Mode
+
+Only explicitly enabled functions are allowed:
+
+```go
+schema := wirefilter.NewSchema().
+    AddField("name", wirefilter.TypeString).
+    SetFunctionMode(wirefilter.FunctionModeAllowlist).
+    EnableFunctions("lower", "upper", "len", "starts_with")
+
+// This works: lower is enabled
+_, err := wirefilter.Compile(`lower(name) == "test"`, schema)
+
+// This fails: concat is not enabled
+_, err = wirefilter.Compile(`concat(name, "!") == "test!"`, schema)
+// Error: function not allowed: concat
+```
+
+Function names are case-insensitive.
+Disabling "lower" also disables "LOWER" and "Lower".
 
 ### Compiling a Filter
 
@@ -418,7 +462,7 @@ if result {
 | `TypeIP` | IP addresses (IPv4/IPv6) | `192.168.1.1`, `2001:db8::1` |
 | `TypeBytes` | Byte arrays | `[]byte("data")` |
 | `TypeArray` | Arrays of values | `{1, 2, 3}` |
-| `TypeMap` | Map of string keys to values | `map[string]string{"key": "value"}` |
+| `TypeMap` | Map of string keys to values | `{"key": "value"}` |
 
 ## Operators
 
@@ -446,18 +490,19 @@ if result {
 
 | Operator | Description | Example |
 |----------|-------------|---------|
-| `in` | Value in array, IP in CIDR, or array ANY match | `port in {80, 443}` |
-| `contains` | String contains substring, or array ALL match | `path contains "/api"` |
-| `matches`, `~` | Regex match | `ua matches "^Mozilla"`, `ua ~ "^Mozilla"` |
+| `in` | Value in array, IP in CIDR, array ANY match | `port in {80, 443}` |
+| `contains` | Substring or array ALL match | `path contains "/api"` |
+| `matches`, `~` | Regex match | `ua matches "^Mozilla"` |
 
 ### Wildcard Operators
 
 | Operator | Description | Example |
 |----------|-------------|---------|
-| `wildcard` | Glob pattern match (case-insensitive) | `host wildcard "*.example.com"` |
-| `strict wildcard` | Glob pattern match (case-sensitive) | `host strict wildcard "*.Example.com"` |
+| `wildcard` | Glob match (case-insensitive) | `host wildcard "*.ex.com"` |
+| `strict wildcard` | Glob (case-sensitive) | `host strict wildcard "*.a"` |
 
 Wildcard patterns support:
+
 - `*` matches any sequence of characters (including empty)
 - `?` matches any single character
 
@@ -481,10 +526,10 @@ Wirefilter provides built-in functions for transforming and inspecting values.
 | `len(String)` | String length in bytes | `len(path) > 100` |
 | `starts_with(String, String)` | Check prefix | `starts_with(path, "/api/")` |
 | `ends_with(String, String)` | Check suffix | `ends_with(file, ".json")` |
-| `substring(String, Int [, Int])` | Extract substring | `substring(path, 0, 4) == "/api"` |
+| `substring(String, Int [, Int])` | Extract substring | `substring(s, 0, 4)` |
 | `concat(String...)` | Concatenate strings | `concat(scheme, "://", host)` |
 | `split(String, String)` | Split into array | `split(header, ",")[0]` |
-| `url_decode(String)` | URL decode | `url_decode(query) contains "admin"` |
+| `url_decode(String)` | URL decode | `url_decode(query)` |
 
 ### Array Functions
 
@@ -501,14 +546,14 @@ Wirefilter provides built-in functions for transforming and inspecting values.
 | Function | Description | Example |
 |----------|-------------|---------|
 | `len(Map)` | Map key count | `len(headers) > 0` |
-| `has_key(Map, String)` | Check key exists | `has_key(headers, "Authorization")` |
+| `has_key(Map, String)` | Check key exists | `has_key(headers, "Auth")` |
 
 ### IP Functions
 
 | Function | Description | Example |
 |----------|-------------|---------|
-| `cidr(IP, Int, Int)` | Apply CIDR mask (ipv4_bits, ipv6_bits) | `cidr(ip.src, 24, 64) == "192.168.1.0"` |
-| `cidr6(IP, Int)` | Apply CIDR mask for IPv6 | `cidr6(ip.src, 64) == "2001:db8::"` |
+| `cidr(IP, Int, Int)` | Apply CIDR mask (ipv4, ipv6 bits) | `cidr(ip, 24, 64)` |
+| `cidr6(IP, Int)` | Apply CIDR mask for IPv6 | `cidr6(ip, 64)` |
 
 ### Function Examples
 
@@ -669,7 +714,8 @@ ctx := wirefilter.NewExecutionContext().
 matched, _ := filter.Execute(ctx) // true (case-insensitive)
 
 // Case-sensitive matching
-filterStrict, _ := wirefilter.Compile(`http.host strict wildcard "*.Example.com"`, schema)
+expr := `http.host strict wildcard "*.Example.com"`
+filterStrict, _ := wirefilter.Compile(expr, schema)
 
 ctx2 := wirefilter.NewExecutionContext().
     SetStringField("http.host", "api.Example.com")
@@ -749,8 +795,10 @@ schema := wirefilter.NewSchema().
     AddField("log.message", wirefilter.TypeString)
 
 // Raw strings make regex patterns cleaner
-filter1, _ := wirefilter.Compile(`file.path matches r"^C:\Windows\System32\.*\.dll$"`, schema)
-filter2, _ := wirefilter.Compile(`log.message matches r"error code: \d{4}"`, schema)
+expr1 := `file.path matches r"^C:\Windows\System32\.*\.dll$"`
+filter1, _ := wirefilter.Compile(expr1, schema)
+expr2 := `log.message matches r"error code: \d{4}"`
+filter2, _ := wirefilter.Compile(expr2, schema)
 
 ctx := wirefilter.NewExecutionContext().
     SetStringField("file.path", `C:\Windows\System32\kernel32.dll`).

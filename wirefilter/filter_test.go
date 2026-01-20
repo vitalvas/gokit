@@ -3212,4 +3212,491 @@ func TestFilter(t *testing.T) {
 		assert.NoError(t, err)
 		assert.False(t, result)
 	})
+
+	// Additional coverage tests
+	t.Run("function upper with wrong type", func(t *testing.T) {
+		filter, err := Compile(`upper(count) == "TEST"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("count", 123)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function upper with nil", func(t *testing.T) {
+		filter, err := Compile(`upper(missing) == "TEST"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function len with bytes", func(t *testing.T) {
+		filter, err := Compile(`len(data) == 5`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetField("data", BytesValue([]byte("hello")))
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function len with nil", func(t *testing.T) {
+		filter, err := Compile(`len(missing) == 0`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function len with wrong type", func(t *testing.T) {
+		filter, err := Compile(`len(flag) == 0`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetBoolField("flag", true)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function starts_with with nil source", func(t *testing.T) {
+		filter, err := Compile(`starts_with(missing, "test")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function starts_with with wrong type", func(t *testing.T) {
+		filter, err := Compile(`starts_with(count, "test")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("count", 123)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function ends_with with nil source", func(t *testing.T) {
+		filter, err := Compile(`ends_with(missing, "test")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function ends_with with wrong type", func(t *testing.T) {
+		filter, err := Compile(`ends_with(count, "test")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("count", 123)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function any with non-expression", func(t *testing.T) {
+		filter, err := Compile(`any(flag)`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetBoolField("flag", true)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function any with nil result", func(t *testing.T) {
+		filter, err := Compile(`any(missing)`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function all with non-binary expression", func(t *testing.T) {
+		filter, err := Compile(`all(flag)`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetBoolField("flag", true)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function all with nil result", func(t *testing.T) {
+		filter, err := Compile(`all(missing)`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function all with ne operator", func(t *testing.T) {
+		filter, err := Compile(`all(tags[*] != "banned")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"a", "b", "c"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetArrayField("tags", []string{"a", "banned", "c"})
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("function all with in operator", func(t *testing.T) {
+		filter, err := Compile(`all(tags[*] in {"a", "b", "c"})`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"a", "b"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetArrayField("tags", []string{"a", "x"})
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("function all with matches operator", func(t *testing.T) {
+		filter, err := Compile(`all(tags[*] matches "^[a-z]+$")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"abc", "def"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetArrayField("tags", []string{"abc", "123"})
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("function concat with nil args", func(t *testing.T) {
+		filter, err := Compile(`concat(a, b, c) == "ac"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("a", "a").
+			SetStringField("c", "c")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function concat with non-string", func(t *testing.T) {
+		filter, err := Compile(`concat(name, count) == "test123"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("name", "test").
+			SetIntField("count", 123)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function substring with nil", func(t *testing.T) {
+		filter, err := Compile(`substring(missing, 0, 4) == ""`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function substring with wrong type", func(t *testing.T) {
+		filter, err := Compile(`substring(count, 0, 4) == ""`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("count", 123)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function substring end less than start", func(t *testing.T) {
+		filter, err := Compile(`substring(name, 5, 2) == ""`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("name", "hello world")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function substring end beyond length", func(t *testing.T) {
+		filter, err := Compile(`substring(name, 0, 100) == "hello"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("name", "hello")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function split with nil", func(t *testing.T) {
+		filter, err := Compile(`split(missing, ",")[0] == ""`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function split with wrong type", func(t *testing.T) {
+		filter, err := Compile(`split(count, ",")[0] == ""`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("count", 123)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function join with nil array", func(t *testing.T) {
+		filter, err := Compile(`join(missing, ",") == ""`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function join with wrong type", func(t *testing.T) {
+		filter, err := Compile(`join(name, ",") == ""`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("name", "test")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function join with nil elements", func(t *testing.T) {
+		filter, err := Compile(`join(tags, ",")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetField("tags", ArrayValue{
+			StringValue("a"),
+			nil,
+			StringValue("c"),
+		})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function join with non-string elements", func(t *testing.T) {
+		filter, err := Compile(`join(items, ",") == "1,2,3"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntArrayField("items", []int64{1, 2, 3})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function has_key with nil", func(t *testing.T) {
+		filter, err := Compile(`has_key(missing, "key")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function has_key with wrong type", func(t *testing.T) {
+		filter, err := Compile(`has_key(name, "key")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("name", "test")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function has_value with nil", func(t *testing.T) {
+		filter, err := Compile(`has_value(missing, "value")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function has_value with wrong type", func(t *testing.T) {
+		filter, err := Compile(`has_value(name, "value")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("name", "test")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function url_decode with nil", func(t *testing.T) {
+		filter, err := Compile(`url_decode(missing) == ""`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function url_decode with wrong type", func(t *testing.T) {
+		filter, err := Compile(`url_decode(count) == ""`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("count", 123)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("array unpack with ne operator", func(t *testing.T) {
+		filter, err := Compile(`tags[*] != "banned"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"a", "b", "c"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array unpack with lt operator", func(t *testing.T) {
+		filter, err := Compile(`nums[*] < 10`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntArrayField("nums", []int64{5, 15, 25})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array unpack with le operator", func(t *testing.T) {
+		filter, err := Compile(`nums[*] <= 5`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntArrayField("nums", []int64{5, 15, 25})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array unpack with ge operator", func(t *testing.T) {
+		filter, err := Compile(`nums[*] >= 25`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntArrayField("nums", []int64{5, 15, 25})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("array unpack with strict wildcard", func(t *testing.T) {
+		filter, err := Compile(`hosts[*] strict wildcard "*.Example.com"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("hosts", []string{
+			"api.Example.com",
+			"www.other.com",
+		})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("range with non-int types", func(t *testing.T) {
+		filter, err := Compile(`status in {200..299}`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("status", "250")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("unary not with nil", func(t *testing.T) {
+		filter, err := Compile(`not missing`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("index on nil object", func(t *testing.T) {
+		filter, err := Compile(`missing[0] == "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("index with nil index", func(t *testing.T) {
+		filter, err := Compile(`tags[idx] == "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"a", "b"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("unpack on nil array", func(t *testing.T) {
+		filter, err := Compile(`missing[*] == "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("unpack on non-array", func(t *testing.T) {
+		filter, err := Compile(`name[*] == "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("name", "test")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("list ref not found", func(t *testing.T) {
+		filter, err := Compile(`role in $missing_list`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("role", "admin")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
 }
