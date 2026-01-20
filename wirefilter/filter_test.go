@@ -3079,4 +3079,137 @@ func TestFilter(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, result)
 	})
+
+	t.Run("function cidr - IPv4", func(t *testing.T) {
+		filter, err := Compile(`cidr(ip, 24, 64) == "192.168.1.0"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.100")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		// Different subnet
+		ctx2 := NewExecutionContext().SetIPField("ip", "192.168.2.100")
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("function cidr - IPv4 /16", func(t *testing.T) {
+		filter, err := Compile(`cidr(ip, 16, 64) == "192.168.0.0"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIPField("ip", "192.168.100.50")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function cidr - IPv6", func(t *testing.T) {
+		filter, err := Compile(`cidr(ip, 24, 64) == "2001:db8::"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIPField("ip", "2001:db8::1234")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		// Different /64 subnet
+		ctx2 := NewExecutionContext().SetIPField("ip", "2001:db8:1::1234")
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("function cidr - edge cases", func(t *testing.T) {
+		// /32 mask (full IP)
+		filter, err := Compile(`cidr(ip, 32, 128) == "192.168.1.100"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.100")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		// /0 mask (all zeros)
+		filter2, err := Compile(`cidr(ip, 0, 0) == "0.0.0.0"`, nil)
+		assert.NoError(t, err)
+
+		result2, err := filter2.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result2)
+	})
+
+	t.Run("function cidr - wrong types", func(t *testing.T) {
+		filter, err := Compile(`cidr(name, 24, 64) == "192.168.1.0"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("name", "not an ip")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function cidr6 - IPv4", func(t *testing.T) {
+		// cidr6 with IPv4 caps at 32
+		filter, err := Compile(`cidr6(ip, 24) == "192.168.1.0"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.100")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function cidr6 - IPv4 with bits > 32", func(t *testing.T) {
+		// cidr6 with bits > 32 for IPv4 should cap at 32
+		filter, err := Compile(`cidr6(ip, 64) == "192.168.1.100"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.100")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function cidr6 - IPv6", func(t *testing.T) {
+		filter, err := Compile(`cidr6(ip, 64) == "2001:db8::"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIPField("ip", "2001:db8::abcd:1234")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function cidr6 - wrong types", func(t *testing.T) {
+		filter, err := Compile(`cidr6(name, 64) == "2001:db8::"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("name", "not an ip")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function cidr - nil arguments", func(t *testing.T) {
+		filter, err := Compile(`cidr(ip, 24, 64) == "192.168.1.0"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function cidr6 - nil arguments", func(t *testing.T) {
+		filter, err := Compile(`cidr6(ip, 64) == "2001:db8::"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
 }

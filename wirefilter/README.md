@@ -503,6 +503,13 @@ Wirefilter provides built-in functions for transforming and inspecting values.
 | `len(Map)` | Map key count | `len(headers) > 0` |
 | `has_key(Map, String)` | Check key exists | `has_key(headers, "Authorization")` |
 
+### IP Functions
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `cidr(IP, Int, Int)` | Apply CIDR mask (ipv4_bits, ipv6_bits) | `cidr(ip.src, 24, 64) == "192.168.1.0"` |
+| `cidr6(IP, Int)` | Apply CIDR mask for IPv6 | `cidr6(ip.src, 64) == "2001:db8::"` |
+
 ### Function Examples
 
 ```go
@@ -532,6 +539,12 @@ split(header, ",")[0] == "value1"
 
 // Check map key exists
 has_key(request.headers, "X-Auth-Token")
+
+// Apply /24 CIDR mask to IPv4 (or /64 to IPv6)
+cidr(ip.src, 24, 64) == "192.168.1.0"
+
+// Apply /64 CIDR mask for IPv6 networks
+cidr6(ip.src, 64) == "2001:db8::"
 ```
 
 ## Advanced Examples

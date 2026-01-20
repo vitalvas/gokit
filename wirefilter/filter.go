@@ -655,6 +655,10 @@ func (f *Filter) evaluateFunctionCall(expr *FunctionCallExpr, ctx *ExecutionCont
 		return f.fnHasValue(args)
 	case "url_decode":
 		return f.fnURLDecode(args)
+	case "cidr":
+		return f.fnCIDR(args)
+	case "cidr6":
+		return f.fnCIDR6(args)
 	}
 
 	return nil, nil
@@ -961,4 +965,73 @@ func (f *Filter) fnURLDecode(args []Value) (Value, error) {
 		return StringValue(str), nil // Return original on error
 	}
 	return StringValue(decoded), nil
+}
+
+// cidr(IP, Int, Int) -> IP
+// Applies CIDR masking: ipv4_bits for IPv4 (1-32), ipv6_bits for IPv6 (1-128)
+func (f *Filter) fnCIDR(args []Value) (Value, error) {
+	if len(args) != 3 || args[0] == nil || args[1] == nil || args[2] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeIP || args[1].Type() != TypeInt || args[2].Type() != TypeInt {
+		return nil, nil
+	}
+
+	ipVal := args[0].(IPValue)
+	ipv4Bits := int(args[1].(IntValue))
+	ipv6Bits := int(args[2].(IntValue))
+
+	return applyCIDRMask(ipVal.IP, ipv4Bits, ipv6Bits), nil
+}
+
+// cidr6(IP, Int) -> IP
+// Applies CIDR masking for IPv6: ipv6_bits (1-128)
+// For IPv4 addresses, applies the same mask value (capped at 32)
+func (f *Filter) fnCIDR6(args []Value) (Value, error) {
+	if len(args) != 2 || args[0] == nil || args[1] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeIP || args[1].Type() != TypeInt {
+		return nil, nil
+	}
+
+	ipVal := args[0].(IPValue)
+	ipv6Bits := int(args[1].(IntValue))
+
+	// For cidr6, use ipv6_bits for both (IPv4 capped at 32)
+	ipv4Bits := ipv6Bits
+	if ipv4Bits > 32 {
+		ipv4Bits = 32
+	}
+
+	return applyCIDRMask(ipVal.IP, ipv4Bits, ipv6Bits), nil
+}
+
+// applyCIDRMask applies CIDR mask to an IP address
+func applyCIDRMask(ip net.IP, ipv4Bits, ipv6Bits int) Value {
+	// Determine if IPv4 or IPv6
+	ip4 := ip.To4()
+	if ip4 != nil {
+		// IPv4 address
+		if ipv4Bits < 0 {
+			ipv4Bits = 0
+		}
+		if ipv4Bits > 32 {
+			ipv4Bits = 32
+		}
+		mask := net.CIDRMask(ipv4Bits, 32)
+		masked := ip4.Mask(mask)
+		return IPValue{IP: masked}
+	}
+
+	// IPv6 address
+	if ipv6Bits < 0 {
+		ipv6Bits = 0
+	}
+	if ipv6Bits > 128 {
+		ipv6Bits = 128
+	}
+	mask := net.CIDRMask(ipv6Bits, 128)
+	masked := ip.Mask(mask)
+	return IPValue{IP: masked}
 }
