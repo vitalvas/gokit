@@ -134,13 +134,52 @@ func (p *Parser) parseGroupedExpression() Expression {
 }
 
 func (p *Parser) parseFieldExpression() Expression {
-	field := &FieldExpr{Name: p.curToken.Literal}
+	name := p.curToken.Literal
+
+	// Check if this is a function call (identifier followed by '(')
+	if p.peekToken.Type == TokenLParen {
+		return p.parseFunctionCallExpression(name)
+	}
+
+	field := &FieldExpr{Name: name}
 
 	if p.peekToken.Type == TokenLBracket {
 		return p.parseIndexExpression(field)
 	}
 
 	return field
+}
+
+func (p *Parser) parseFunctionCallExpression(name string) Expression {
+	p.nextToken() // consume '('
+	p.nextToken() // move to first argument or ')'
+
+	args := []Expression{}
+
+	// Handle empty argument list
+	if p.curToken.Type == TokenRParen {
+		return &FunctionCallExpr{Name: name, Arguments: args}
+	}
+
+	// Parse first argument
+	arg := p.parseExpression(LOWEST)
+	args = append(args, arg)
+
+	// Parse remaining arguments
+	for p.peekToken.Type == TokenComma {
+		p.nextToken() // consume ','
+		p.nextToken() // move to next argument
+		arg = p.parseExpression(LOWEST)
+		args = append(args, arg)
+	}
+
+	if p.peekToken.Type != TokenRParen {
+		p.addError("expected ), got %s", p.peekToken.Type)
+		return nil
+	}
+	p.nextToken() // consume ')'
+
+	return &FunctionCallExpr{Name: name, Arguments: args}
 }
 
 func (p *Parser) parseIndexExpression(object Expression) Expression {

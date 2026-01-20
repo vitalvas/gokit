@@ -19,6 +19,7 @@ inspired by Cloudflare's Wirefilter.
 - Array unpack operations: `tags[*] == "value"` (ANY semantics)
 - Raw strings: `r"..."` (no escape processing)
 - Custom lists: `$list_name` for external list references
+- Built-in functions: `lower()`, `upper()`, `len()`, `starts_with()`, `ends_with()`, and more
 - Field-to-field comparisons
 - IP/CIDR matching for IPv4 and IPv6
 - Regular expression matching
@@ -466,6 +467,72 @@ Wildcard patterns support:
 |----------|-------------|---------|
 | `===` | All elements equal | `tags === "prod"` |
 | `!==` | Any element not equal | `tags !== "test"` |
+
+## Functions
+
+Wirefilter provides built-in functions for transforming and inspecting values.
+
+### String Functions
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `lower(String)` | Convert to lowercase | `lower(http.host) == "example.com"` |
+| `upper(String)` | Convert to uppercase | `upper(method) == "GET"` |
+| `len(String)` | String length in bytes | `len(path) > 100` |
+| `starts_with(String, String)` | Check prefix | `starts_with(path, "/api/")` |
+| `ends_with(String, String)` | Check suffix | `ends_with(file, ".json")` |
+| `substring(String, Int [, Int])` | Extract substring | `substring(path, 0, 4) == "/api"` |
+| `concat(String...)` | Concatenate strings | `concat(scheme, "://", host)` |
+| `split(String, String)` | Split into array | `split(header, ",")[0]` |
+| `url_decode(String)` | URL decode | `url_decode(query) contains "admin"` |
+
+### Array Functions
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `len(Array)` | Array element count | `len(tags) > 0` |
+| `any(expression)` | Any element matches | `any(tags[*] == "admin")` |
+| `all(expression)` | All elements match | `all(ports[*] > 0)` |
+| `has_value(Array, Value)` | Array contains value | `has_value(tags, "admin")` |
+| `join(Array, String)` | Join array elements | `join(tags, ",")` |
+
+### Map Functions
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `len(Map)` | Map key count | `len(headers) > 0` |
+| `has_key(Map, String)` | Check key exists | `has_key(headers, "Authorization")` |
+
+### Function Examples
+
+```go
+// Case-insensitive comparison
+lower(http.host) == "example.com"
+
+// Check path prefix
+starts_with(http.path, "/api/v1/")
+
+// Check file extension
+ends_with(request.file, ".pdf")
+
+// URL decode and search
+url_decode(http.query) contains "admin"
+
+// Check if any tag matches
+any(tags[*] contains "prod")
+
+// Check if all ports are valid
+all(ports[*] > 0 and ports[*] < 65536)
+
+// Build URL from parts
+concat(scheme, "://", host, path) == "https://api.example.com/users"
+
+// Parse CSV header
+split(header, ",")[0] == "value1"
+
+// Check map key exists
+has_key(request.headers, "X-Auth-Token")
+```
 
 ## Advanced Examples
 

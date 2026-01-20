@@ -34,7 +34,9 @@ package wirefilter
 
 import (
 	"net"
+	"net/url"
 	"regexp"
+	"strings"
 )
 
 // Filter represents a compiled filter expression that can be executed against an execution context.
@@ -107,6 +109,8 @@ func (f *Filter) evaluate(expr Expression, ctx *ExecutionContext) (Value, error)
 		return f.evaluateUnpackExpr(e, ctx)
 	case *ListRefExpr:
 		return f.evaluateListRefExpr(e, ctx)
+	case *FunctionCallExpr:
+		return f.evaluateFunctionCall(e, ctx)
 	}
 	return nil, nil
 }
@@ -607,4 +611,354 @@ func globToRegex(glob string) string {
 
 	result = append(result, '$')
 	return string(result)
+}
+
+func (f *Filter) evaluateFunctionCall(expr *FunctionCallExpr, ctx *ExecutionContext) (Value, error) {
+	// Evaluate all arguments first
+	args := make([]Value, len(expr.Arguments))
+	for i, arg := range expr.Arguments {
+		val, err := f.evaluate(arg, ctx)
+		if err != nil {
+			return nil, err
+		}
+		args[i] = val
+	}
+
+	name := strings.ToLower(expr.Name)
+
+	switch name {
+	case "lower":
+		return f.fnLower(args)
+	case "upper":
+		return f.fnUpper(args)
+	case "len":
+		return f.fnLen(args)
+	case "starts_with":
+		return f.fnStartsWith(args)
+	case "ends_with":
+		return f.fnEndsWith(args)
+	case "any":
+		return f.fnAny(expr.Arguments, ctx)
+	case "all":
+		return f.fnAll(expr.Arguments, ctx)
+	case "concat":
+		return f.fnConcat(args)
+	case "substring":
+		return f.fnSubstring(args)
+	case "split":
+		return f.fnSplit(args)
+	case "join":
+		return f.fnJoin(args)
+	case "has_key":
+		return f.fnHasKey(args)
+	case "has_value":
+		return f.fnHasValue(args)
+	case "url_decode":
+		return f.fnURLDecode(args)
+	}
+
+	return nil, nil
+}
+
+// lower(String) -> String
+func (f *Filter) fnLower(args []Value) (Value, error) {
+	if len(args) != 1 || args[0] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeString {
+		return nil, nil
+	}
+	return StringValue(strings.ToLower(string(args[0].(StringValue)))), nil
+}
+
+// upper(String) -> String
+func (f *Filter) fnUpper(args []Value) (Value, error) {
+	if len(args) != 1 || args[0] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeString {
+		return nil, nil
+	}
+	return StringValue(strings.ToUpper(string(args[0].(StringValue)))), nil
+}
+
+// len(String|Array|Map|Bytes) -> Int
+func (f *Filter) fnLen(args []Value) (Value, error) {
+	if len(args) != 1 || args[0] == nil {
+		return nil, nil
+	}
+	switch v := args[0].(type) {
+	case StringValue:
+		return IntValue(len(v)), nil
+	case ArrayValue:
+		return IntValue(len(v)), nil
+	case MapValue:
+		return IntValue(len(v)), nil
+	case BytesValue:
+		return IntValue(len(v)), nil
+	}
+	return nil, nil
+}
+
+// starts_with(String, String) -> Bool
+func (f *Filter) fnStartsWith(args []Value) (Value, error) {
+	if len(args) != 2 || args[0] == nil || args[1] == nil {
+		return BoolValue(false), nil
+	}
+	if args[0].Type() != TypeString || args[1].Type() != TypeString {
+		return BoolValue(false), nil
+	}
+	str := string(args[0].(StringValue))
+	prefix := string(args[1].(StringValue))
+	return BoolValue(strings.HasPrefix(str, prefix)), nil
+}
+
+// ends_with(String, String) -> Bool
+func (f *Filter) fnEndsWith(args []Value) (Value, error) {
+	if len(args) != 2 || args[0] == nil || args[1] == nil {
+		return BoolValue(false), nil
+	}
+	if args[0].Type() != TypeString || args[1].Type() != TypeString {
+		return BoolValue(false), nil
+	}
+	str := string(args[0].(StringValue))
+	suffix := string(args[1].(StringValue))
+	return BoolValue(strings.HasSuffix(str, suffix)), nil
+}
+
+// any(expression) -> Bool - returns true if any element matches
+func (f *Filter) fnAny(args []Expression, ctx *ExecutionContext) (Value, error) {
+	if len(args) != 1 {
+		return BoolValue(false), nil
+	}
+
+	// The argument should be a binary expression with unpacked array on left
+	result, err := f.evaluate(args[0], ctx)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return BoolValue(false), nil
+	}
+
+	return BoolValue(result.IsTruthy()), nil
+}
+
+// all(expression) -> Bool - returns true if all elements match
+func (f *Filter) fnAll(args []Expression, ctx *ExecutionContext) (Value, error) {
+	if len(args) != 1 {
+		return BoolValue(false), nil
+	}
+
+	// Evaluate the inner expression
+	arg := args[0]
+
+	// If it's a binary expression with unpacked array, we need ALL semantics
+	if binExpr, ok := arg.(*BinaryExpr); ok {
+		left, err := f.evaluate(binExpr.Left, ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		if uv, ok := left.(UnpackedArrayValue); ok {
+			if len(uv.Array) == 0 {
+				return BoolValue(false), nil
+			}
+
+			right, err := f.evaluate(binExpr.Right, ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			// Apply operation to each element, return true only if ALL match
+			for _, elem := range uv.Array {
+				var result Value
+
+				switch binExpr.Operator {
+				case TokenEq:
+					result, err = f.evaluateEquality(elem, right)
+				case TokenNe:
+					eqResult, eqErr := f.evaluateEquality(elem, right)
+					if eqErr != nil {
+						return nil, eqErr
+					}
+					result = BoolValue(!bool(eqResult.(BoolValue)))
+				case TokenContains:
+					result, err = f.evaluateContains(elem, right)
+				case TokenMatches:
+					result, err = f.evaluateMatches(elem, right)
+				case TokenIn:
+					result, err = f.evaluateIn(elem, right)
+				case TokenLt:
+					result, err = f.evaluateComparison(elem, right, func(a, b int64) bool { return a < b })
+				case TokenGt:
+					result, err = f.evaluateComparison(elem, right, func(a, b int64) bool { return a > b })
+				case TokenLe:
+					result, err = f.evaluateComparison(elem, right, func(a, b int64) bool { return a <= b })
+				case TokenGe:
+					result, err = f.evaluateComparison(elem, right, func(a, b int64) bool { return a >= b })
+				default:
+					continue
+				}
+
+				if err != nil {
+					return nil, err
+				}
+				if result == nil || !result.IsTruthy() {
+					return BoolValue(false), nil
+				}
+			}
+			return BoolValue(true), nil
+		}
+	}
+
+	// Fallback: just evaluate the expression
+	result, err := f.evaluate(arg, ctx)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return BoolValue(false), nil
+	}
+	return BoolValue(result.IsTruthy()), nil
+}
+
+// concat(String...) -> String
+func (f *Filter) fnConcat(args []Value) (Value, error) {
+	var sb strings.Builder
+	for _, arg := range args {
+		if arg == nil {
+			continue
+		}
+		if arg.Type() == TypeString {
+			sb.WriteString(string(arg.(StringValue)))
+		} else {
+			sb.WriteString(arg.String())
+		}
+	}
+	return StringValue(sb.String()), nil
+}
+
+// substring(String, Int, Int) -> String
+func (f *Filter) fnSubstring(args []Value) (Value, error) {
+	if len(args) < 2 || args[0] == nil || args[1] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeString || args[1].Type() != TypeInt {
+		return nil, nil
+	}
+
+	str := string(args[0].(StringValue))
+	start := int(args[1].(IntValue))
+
+	if start < 0 {
+		start = 0
+	}
+	if start >= len(str) {
+		return StringValue(""), nil
+	}
+
+	end := len(str)
+	if len(args) >= 3 && args[2] != nil && args[2].Type() == TypeInt {
+		end = int(args[2].(IntValue))
+		if end > len(str) {
+			end = len(str)
+		}
+		if end < start {
+			end = start
+		}
+	}
+
+	return StringValue(str[start:end]), nil
+}
+
+// split(String, String) -> Array
+func (f *Filter) fnSplit(args []Value) (Value, error) {
+	if len(args) != 2 || args[0] == nil || args[1] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeString || args[1].Type() != TypeString {
+		return nil, nil
+	}
+
+	str := string(args[0].(StringValue))
+	sep := string(args[1].(StringValue))
+	parts := strings.Split(str, sep)
+
+	result := make(ArrayValue, len(parts))
+	for i, part := range parts {
+		result[i] = StringValue(part)
+	}
+	return result, nil
+}
+
+// join(Array, String) -> String
+func (f *Filter) fnJoin(args []Value) (Value, error) {
+	if len(args) != 2 || args[0] == nil || args[1] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeArray || args[1].Type() != TypeString {
+		return nil, nil
+	}
+
+	arr := args[0].(ArrayValue)
+	sep := string(args[1].(StringValue))
+
+	parts := make([]string, len(arr))
+	for i, elem := range arr {
+		switch {
+		case elem == nil:
+			parts[i] = ""
+		case elem.Type() == TypeString:
+			parts[i] = string(elem.(StringValue))
+		default:
+			parts[i] = elem.String()
+		}
+	}
+	return StringValue(strings.Join(parts, sep)), nil
+}
+
+// has_key(Map, String) -> Bool
+func (f *Filter) fnHasKey(args []Value) (Value, error) {
+	if len(args) != 2 || args[0] == nil || args[1] == nil {
+		return BoolValue(false), nil
+	}
+	if args[0].Type() != TypeMap || args[1].Type() != TypeString {
+		return BoolValue(false), nil
+	}
+
+	m := args[0].(MapValue)
+	key := string(args[1].(StringValue))
+	_, ok := m.Get(key)
+	return BoolValue(ok), nil
+}
+
+// has_value(Array, Value) -> Bool
+func (f *Filter) fnHasValue(args []Value) (Value, error) {
+	if len(args) != 2 || args[0] == nil || args[1] == nil {
+		return BoolValue(false), nil
+	}
+	if args[0].Type() != TypeArray {
+		return BoolValue(false), nil
+	}
+
+	arr := args[0].(ArrayValue)
+	return BoolValue(arr.Contains(args[1])), nil
+}
+
+// url_decode(String) -> String
+func (f *Filter) fnURLDecode(args []Value) (Value, error) {
+	if len(args) != 1 || args[0] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeString {
+		return nil, nil
+	}
+
+	str := string(args[0].(StringValue))
+	decoded, err := url.QueryUnescape(str)
+	if err != nil {
+		return StringValue(str), nil // Return original on error
+	}
+	return StringValue(decoded), nil
 }

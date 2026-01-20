@@ -96,6 +96,12 @@ func (s *Schema) validateExpression(expr Expression) error {
 		}
 	case *ListRefExpr:
 		// List references are validated at runtime
+	case *FunctionCallExpr:
+		for _, arg := range e.Arguments {
+			if err := s.validateExpression(arg); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

@@ -87,3 +87,12 @@ type ListRefExpr struct {
 
 func (l *ListRefExpr) node()       {}
 func (l *ListRefExpr) expression() {}
+
+// FunctionCallExpr represents a function call (e.g., lower(http.host)).
+type FunctionCallExpr struct {
+	Name      string
+	Arguments []Expression
+}
+
+func (f *FunctionCallExpr) node()       {}
+func (f *FunctionCallExpr) expression() {}

@@ -87,4 +87,13 @@ func TestASTNodeInterfaces(t *testing.T) {
 		var _ Expression = expr
 		assert.NotNil(t, expr)
 	})
+
+	t.Run("FunctionCallExpr implements Node and Expression", func(t *testing.T) {
+		expr := &FunctionCallExpr{}
+		expr.node()
+		expr.expression()
+		var _ Node = expr
+		var _ Expression = expr
+		assert.NotNil(t, expr)
+	})
 }
