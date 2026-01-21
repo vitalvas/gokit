@@ -51,12 +51,11 @@ func TestNew(t *testing.T) {
 			}),
 		},
 		{
-			name: "Create logger with error level and source path replacement",
+			name: "Create logger with error level",
 			conf: Config{
-				Level:      "error",
-				LogType:    "json",
-				AddSource:  true,
-				SourcePath: "/Users/vitalvas/workspace/go/src/github.com/vitalvas/gokit/",
+				Level:     "error",
+				LogType:   "json",
+				AddSource: true,
 			},
 			expected: slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 				AddSource: true,
@@ -182,74 +181,70 @@ func TestGetHandler(t *testing.T) {
 	}
 }
 
-func TestReplaceAttr(t *testing.T) {
-	tests := []struct {
-		name     string
-		conf     Config
-		attr     slog.Attr
-		expected slog.Attr
-	}{
-		{
-			name: "Replace source attribute with source path",
-			conf: Config{
-				SourcePath: "github.com/vitalvas/gokit/",
-			},
-			attr: slog.Attr{
-				Key: slog.SourceKey,
-				Value: slog.AnyValue(&slog.Source{
-					File: "/Users/vitalvas/workspace/go/src/github.com/vitalvas/gokit/xlogger/logger.go",
-					Line: 42,
-				}),
-			},
-			expected: slog.String("source", "xlogger/logger.go:42"),
-		},
-		{
-			name: "Replace source attribute with full source path",
-			conf: Config{
-				SourcePath: "/Users/vitalvas/workspace/go/src/github.com/vitalvas/gokit/",
-			},
-			attr: slog.Attr{
-				Key: slog.SourceKey,
-				Value: slog.AnyValue(&slog.Source{
-					File: "/Users/vitalvas/workspace/go/src/github.com/vitalvas/gokit/xlogger/logger.go",
-					Line: 42,
-				}),
-			},
-			expected: slog.String("source", "xlogger/logger.go:42"),
-		},
-		{
-			name: "Replace source attribute without source path",
-			conf: Config{},
-			attr: slog.Attr{
-				Key: slog.SourceKey,
-				Value: slog.AnyValue(&slog.Source{
-					File: "/Users/vitalvas/workspace/go/src/github.com/vitalvas/gokit/xlogger/logger.go",
-					Line: 42,
-				}),
-			},
-			expected: slog.String("source", "/Users/vitalvas/workspace/go/src/github.com/vitalvas/gokit/xlogger/logger.go:42"),
-		},
-		{
-			name: "Non-source attribute remains unchanged",
-			conf: Config{},
-			attr: slog.Attr{
-				Key:   "non-source",
-				Value: slog.StringValue("test"),
-			},
-			expected: slog.Attr{
-				Key:   "non-source",
-				Value: slog.StringValue("test"),
-			},
-		},
-	}
+func TestDetectSourcePath(t *testing.T) {
+	path := detectSourcePath()
+	assert.NotEmpty(t, path)
+	assert.Contains(t, path, "gokit")
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			replaceFunc := replaceAttr(tt.conf)
-			assert.NotNil(t, replaceFunc)
+func TestNewReplaceAttr(t *testing.T) {
+	t.Run("with source path", func(t *testing.T) {
+		replaceFunc := newReplaceAttr("github.com/vitalvas/gokit")
 
-			result := replaceFunc(nil, tt.attr)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+		attr := slog.Attr{
+			Key: slog.SourceKey,
+			Value: slog.AnyValue(&slog.Source{
+				File: "/home/user/go/pkg/mod/github.com/vitalvas/gokit/xlogger/logger.go",
+				Line: 42,
+			}),
+		}
+
+		result := replaceFunc(nil, attr)
+		assert.Equal(t, slog.SourceKey, result.Key)
+		assert.Equal(t, "xlogger/logger.go:42", result.Value.String())
+	})
+
+	t.Run("without source path", func(t *testing.T) {
+		replaceFunc := newReplaceAttr("")
+
+		attr := slog.Attr{
+			Key: slog.SourceKey,
+			Value: slog.AnyValue(&slog.Source{
+				File: "/full/path/to/file.go",
+				Line: 10,
+			}),
+		}
+
+		result := replaceFunc(nil, attr)
+		assert.Equal(t, slog.SourceKey, result.Key)
+		assert.Equal(t, "/full/path/to/file.go:10", result.Value.String())
+	})
+
+	t.Run("non-source attribute unchanged", func(t *testing.T) {
+		replaceFunc := newReplaceAttr("github.com/vitalvas/gokit")
+
+		attr := slog.Attr{
+			Key:   "message",
+			Value: slog.StringValue("test"),
+		}
+
+		result := replaceFunc(nil, attr)
+		assert.Equal(t, attr, result)
+	})
+
+	t.Run("source path not in file path", func(t *testing.T) {
+		replaceFunc := newReplaceAttr("github.com/other/module")
+
+		attr := slog.Attr{
+			Key: slog.SourceKey,
+			Value: slog.AnyValue(&slog.Source{
+				File: "/home/user/go/src/myproject/main.go",
+				Line: 5,
+			}),
+		}
+
+		result := replaceFunc(nil, attr)
+		assert.Equal(t, slog.SourceKey, result.Key)
+		assert.Equal(t, "/home/user/go/src/myproject/main.go:5", result.Value.String())
+	})
 }
