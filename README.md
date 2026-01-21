@@ -12,6 +12,7 @@ The following libraries will be released in v1.0.0:
 - **fastcdc** - Fast Content-Defined Chunking with gear rolling hash and configurable hash algorithms
 - **hyperloglog** - Cardinality estimation for counting distinct elements with minimal memory
 - **markov** - Markov chain text generator with thread-safe operations
+- **shamir** - Shamir's Secret Sharing with GF(2^8) and prime field options, share verification, and chunked large secret support
 - **spacesaving** - Space-Saving algorithm for finding top-k most frequent items (heavy hitters) in streams
 - **tdigest** - T-Digest for accurate quantile estimation from streaming or distributed data
 - **wirefilter** - Filtering expression language and execution engine for runtime data evaluation
