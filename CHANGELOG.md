@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.28.0](https://github.com/vitalvas/gokit/compare/v0.27.0...v0.28.0) (2026-01-21)
+
+
+### Features
+
+* **shamir:** add Shamir's Secret Sharing implementation ([2f072cd](https://github.com/vitalvas/gokit/commit/2f072cd0a7691383145d162a9699025291df33f3))
+
+
+### Bug Fixes
+
+* **xlogger:** auto-detect source path from build info ([23cf878](https://github.com/vitalvas/gokit/commit/23cf8788608263b1b9e4f9fc532cde05a6a93c11))
+
 ## [0.27.0](https://github.com/vitalvas/gokit/compare/v0.26.0...v0.27.0) (2026-01-20)
 
 
