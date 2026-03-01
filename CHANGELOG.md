@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.0](https://github.com/vitalvas/gokit/compare/v0.28.0...v0.29.0) (2026-03-01)
+
+
+### Features
+
+* **xstrings:** add glob match ([3158cba](https://github.com/vitalvas/gokit/commit/3158cbaeb9df56be8774051dbc8ffb9e182c3775))
+
 ## [0.28.0](https://github.com/vitalvas/gokit/compare/v0.27.0...v0.28.0) (2026-01-21)
 
 
