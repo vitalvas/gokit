@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.0](https://github.com/vitalvas/gokit/compare/v0.29.0...v0.30.0) (2026-03-04)
+
+
+### Features
+
+* **xsemver:** add lenient parsing, constraints, increment, and diff ([4d245c7](https://github.com/vitalvas/gokit/commit/4d245c7b79c4d3dd1c0c3cf0fbbaa59f14da8175))
+
 ## [0.29.0](https://github.com/vitalvas/gokit/compare/v0.28.0...v0.29.0) (2026-03-01)
 
 
