@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.0](https://github.com/vitalvas/gokit/compare/v0.30.0...v0.31.0) (2026-03-12)
+
+
+### Features
+
+* **radixtree:** add generic concurrent-safe radix tree package ([a221be8](https://github.com/vitalvas/gokit/commit/a221be8a9464abd0d1d1781504299b399099923d))
+
 ## [0.30.0](https://github.com/vitalvas/gokit/compare/v0.29.0...v0.30.0) (2026-03-04)
 
 
