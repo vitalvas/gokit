@@ -1048,21 +1048,33 @@ func (f *Filter) fnURLDecode(args []Value) (Value, error) {
 	return StringValue(decoded), nil
 }
 
-// cidr(IP, Int, Int) -> IP
-// Applies CIDR masking: ipv4_bits for IPv4 (1-32), ipv6_bits for IPv6 (1-128)
+// cidr(IP, Int) -> IP
+// Applies CIDR masking for IPv4: ipv4_bits (1-32)
+// For IPv6 addresses, applies the same mask value (capped at 128)
 func (f *Filter) fnCIDR(args []Value) (Value, error) {
-	if len(args) != 3 || args[0] == nil || args[1] == nil || args[2] == nil {
+	if len(args) != 2 || args[0] == nil || args[1] == nil {
 		return nil, nil
 	}
-	if args[0].Type() != TypeIP || args[1].Type() != TypeInt || args[2].Type() != TypeInt {
+	if args[0].Type() != TypeIP || args[1].Type() != TypeInt {
 		return nil, nil
 	}
 
 	ipVal := args[0].(IPValue)
 	ipv4Bits := int(args[1].(IntValue))
-	ipv6Bits := int(args[2].(IntValue))
 
-	return applyCIDRMask(ipVal.IP, ipv4Bits, ipv6Bits), nil
+	ip4 := ipVal.IP.To4()
+	if ip4 != nil {
+		if ipv4Bits < 0 {
+			ipv4Bits = 0
+		}
+		if ipv4Bits > 32 {
+			ipv4Bits = 32
+		}
+		mask := net.CIDRMask(ipv4Bits, 32)
+		return IPValue{IP: ip4.Mask(mask)}, nil
+	}
+
+	return nil, nil
 }
 
 // cidr6(IP, Int) -> IP

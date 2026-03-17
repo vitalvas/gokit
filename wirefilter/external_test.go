@@ -1023,7 +1023,7 @@ func TestCloudflareIPFunctions(t *testing.T) {
 	}{
 		{
 			name:       "cidr_function_24",
-			expression: `cidr(ip.src, 24, 24) in "113.10.0.0/32"`,
+			expression: `cidr(ip.src, 24) in "113.10.0.0/32"`,
 			cases: []struct {
 				name     string
 				ctx      *ExecutionContext

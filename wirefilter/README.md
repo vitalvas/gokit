@@ -552,7 +552,7 @@ Wirefilter provides built-in functions for transforming and inspecting values.
 
 | Function | Description | Example |
 |----------|-------------|---------|
-| `cidr(IP, Int, Int)` | Apply CIDR mask (ipv4, ipv6 bits) | `cidr(ip, 24, 64)` |
+| `cidr(IP, Int)` | Apply CIDR mask for IPv4 | `cidr(ip, 24)` |
 | `cidr6(IP, Int)` | Apply CIDR mask for IPv6 | `cidr6(ip, 64)` |
 
 ### Function Examples
@@ -585,8 +585,8 @@ split(header, ",")[0] == "value1"
 // Check map key exists
 has_key(request.headers, "X-Auth-Token")
 
-// Apply /24 CIDR mask to IPv4 (or /64 to IPv6)
-cidr(ip.src, 24, 64) == "192.168.1.0"
+// Apply /24 CIDR mask to IPv4
+cidr(ip.src, 24) == "192.168.1.0"
 
 // Apply /64 CIDR mask for IPv6 networks
 cidr6(ip.src, 64) == "2001:db8::"
