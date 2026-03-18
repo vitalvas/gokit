@@ -1,6 +1,7 @@
 package xnet
 
 import (
+	"fmt"
 	"net"
 	"testing"
 )
@@ -141,7 +142,7 @@ func TestCIDRContainsString(t *testing.T) {
 func BenchmarkCIDRContains_10(b *testing.B) {
 	nets := make([]net.IPNet, 10)
 	for i := 0; i < 10; i++ {
-		_, ipNet, _ := net.ParseCIDR(net.IPv4(10, byte(i), 0, 0).String() + "/24")
+		_, ipNet, _ := net.ParseCIDR(fmt.Sprintf("%s/24", net.IPv4(10, byte(i), 0, 0).String()))
 		nets[i] = *ipNet
 	}
 	ip := net.IPv4(10, 5, 1, 1)
@@ -155,7 +156,7 @@ func BenchmarkCIDRContains_10(b *testing.B) {
 func BenchmarkCIDRContains_100(b *testing.B) {
 	nets := make([]net.IPNet, 100)
 	for i := 0; i < 100; i++ {
-		_, ipNet, _ := net.ParseCIDR(net.IPv4(10, byte(i), 0, 0).String() + "/24")
+		_, ipNet, _ := net.ParseCIDR(fmt.Sprintf("%s/24", net.IPv4(10, byte(i), 0, 0).String()))
 		nets[i] = *ipNet
 	}
 	ip := net.IPv4(10, 50, 1, 1)
@@ -171,7 +172,7 @@ func BenchmarkCIDRContains_1000(b *testing.B) {
 	for i := 0; i < 1000; i++ {
 		octet2 := byte(i / 256)
 		octet3 := byte(i % 256)
-		_, ipNet, _ := net.ParseCIDR(net.IPv4(10, octet2, octet3, 0).String() + "/24")
+		_, ipNet, _ := net.ParseCIDR(fmt.Sprintf("%s/24", net.IPv4(10, octet2, octet3, 0).String()))
 		nets[i] = *ipNet
 	}
 	ip := net.IPv4(10, 1, 244, 1)
@@ -187,7 +188,7 @@ func BenchmarkCIDRContainsString_1000(b *testing.B) {
 	for i := 0; i < 1000; i++ {
 		octet2 := byte(i / 256)
 		octet3 := byte(i % 256)
-		nets[i] = net.IPv4(10, octet2, octet3, 0).String() + "/24"
+		nets[i] = fmt.Sprintf("%s/24", net.IPv4(10, octet2, octet3, 0).String())
 	}
 	ip := net.IPv4(10, 1, 244, 1)
 
@@ -211,7 +212,7 @@ func FuzzCIDRContains(f *testing.F) {
 			return
 		}
 
-		_, ipNet, err := net.ParseCIDR(net.IP(netBytes).String() + "/" + string(rune('0'+mask/10)) + string(rune('0'+mask%10)))
+		_, ipNet, err := net.ParseCIDR(fmt.Sprintf("%s/%d", net.IP(netBytes).String(), mask))
 		if err != nil {
 			return
 		}

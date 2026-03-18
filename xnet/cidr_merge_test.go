@@ -1,6 +1,7 @@
 package xnet
 
 import (
+	"fmt"
 	"net"
 	"sort"
 	"testing"
@@ -160,7 +161,7 @@ func TestCIDRMerge(t *testing.T) {
 		// Generate all 256 /24 subnets from 192.168.0.0/16
 		cidrs := make([]string, 256)
 		for i := 0; i < 256; i++ {
-			cidrs[i] = net.IPv4(192, 168, byte(i), 0).String() + "/24"
+			cidrs[i] = fmt.Sprintf("%s/24", net.IPv4(192, 168, byte(i), 0).String())
 		}
 
 		nets := parseCIDRs(t, cidrs)
@@ -183,7 +184,7 @@ func TestCIDRMerge(t *testing.T) {
 				byte(i >> 8), byte(i & 0xff), 0x00, 0x00, // third hextet varies
 				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			}
-			cidrs[i] = ip.String() + "/48"
+			cidrs[i] = fmt.Sprintf("%s/48", ip.String())
 		}
 
 		nets := parseCIDRs(t, cidrs)
@@ -201,10 +202,10 @@ func TestCIDRMerge(t *testing.T) {
 		// This should merge into two /18 blocks
 		cidrs := make([]string, 0, 128)
 		for i := 0; i < 64; i++ {
-			cidrs = append(cidrs, net.IPv4(192, 168, byte(i), 0).String()+"/24")
+			cidrs = append(cidrs, fmt.Sprintf("%s/24", net.IPv4(192, 168, byte(i), 0).String()))
 		}
 		for i := 128; i < 192; i++ {
-			cidrs = append(cidrs, net.IPv4(192, 168, byte(i), 0).String()+"/24")
+			cidrs = append(cidrs, fmt.Sprintf("%s/24", net.IPv4(192, 168, byte(i), 0).String()))
 		}
 
 		nets := parseCIDRs(t, cidrs)
@@ -247,7 +248,7 @@ func TestCIDRMerge(t *testing.T) {
 				0x00, byte(i), 0x00, 0x00, // third hextet 0x00XX
 				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			}
-			cidrs[i] = ip.String() + "/48"
+			cidrs[i] = fmt.Sprintf("%s/48", ip.String())
 		}
 
 		nets := parseCIDRs(t, cidrs)
@@ -270,7 +271,7 @@ func TestCIDRMerge(t *testing.T) {
 				0x00, byte(i), 0x00, 0x00,
 				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			}
-			cidrs = append(cidrs, ip.String()+"/48")
+			cidrs = append(cidrs, fmt.Sprintf("%s/48", ip.String()))
 		}
 		for i := 0x100; i < 0x104; i++ {
 			ip := net.IP{
@@ -278,7 +279,7 @@ func TestCIDRMerge(t *testing.T) {
 				byte(i >> 8), byte(i & 0xff), 0x00, 0x00,
 				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			}
-			cidrs = append(cidrs, ip.String()+"/48")
+			cidrs = append(cidrs, fmt.Sprintf("%s/48", ip.String()))
 		}
 
 		nets := parseCIDRs(t, cidrs)
@@ -531,7 +532,7 @@ func BenchmarkCIDRMerge_IPv4_16to24(b *testing.B) {
 	// 256 subnets
 	cidrs := make([]net.IPNet, 256)
 	for i := 0; i < 256; i++ {
-		_, ipNet, _ := net.ParseCIDR(net.IPv4(192, 168, byte(i), 0).String() + "/24")
+		_, ipNet, _ := net.ParseCIDR(fmt.Sprintf("%s/24", net.IPv4(192, 168, byte(i), 0).String()))
 		cidrs[i] = *ipNet
 	}
 
@@ -599,12 +600,12 @@ func BenchmarkCIDRMerge_WithGaps(b *testing.B) {
 	cidrs := make([]net.IPNet, 128)
 	// First 64 /24s
 	for i := 0; i < 64; i++ {
-		_, ipNet, _ := net.ParseCIDR(net.IPv4(192, 168, byte(i), 0).String() + "/24")
+		_, ipNet, _ := net.ParseCIDR(fmt.Sprintf("%s/24", net.IPv4(192, 168, byte(i), 0).String()))
 		cidrs[i] = *ipNet
 	}
 	// Skip 64-127, add 128-191
 	for i := 128; i < 192; i++ {
-		_, ipNet, _ := net.ParseCIDR(net.IPv4(192, 168, byte(i), 0).String() + "/24")
+		_, ipNet, _ := net.ParseCIDR(fmt.Sprintf("%s/24", net.IPv4(192, 168, byte(i), 0).String()))
 		cidrs[i-64] = *ipNet
 	}
 

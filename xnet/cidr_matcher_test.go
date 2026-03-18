@@ -1,6 +1,7 @@
 package xnet
 
 import (
+	"fmt"
 	"net"
 	"testing"
 
@@ -193,7 +194,7 @@ func TestGetBit(t *testing.T) {
 func BenchmarkCIDRMatcher_Build_10(b *testing.B) {
 	nets := make([]net.IPNet, 10)
 	for i := 0; i < 10; i++ {
-		_, ipNet, _ := net.ParseCIDR(net.IPv4(10, byte(i), 0, 0).String() + "/24")
+		_, ipNet, _ := net.ParseCIDR(fmt.Sprintf("%s/24", net.IPv4(10, byte(i), 0, 0).String()))
 		nets[i] = *ipNet
 	}
 
@@ -206,7 +207,7 @@ func BenchmarkCIDRMatcher_Build_10(b *testing.B) {
 func BenchmarkCIDRMatcher_Build_100(b *testing.B) {
 	nets := make([]net.IPNet, 100)
 	for i := 0; i < 100; i++ {
-		_, ipNet, _ := net.ParseCIDR(net.IPv4(10, byte(i), 0, 0).String() + "/24")
+		_, ipNet, _ := net.ParseCIDR(fmt.Sprintf("%s/24", net.IPv4(10, byte(i), 0, 0).String()))
 		nets[i] = *ipNet
 	}
 
@@ -221,7 +222,7 @@ func BenchmarkCIDRMatcher_Build_1000(b *testing.B) {
 	for i := 0; i < 1000; i++ {
 		octet2 := byte(i / 256)
 		octet3 := byte(i % 256)
-		_, ipNet, _ := net.ParseCIDR(net.IPv4(10, octet2, octet3, 0).String() + "/24")
+		_, ipNet, _ := net.ParseCIDR(fmt.Sprintf("%s/24", net.IPv4(10, octet2, octet3, 0).String()))
 		nets[i] = *ipNet
 	}
 
@@ -234,7 +235,7 @@ func BenchmarkCIDRMatcher_Build_1000(b *testing.B) {
 func BenchmarkCIDRMatcher_Contains_10(b *testing.B) {
 	nets := make([]net.IPNet, 10)
 	for i := 0; i < 10; i++ {
-		_, ipNet, _ := net.ParseCIDR(net.IPv4(10, byte(i), 0, 0).String() + "/24")
+		_, ipNet, _ := net.ParseCIDR(fmt.Sprintf("%s/24", net.IPv4(10, byte(i), 0, 0).String()))
 		nets[i] = *ipNet
 	}
 	matcher := NewCIDRMatcher(nets)
@@ -249,7 +250,7 @@ func BenchmarkCIDRMatcher_Contains_10(b *testing.B) {
 func BenchmarkCIDRMatcher_Contains_100(b *testing.B) {
 	nets := make([]net.IPNet, 100)
 	for i := 0; i < 100; i++ {
-		_, ipNet, _ := net.ParseCIDR(net.IPv4(10, byte(i), 0, 0).String() + "/24")
+		_, ipNet, _ := net.ParseCIDR(fmt.Sprintf("%s/24", net.IPv4(10, byte(i), 0, 0).String()))
 		nets[i] = *ipNet
 	}
 	matcher := NewCIDRMatcher(nets)
@@ -266,7 +267,7 @@ func BenchmarkCIDRMatcher_Contains_1000(b *testing.B) {
 	for i := 0; i < 1000; i++ {
 		octet2 := byte(i / 256)
 		octet3 := byte(i % 256)
-		_, ipNet, _ := net.ParseCIDR(net.IPv4(10, octet2, octet3, 0).String() + "/24")
+		_, ipNet, _ := net.ParseCIDR(fmt.Sprintf("%s/24", net.IPv4(10, octet2, octet3, 0).String()))
 		nets[i] = *ipNet
 	}
 	matcher := NewCIDRMatcher(nets)
