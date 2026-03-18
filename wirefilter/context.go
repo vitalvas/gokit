@@ -6,6 +6,7 @@ import "net"
 type ExecutionContext struct {
 	fields map[string]Value
 	lists  map[string]ArrayValue
+	tables map[string]MapValue
 }
 
 // NewExecutionContext creates a new empty execution context.
@@ -13,6 +14,7 @@ func NewExecutionContext() *ExecutionContext {
 	return &ExecutionContext{
 		fields: make(map[string]Value),
 		lists:  make(map[string]ArrayValue),
+		tables: make(map[string]MapValue),
 	}
 }
 
@@ -150,5 +152,68 @@ func (ctx *ExecutionContext) SetIPList(name string, values []string) *ExecutionC
 // Returns the list and true if found, or nil and false if not found.
 func (ctx *ExecutionContext) GetList(name string) (ArrayValue, bool) {
 	val, ok := ctx.lists[name]
+	return val, ok
+}
+
+// SetTable sets a lookup table with string values in the execution context.
+// Tables are referenced in expressions with $table_name[field] syntax.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) SetTable(name string, data map[string]string) *ExecutionContext {
+	m := make(MapValue, len(data))
+	for k, v := range data {
+		m[k] = StringValue(v)
+	}
+	ctx.tables[name] = m
+	return ctx
+}
+
+// SetTableValues sets a lookup table with mixed value types.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) SetTableValues(name string, data map[string]Value) *ExecutionContext {
+	ctx.tables[name] = MapValue(data)
+	return ctx
+}
+
+// SetTableList sets a lookup table where each key maps to a string array.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) SetTableList(name string, data map[string][]string) *ExecutionContext {
+	m := make(MapValue, len(data))
+	for k, values := range data {
+		arr := make(ArrayValue, len(values))
+		for i, v := range values {
+			arr[i] = StringValue(v)
+		}
+		m[k] = arr
+	}
+	ctx.tables[name] = m
+	return ctx
+}
+
+// SetTableIPList sets a lookup table where each key maps to an IP/CIDR array.
+// Values can be plain IPs or CIDR ranges.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) SetTableIPList(name string, data map[string][]string) *ExecutionContext {
+	m := make(MapValue, len(data))
+	for k, values := range data {
+		arr := make(ArrayValue, 0, len(values))
+		for _, v := range values {
+			if _, ipNet, err := net.ParseCIDR(v); err == nil {
+				arr = append(arr, CIDRValue{IPNet: ipNet})
+				continue
+			}
+			if ip := net.ParseIP(v); ip != nil {
+				arr = append(arr, IPValue{IP: ip})
+			}
+		}
+		m[k] = arr
+	}
+	ctx.tables[name] = m
+	return ctx
+}
+
+// GetTable retrieves a lookup table from the execution context.
+// Returns the table and true if found, or nil and false if not found.
+func (ctx *ExecutionContext) GetTable(name string) (MapValue, bool) {
+	val, ok := ctx.tables[name]
 	return val, ok
 }

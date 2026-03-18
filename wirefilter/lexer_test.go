@@ -63,6 +63,8 @@ func FuzzLexer(f *testing.F) {
 	f.Add(`ip not in $blocked`)
 	f.Add(`name not contains "admin"`)
 	f.Add(`$list_ref`)
+	f.Add(`$table[field]`)
+	f.Add(`$geo[ip.src]`)
 	f.Add(`192.168.0.0/24`)
 	f.Add(`2001:db8::/32`)
 	f.Add(`r"raw\nstring"`)
@@ -744,5 +746,45 @@ func TestLexer(t *testing.T) {
 
 	t.Run("float token string", func(t *testing.T) {
 		assert.Equal(t, "FLOAT", TokenFloat.String())
+	})
+
+	t.Run("list ref followed by bracket", func(t *testing.T) {
+		lexer := NewLexer(`$geo[ip.src]`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenListRef, tok.Type)
+		assert.Equal(t, "geo", tok.Literal)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenLBracket, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "ip.src", tok.Literal)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenRBracket, tok.Type)
+	})
+
+	t.Run("list ref without bracket", func(t *testing.T) {
+		lexer := NewLexer(`$blocked_ips`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenListRef, tok.Type)
+		assert.Equal(t, "blocked_ips", tok.Literal)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenEOF, tok.Type)
+	})
+
+	t.Run("list ref in expression", func(t *testing.T) {
+		lexer := NewLexer(`ip in $nets`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenIn, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenListRef, tok.Type)
+		assert.Equal(t, "nets", tok.Literal)
 	})
 }

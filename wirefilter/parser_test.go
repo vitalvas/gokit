@@ -73,6 +73,9 @@ func FuzzParser(f *testing.F) {
 	f.Add(`concat("a", "b", "c")`)
 	f.Add(`split(name, ",")[0]`)
 	f.Add(`func()`)
+	f.Add(`$geo[ip.src] == "US"`)
+	f.Add(`role in $allowed[dept]`)
+	f.Add(`$config["key"] == "val"`)
 
 	f.Fuzz(func(_ *testing.T, input string) {
 		lexer := NewLexer(input)
@@ -677,5 +680,66 @@ func TestParser(t *testing.T) {
 
 		arrExpr := binExpr.Right.(*ArrayExpr)
 		assert.Len(t, arrExpr.Elements, 3)
+	})
+
+	t.Run("table lookup with field key", func(t *testing.T) {
+		input := `$geo[ip.src] == "US"`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+
+		binExpr, ok := expr.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenEq, binExpr.Operator)
+
+		indexExpr, ok := binExpr.Left.(*IndexExpr)
+		assert.True(t, ok)
+
+		listRef, ok := indexExpr.Object.(*ListRefExpr)
+		assert.True(t, ok)
+		assert.Equal(t, "geo", listRef.Name)
+
+		fieldRef, ok := indexExpr.Index.(*FieldExpr)
+		assert.True(t, ok)
+		assert.Equal(t, "ip.src", fieldRef.Name)
+	})
+
+	t.Run("table lookup in membership", func(t *testing.T) {
+		input := `role in $allowed[dept]`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+
+		binExpr := expr.(*BinaryExpr)
+		assert.Equal(t, TokenIn, binExpr.Operator)
+
+		indexExpr := binExpr.Right.(*IndexExpr)
+		listRef := indexExpr.Object.(*ListRefExpr)
+		assert.Equal(t, "allowed", listRef.Name)
+
+		fieldRef := indexExpr.Index.(*FieldExpr)
+		assert.Equal(t, "dept", fieldRef.Name)
+	})
+
+	t.Run("table lookup with literal key", func(t *testing.T) {
+		input := `$config["mode"] == "prod"`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+
+		binExpr := expr.(*BinaryExpr)
+		indexExpr := binExpr.Left.(*IndexExpr)
+
+		listRef := indexExpr.Object.(*ListRefExpr)
+		assert.Equal(t, "config", listRef.Name)
+
+		literal := indexExpr.Index.(*LiteralExpr)
+		assert.Equal(t, StringValue("mode"), literal.Value)
 	})
 }

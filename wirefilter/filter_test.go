@@ -172,6 +172,9 @@ func FuzzCompile(f *testing.F) {
 	f.Add(`not http.host == "blocked.com"`)
 	f.Add(`true and false`)
 	f.Add(`ip not in $blocked`)
+	f.Add(`$geo[ip] == "US"`)
+	f.Add(`role in $allowed[dept]`)
+	f.Add(`$config["key"] == "val"`)
 	f.Add(`name not contains "admin"`)
 	f.Add(`cidr(ip, 24) == "10.0.0.0"`)
 	f.Add(`cidr6(ip, 64) == "2001:db8::"`)
@@ -238,6 +241,8 @@ func FuzzExecuteMultiType(f *testing.F) {
 	f.Add(`count in {1..100}`, "x", "x", int64(50), "10.0.0.1")
 	f.Add(`lower(name) == value`, "TEST", "test", int64(0), "10.0.0.1")
 	f.Add(`len(name) > count`, "hello", "x", int64(3), "10.0.0.1")
+	f.Add(`$geo[ip] == "US"`, "x", "US", int64(0), "10.0.0.1")
+	f.Add(`name in $allowed[value]`, "dev", "eng", int64(0), "10.0.0.1")
 
 	f.Fuzz(func(_ *testing.T, expression, strVal1, strVal2 string, intVal int64, ipVal string) {
 		filter, err := Compile(expression, nil)
@@ -255,7 +260,10 @@ func FuzzExecuteMultiType(f *testing.F) {
 			SetIntArrayField("ports", []int64{intVal, intVal + 1}).
 			SetMapField("data", map[string]string{"key": strVal1}).
 			SetList("names", []string{strVal1, strVal2}).
-			SetIPList("nets", []string{"10.0.0.0/8", "192.168.0.0/16"})
+			SetIPList("nets", []string{"10.0.0.0/8", "192.168.0.0/16"}).
+			SetTable("geo", map[string]string{ipVal: "US", strVal1: strVal2}).
+			SetTableList("allowed", map[string][]string{strVal1: {strVal2}}).
+			SetTableIPList("blocked", map[string][]string{"office": {"10.0.0.0/8"}})
 
 		_, _ = filter.Execute(ctx)
 	})
@@ -4006,11 +4014,17 @@ func TestFilter(t *testing.T) {
 		assert.False(t, result)
 	})
 
-	t.Run("index with non-literal index rejected", func(t *testing.T) {
-		// Non-literal indices like tags[idx] are rejected at parse time
-		_, err := Compile(`tags[idx] == "test"`, nil)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "index must be a string or integer literal")
+	t.Run("index with field reference key", func(t *testing.T) {
+		// Field references as index keys are valid (for table lookups)
+		filter, err := Compile(`data[key] == "val"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetMapField("data", map[string]string{"mykey": "val"}).
+			SetStringField("key", "mykey")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
 	})
 
 	t.Run("unpack on nil array", func(t *testing.T) {
@@ -4634,6 +4648,196 @@ func TestFilterFloat(t *testing.T) {
 			r2, _ := restored.Execute(ctx)
 			assert.Equal(t, r1, r2)
 		}
+	})
+}
+
+func TestFilterLookupTable(t *testing.T) {
+	t.Run("scalar table lookup", func(t *testing.T) {
+		filter, err := Compile(`$geo[ip.src] == "US"`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "10.0.0.1").
+			SetTable("geo", map[string]string{"10.0.0.1": "US", "8.8.8.8": "DE"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetIPField("ip.src", "8.8.8.8").
+			SetTable("geo", map[string]string{"10.0.0.1": "US", "8.8.8.8": "DE"})
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("table lookup with int values", func(t *testing.T) {
+		filter, err := Compile(`$rate_limits[user.role] >= 100`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("user.role", "admin").
+			SetTableValues("rate_limits", map[string]Value{
+				"admin": IntValue(1000),
+				"user":  IntValue(50),
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetStringField("user.role", "user").
+			SetTableValues("rate_limits", map[string]Value{
+				"admin": IntValue(1000),
+				"user":  IntValue(50),
+			})
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("table lookup key not found", func(t *testing.T) {
+		filter, err := Compile(`$geo[ip.src] == "US"`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "1.2.3.4").
+			SetTable("geo", map[string]string{"10.0.0.1": "US"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("table not defined", func(t *testing.T) {
+		filter, err := Compile(`$missing[ip.src] == "US"`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIPField("ip.src", "10.0.0.1")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("array table lookup with in", func(t *testing.T) {
+		filter, err := Compile(`user.role in $allowed_roles[department]`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("user.role", "dev").
+			SetStringField("department", "eng").
+			SetTableList("allowed_roles", map[string][]string{
+				"eng":   {"dev", "sre", "lead"},
+				"sales": {"account", "manager"},
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetStringField("user.role", "dev").
+			SetStringField("department", "sales").
+			SetTableList("allowed_roles", map[string][]string{
+				"eng":   {"dev", "sre", "lead"},
+				"sales": {"account", "manager"},
+			})
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("IP table lookup with in", func(t *testing.T) {
+		filter, err := Compile(`ip.src in $blocked_nets[region]`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "10.0.0.5").
+			SetStringField("region", "office").
+			SetTableIPList("blocked_nets", map[string][]string{
+				"office": {"10.0.0.0/8"},
+				"vpn":    {"172.16.0.0/12"},
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetIPField("ip.src", "192.168.1.1").
+			SetStringField("region", "office").
+			SetTableIPList("blocked_nets", map[string][]string{
+				"office": {"10.0.0.0/8"},
+				"vpn":    {"172.16.0.0/12"},
+			})
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("IP table lookup with not in", func(t *testing.T) {
+		filter, err := Compile(`ip.src not in $allowed_nets[zone]`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "192.168.1.1").
+			SetStringField("zone", "dmz").
+			SetTableIPList("allowed_nets", map[string][]string{
+				"dmz":      {"10.0.0.0/8"},
+				"internal": {"192.168.0.0/16"},
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("table lookup with string field key", func(t *testing.T) {
+		filter, err := Compile(`$config[env] == "production"`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("env", "mode").
+			SetTable("config", map[string]string{"mode": "production", "debug": "false"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("table lookup combined with logical operators", func(t *testing.T) {
+		filter, err := Compile(
+			`$geo[ip.src] == "US" and user.role in $allowed_roles[department]`,
+			nil,
+		)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "10.0.0.1").
+			SetStringField("user.role", "dev").
+			SetStringField("department", "eng").
+			SetTable("geo", map[string]string{"10.0.0.1": "US"}).
+			SetTableList("allowed_roles", map[string][]string{
+				"eng": {"dev", "sre"},
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("table marshal unmarshal", func(t *testing.T) {
+		filter, err := Compile(`$geo[ip.src] == "US"`, nil)
+		require.NoError(t, err)
+
+		data, err := filter.MarshalBinary()
+		require.NoError(t, err)
+
+		restored := &Filter{}
+		err = restored.UnmarshalBinary(data)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "10.0.0.1").
+			SetTable("geo", map[string]string{"10.0.0.1": "US"})
+
+		r1, _ := filter.Execute(ctx)
+		r2, _ := restored.Execute(ctx)
+		assert.Equal(t, r1, r2)
 	})
 }
 

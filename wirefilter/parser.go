@@ -128,6 +128,9 @@ func (p *Parser) parseExpression(precedence int) Expression {
 		left = p.parseLiteralExpression()
 	case TokenListRef:
 		left = p.parseListRefExpression()
+		if p.peekToken.Type == TokenLBracket {
+			left = p.parseIndexExpression(left)
+		}
 	default:
 		p.addError("unexpected token: %s", p.curToken.Type)
 		return nil
@@ -231,16 +234,17 @@ func (p *Parser) parseIndexExpression(object Expression) Expression {
 		return &UnpackExpr{Array: object}
 	}
 
-	// Validate index is a literal type (string or int)
+	// Parse index: literal (string, int, float) or field reference
+	var index Expression
 	switch p.curToken.Type {
-	case TokenString, TokenRawString, TokenInt:
-		// Valid index types
+	case TokenString, TokenRawString, TokenInt, TokenFloat:
+		index = p.parseLiteralExpression()
+	case TokenIdent:
+		index = p.parseFieldExpression()
 	default:
-		p.addError("index must be a string or integer literal, got %s", p.curToken.Type)
+		p.addError("index must be a literal or field reference, got %s", p.curToken.Type)
 		return nil
 	}
-
-	index := p.parseLiteralExpression()
 
 	if p.peekToken.Type != TokenRBracket {
 		p.addError("expected ], got %s", p.peekToken.Type)

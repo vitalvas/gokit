@@ -61,6 +61,9 @@ func TestMarshalUnmarshal(t *testing.T) {
 		{"IP literal", `ip == 192.168.1.1`},
 		{"empty array", `x in {}`},
 		{"mixed array", `port in {80, 443, 8000..9000}`},
+		{"table lookup scalar", `$geo[ip] == "US"`},
+		{"table lookup with in", `name in $allowed[dept]`},
+		{"table lookup literal key", `$config["mode"] == "prod"`},
 	}
 
 	for _, tt := range expressions {
@@ -99,7 +102,12 @@ func TestMarshalUnmarshal(t *testing.T) {
 				SetList("names", []string{"admin", "user"}).
 				SetIPList("blocked_ips", []string{"10.0.0.1", "192.168.0.0/16"}).
 				SetIPList("blocked", []string{"10.0.0.0/8"}).
-				SetIPList("nets", []string{"10.0.0.0/8", "172.16.0.0/12"})
+				SetIPList("nets", []string{"10.0.0.0/8", "172.16.0.0/12"}).
+				SetTable("geo", map[string]string{"192.168.1.1": "US"}).
+				SetTable("config", map[string]string{"mode": "prod"}).
+				SetTableList("allowed", map[string][]string{"eng": {"dev", "sre"}}).
+				SetStringField("dept", "eng").
+				SetStringField("name", "dev")
 
 			origResult, origErr := original.Execute(ctx)
 			restoredResult, restoredErr := restored.Execute(ctx)
@@ -252,6 +260,9 @@ func FuzzMarshalUnmarshal(f *testing.F) {
 	f.Add(`x in {1..100}`)
 	f.Add(`lower(name) not contains "admin"`)
 	f.Add(`data["key"] == "val"`)
+	f.Add(`$geo[ip] == "US"`)
+	f.Add(`role in $allowed[dept]`)
+	f.Add(`$config["mode"] == "prod"`)
 
 	f.Fuzz(func(t *testing.T, expr string) {
 		filter, err := Compile(expr, nil)

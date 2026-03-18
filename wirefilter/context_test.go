@@ -157,6 +157,67 @@ func TestExecutionContext(t *testing.T) {
 		assert.False(t, ok)
 	})
 
+	t.Run("set and get table", func(t *testing.T) {
+		ctx := NewExecutionContext().
+			SetTable("geo", map[string]string{"10.0.0.1": "US", "8.8.8.8": "DE"})
+		table, ok := ctx.GetTable("geo")
+		assert.True(t, ok)
+		assert.Len(t, table, 2)
+		v, ok := table.Get("10.0.0.1")
+		assert.True(t, ok)
+		assert.Equal(t, StringValue("US"), v)
+	})
+
+	t.Run("set and get table values", func(t *testing.T) {
+		ctx := NewExecutionContext().
+			SetTableValues("limits", map[string]Value{
+				"admin": IntValue(1000),
+				"user":  IntValue(100),
+			})
+		table, ok := ctx.GetTable("limits")
+		assert.True(t, ok)
+		v, ok := table.Get("admin")
+		assert.True(t, ok)
+		assert.Equal(t, IntValue(1000), v)
+	})
+
+	t.Run("set and get table list", func(t *testing.T) {
+		ctx := NewExecutionContext().
+			SetTableList("roles_by_dept", map[string][]string{
+				"eng":   {"dev", "sre"},
+				"sales": {"account", "manager"},
+			})
+		table, ok := ctx.GetTable("roles_by_dept")
+		assert.True(t, ok)
+		v, ok := table.Get("eng")
+		assert.True(t, ok)
+		arr := v.(ArrayValue)
+		assert.Len(t, arr, 2)
+		assert.Equal(t, StringValue("dev"), arr[0])
+	})
+
+	t.Run("set and get table IP list", func(t *testing.T) {
+		ctx := NewExecutionContext().
+			SetTableIPList("nets_by_office", map[string][]string{
+				"hq":     {"10.0.0.0/8"},
+				"branch": {"192.168.1.0/24", "172.16.0.1"},
+			})
+		table, ok := ctx.GetTable("nets_by_office")
+		assert.True(t, ok)
+		v, ok := table.Get("branch")
+		assert.True(t, ok)
+		arr := v.(ArrayValue)
+		assert.Len(t, arr, 2)
+		assert.Equal(t, TypeCIDR, arr[0].Type())
+		assert.Equal(t, TypeIP, arr[1].Type())
+	})
+
+	t.Run("get missing table", func(t *testing.T) {
+		ctx := NewExecutionContext()
+		_, ok := ctx.GetTable("missing")
+		assert.False(t, ok)
+	})
+
 	t.Run("method chaining", func(t *testing.T) {
 		ctx := NewExecutionContext().
 			SetStringField("name", "test").
@@ -164,7 +225,8 @@ func TestExecutionContext(t *testing.T) {
 			SetBoolField("active", true).
 			SetIPField("ip", "10.0.0.1").
 			SetList("roles", []string{"admin"}).
-			SetIPList("nets", []string{"10.0.0.0/8"})
+			SetIPList("nets", []string{"10.0.0.0/8"}).
+			SetTable("geo", map[string]string{"10.0.0.1": "US"})
 
 		_, ok := ctx.GetField("name")
 		assert.True(t, ok)
@@ -177,6 +239,8 @@ func TestExecutionContext(t *testing.T) {
 		_, ok = ctx.GetList("roles")
 		assert.True(t, ok)
 		_, ok = ctx.GetList("nets")
+		assert.True(t, ok)
+		_, ok = ctx.GetTable("geo")
 		assert.True(t, ok)
 	})
 }

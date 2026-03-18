@@ -144,6 +144,7 @@ func (l *Lexer) NextToken() Token {
 		tok.Type = TokenListRef
 		tok.Literal = l.readListName()
 		tok.Value = tok.Literal
+		return tok
 	default:
 		switch {
 		case isLetter(l.ch):

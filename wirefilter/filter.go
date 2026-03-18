@@ -215,10 +215,15 @@ func (f *Filter) evaluateIndexExpr(expr *IndexExpr, ctx *ExecutionContext) (Valu
 		return nil, nil
 	}
 
-	// Map access with string key
-	if object.Type() == TypeMap && index.Type() == TypeString {
+	// Map access with string key (or any type converted to string)
+	if object.Type() == TypeMap {
 		mapVal := object.(MapValue)
-		key := string(index.(StringValue))
+		var key string
+		if index.Type() == TypeString {
+			key = string(index.(StringValue))
+		} else {
+			key = index.String()
+		}
 		if val, ok := mapVal.Get(key); ok {
 			return val, nil
 		}
@@ -255,11 +260,13 @@ func (f *Filter) evaluateUnpackExpr(expr *UnpackExpr, ctx *ExecutionContext) (Va
 }
 
 func (f *Filter) evaluateListRefExpr(expr *ListRefExpr, ctx *ExecutionContext) (Value, error) {
-	list, ok := ctx.GetList(expr.Name)
-	if !ok {
-		return nil, nil
+	if list, ok := ctx.GetList(expr.Name); ok {
+		return list, nil
 	}
-	return list, nil
+	if table, ok := ctx.GetTable(expr.Name); ok {
+		return table, nil
+	}
+	return nil, nil
 }
 
 func (f *Filter) evaluateUnaryExpr(expr *UnaryExpr, ctx *ExecutionContext) (Value, error) {

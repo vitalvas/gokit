@@ -19,6 +19,7 @@ inspired by Cloudflare's Wirefilter.
 - Array unpack operations: `tags[*] == "value"` (ANY semantics)
 - Raw strings: `r"..."` (no escape processing)
 - Custom lists: `$list_name` for external list references
+- Lookup tables: `$table_name[field]` for key-value lookups
 - Negated membership: `not in`, `not contains`
 - Built-in functions: `lower()`, `upper()`, `len()`, `starts_with()`, and more
 - Field-to-field comparisons
@@ -231,6 +232,46 @@ http.host in $allowed_hosts  // check if host is allowed
 ```
 
 Lists are defined in the execution context (see API Reference below).
+
+### Lookup Tables
+
+Named key-value tables for dynamic lookups using `$table_name[field]` syntax:
+
+```go
+// Scalar lookup: returns a single value
+$geo_table[ip.src] == "US"
+$rate_limits[user.role] >= 100
+
+// Array lookup: returns an array for use with in/contains
+user.role in $allowed_roles[department]
+ip.src in $blocked_nets[region]
+ip.src not in $allowed_nets[zone]
+```
+
+Tables support different value types per key:
+
+```go
+// String values
+ctx.SetTable("geo", map[string]string{"10.0.0.1": "US", "8.8.8.8": "DE"})
+
+// Mixed value types
+ctx.SetTableValues("limits", map[string]wirefilter.Value{
+    "admin": wirefilter.IntValue(1000),
+    "user":  wirefilter.IntValue(100),
+})
+
+// String arrays per key
+ctx.SetTableList("roles", map[string][]string{
+    "eng":   {"dev", "sre", "lead"},
+    "sales": {"account", "manager"},
+})
+
+// IP/CIDR arrays per key
+ctx.SetTableIPList("nets", map[string][]string{
+    "office": {"10.0.0.0/8"},
+    "vpn":    {"172.16.0.0/12"},
+})
+```
 
 ### Array-to-Array Operations
 
