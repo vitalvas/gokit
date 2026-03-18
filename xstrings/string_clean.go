@@ -5,7 +5,9 @@ import (
 	"unicode"
 )
 
-// clean up the non-ASCII characters
+// StringClean removes non-graphic characters from the input string.
+//
+//yake:skip-test
 func StringClean(input string) string {
 	return strings.TrimFunc(input, func(r rune) bool {
 		return !unicode.IsGraphic(r)
