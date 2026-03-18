@@ -6,7 +6,7 @@ import (
 )
 
 // Operator precedence levels for parsing expressions.
-// Precedence order (lowest to highest): OR < XOR < AND < PREFIX < EQUALS < COMPARE < MEMBERSHIP
+// Precedence order (lowest to highest): OR < XOR < AND < PREFIX < EQUALS < COMPARE < MEMBERSHIP < SUM < PRODUCT
 // PREFIX is used for NOT operator - it binds tighter than AND/OR/XOR but looser than comparisons.
 const (
 	_ int = iota
@@ -18,6 +18,8 @@ const (
 	EQUALS
 	COMPARE
 	MEMBERSHIP
+	SUM     // +, -
+	PRODUCT // *, /, %
 )
 
 var precedences = map[TokenType]int{
@@ -37,6 +39,11 @@ var precedences = map[TokenType]int{
 	TokenIn:             MEMBERSHIP,
 	TokenWildcard:       MEMBERSHIP,
 	TokenStrictWildcard: MEMBERSHIP,
+	TokenPlus:           SUM,
+	TokenMinus:          SUM,
+	TokenAsterisk:       PRODUCT,
+	TokenDiv:            PRODUCT,
+	TokenMod:            PRODUCT,
 }
 
 // Parser parses tokens from a lexer into an abstract syntax tree.

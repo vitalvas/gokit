@@ -628,6 +628,19 @@ Wildcard patterns support:
 - `*` matches any sequence of characters (including empty)
 - `?` matches any single character
 
+### Arithmetic Operators
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `+` | Addition | `x + 1` |
+| `-` | Subtraction | `x - 5` |
+| `*` | Multiplication | `x * 2` |
+| `/` | Division (nil on zero) | `x / 3` |
+| `%` | Modulo (nil on zero) | `x % 2` |
+
+Arithmetic works on Int and Float types. Mixed Int/Float produces Float results.
+Standard precedence: `*`, `/`, `%` bind tighter than `+`, `-`.
+
 ### Array Operators
 
 | Operator | Description | Example |
@@ -652,16 +665,29 @@ Wirefilter provides built-in functions for transforming and inspecting values.
 | `concat(String...)` | Concatenate strings | `concat(scheme, "://", host)` |
 | `split(String, String)` | Split into array | `split(header, ",")[0]` |
 | `url_decode(String)` | URL decode | `url_decode(query)` |
+| `trim(String)` | Trim whitespace from both ends | `trim(name)` |
+| `trim_left(String)` | Trim whitespace from left | `trim_left(name)` |
+| `trim_right(String)` | Trim whitespace from right | `trim_right(name)` |
+| `replace(String, String, String)` | Replace all occurrences | `replace(path, "/", "-")` |
+| `regex_replace(String, String, String)` | Replace regex matches | `regex_replace(s, "[0-9]+", "X")` |
+| `regex_extract(String, String)` | Extract first regex match | `regex_extract(path, "/v([0-9]+)/")` |
+| `contains_word(String, String)` | Word boundary match | `contains_word(msg, "admin")` |
 
 ### Array Functions
 
 | Function | Description | Example |
 |----------|-------------|---------|
 | `len(Array)` | Array element count | `len(tags) > 0` |
+| `count(Array)` | Count truthy elements | `count(tags) >= 3` |
 | `any(expression)` | Any element matches | `any(tags[*] == "admin")` |
 | `all(expression)` | All elements match | `all(ports[*] > 0)` |
 | `has_value(Array, Value)` | Array contains value | `has_value(tags, "admin")` |
 | `join(Array, String)` | Join array elements | `join(tags, ",")` |
+| `contains_any(Array, Array)` | Any element from second in first | `contains_any(tags, required)` |
+| `contains_all(Array, Array)` | All elements from second in first | `contains_all(tags, required)` |
+| `intersection(Array, Array)` | Elements in both arrays | `intersection(a, b)` |
+| `union(Array, Array)` | Combined unique elements | `union(a, b)` |
+| `difference(Array, Array)` | Elements in first not in second | `difference(a, b)` |
 
 ### Map Functions
 
@@ -676,6 +702,24 @@ Wirefilter provides built-in functions for transforming and inspecting values.
 |----------|-------------|---------|
 | `cidr(IP, Int)` | Apply CIDR mask for IPv4 | `cidr(ip, 24)` |
 | `cidr6(IP, Int)` | Apply CIDR mask for IPv6 | `cidr6(ip, 64)` |
+| `is_ipv4(IP)` | Check if IPv4 | `is_ipv4(ip)` |
+| `is_ipv6(IP)` | Check if IPv6 | `is_ipv6(ip)` |
+| `is_loopback(IP)` | Check if loopback | `is_loopback(ip)` |
+
+### Math Functions
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `abs(Int\|Float)` | Absolute value | `abs(x) > 5` |
+| `ceil(Float)` | Ceiling (round up) | `ceil(x) == 4` |
+| `floor(Float)` | Floor (round down) | `floor(x) == 3` |
+| `round(Float)` | Round to nearest | `round(x) == 4` |
+
+### Utility Functions
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `coalesce(Value...)` | First non-nil value | `coalesce(a, b, "default")` |
 
 ### Function Examples
 

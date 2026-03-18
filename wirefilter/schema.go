@@ -49,12 +49,14 @@ var operatorsByType = map[Type]map[TokenType]bool{
 	TypeInt: {
 		TokenEq: true, TokenNe: true,
 		TokenLt: true, TokenGt: true, TokenLe: true, TokenGe: true,
-		TokenIn: true,
+		TokenIn:   true,
+		TokenPlus: true, TokenMinus: true, TokenAsterisk: true, TokenDiv: true, TokenMod: true,
 	},
 	TypeFloat: {
 		TokenEq: true, TokenNe: true,
 		TokenLt: true, TokenGt: true, TokenLe: true, TokenGe: true,
-		TokenIn: true,
+		TokenIn:   true,
+		TokenPlus: true, TokenMinus: true, TokenAsterisk: true, TokenDiv: true, TokenMod: true,
 	},
 	TypeBool: {
 		TokenEq: true, TokenNe: true,

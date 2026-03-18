@@ -199,6 +199,28 @@ func FuzzCompile(f *testing.F) {
 	f.Add(`len(name) > 0`)
 	f.Add(`url_decode(name) == "a b"`)
 	f.Add(`substring(name, 0, 3) == "tes"`)
+	f.Add(`trim(name) == "test"`)
+	f.Add(`replace(name, "a", "b") == "b"`)
+	f.Add(`regex_replace(name, "[0-9]+", "X") == "X"`)
+	f.Add(`regex_extract(name, "[0-9]+") == "123"`)
+	f.Add(`contains_word(name, "test")`)
+	f.Add(`count(tags) > 0`)
+	f.Add(`coalesce(a, b) == "x"`)
+	f.Add(`abs(x) > 0`)
+	f.Add(`ceil(x) == 4`)
+	f.Add(`floor(x) == 3`)
+	f.Add(`round(x) == 4`)
+	f.Add(`is_ipv4(ip) == true`)
+	f.Add(`is_loopback(ip) == true`)
+	f.Add(`intersection(a, b)`)
+	f.Add(`union(a, b)`)
+	f.Add(`difference(a, b)`)
+	f.Add(`contains_any(a, b)`)
+	f.Add(`contains_all(a, b)`)
+	f.Add(`x + 1 > 5`)
+	f.Add(`x * 2 == 10`)
+	f.Add(`x / 3 == 1`)
+	f.Add(`x % 2 == 0`)
 
 	f.Fuzz(func(_ *testing.T, input string) {
 		_, _ = Compile(input, nil)
@@ -5721,5 +5743,596 @@ func TestFilterCoverageGaps(t *testing.T) {
 		lexer := NewLexer(`-99999999999999999999999`)
 		tok := lexer.NextToken()
 		assert.Equal(t, TokenError, tok.Type)
+	})
+}
+
+func TestFnRegexReplace(t *testing.T) {
+	t.Run("basic replace", func(t *testing.T) {
+		f, err := Compile(`regex_replace(name, "[0-9]+", "X") == "userX"`, nil)
+		require.NoError(t, err)
+		ctx := NewExecutionContext().SetStringField("name", "user123")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("no match", func(t *testing.T) {
+		f, err := Compile(`regex_replace(name, "[0-9]+", "X") == "hello"`, nil)
+		require.NoError(t, err)
+		ctx := NewExecutionContext().SetStringField("name", "hello")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("wrong arg count", func(t *testing.T) {
+		f, err := Compile(`regex_replace(name, "[0-9]+") == "x"`, nil)
+		require.NoError(t, err)
+		ctx := NewExecutionContext().SetStringField("name", "test")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("invalid regex", func(t *testing.T) {
+		f, err := Compile(`regex_replace(name, "[invalid", "X") == "x"`, nil)
+		require.NoError(t, err)
+		ctx := NewExecutionContext().SetStringField("name", "test")
+		_, err = f.Execute(ctx)
+		assert.Error(t, err)
+	})
+}
+
+func TestFnTrim(t *testing.T) {
+	t.Run("trim", func(t *testing.T) {
+		f, _ := Compile(`trim(name) == "hello"`, nil)
+		ctx := NewExecutionContext().SetStringField("name", "  hello  ")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("trim_left", func(t *testing.T) {
+		f, _ := Compile(`trim_left(name) == "hello  "`, nil)
+		ctx := NewExecutionContext().SetStringField("name", "  hello  ")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("trim_right", func(t *testing.T) {
+		f, _ := Compile(`trim_right(name) == "  hello"`, nil)
+		ctx := NewExecutionContext().SetStringField("name", "  hello  ")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("nil arg", func(t *testing.T) {
+		f, _ := Compile(`trim(missing) == ""`, nil)
+		ctx := NewExecutionContext()
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("wrong type", func(t *testing.T) {
+		f, _ := Compile(`trim(count) == ""`, nil)
+		ctx := NewExecutionContext().SetIntField("count", 42)
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+}
+
+func TestFnReplace(t *testing.T) {
+	t.Run("basic", func(t *testing.T) {
+		f, _ := Compile(`replace(name, "world", "go") == "hello go"`, nil)
+		ctx := NewExecutionContext().SetStringField("name", "hello world")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("multiple occurrences", func(t *testing.T) {
+		f, _ := Compile(`replace(name, "a", "b") == "bbb"`, nil)
+		ctx := NewExecutionContext().SetStringField("name", "aaa")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("wrong arg count", func(t *testing.T) {
+		f, _ := Compile(`replace(name, "a") == "x"`, nil)
+		ctx := NewExecutionContext().SetStringField("name", "test")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+}
+
+func TestFnCount(t *testing.T) {
+	t.Run("count truthy elements", func(t *testing.T) {
+		f, _ := Compile(`count(tags) > 0`, nil)
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"a", "b"})
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("count value", func(t *testing.T) {
+		f, _ := Compile(`count(tags) == 3`, nil)
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"a", "b", "c"})
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("nil arg", func(t *testing.T) {
+		f, _ := Compile(`count(missing) == 0`, nil)
+		ctx := NewExecutionContext()
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("non-array", func(t *testing.T) {
+		f, _ := Compile(`count(name) == 0`, nil)
+		ctx := NewExecutionContext().SetStringField("name", "test")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+}
+
+func TestFnCoalesce(t *testing.T) {
+	t.Run("first non-nil", func(t *testing.T) {
+		f, _ := Compile(`coalesce(missing, name) == "hello"`, nil)
+		ctx := NewExecutionContext().SetStringField("name", "hello")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("first arg non-nil", func(t *testing.T) {
+		f, _ := Compile(`coalesce(name, other) == "hello"`, nil)
+		ctx := NewExecutionContext().SetStringField("name", "hello").SetStringField("other", "world")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("all nil", func(t *testing.T) {
+		f, _ := Compile(`coalesce(a, b, c) == "x"`, nil)
+		ctx := NewExecutionContext()
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("no args", func(t *testing.T) {
+		f, _ := Compile(`coalesce() == "x"`, nil)
+		ctx := NewExecutionContext()
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+}
+
+func TestFnContainsWord(t *testing.T) {
+	t.Run("word found", func(t *testing.T) {
+		f, _ := Compile(`contains_word(msg, "admin") == true`, nil)
+		ctx := NewExecutionContext().SetStringField("msg", "hello admin world")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("substring but not word", func(t *testing.T) {
+		f, _ := Compile(`contains_word(msg, "admin") == true`, nil)
+		ctx := NewExecutionContext().SetStringField("msg", "sysadmin access")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("word at start", func(t *testing.T) {
+		f, _ := Compile(`contains_word(msg, "hello") == true`, nil)
+		ctx := NewExecutionContext().SetStringField("msg", "hello world")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("word at end", func(t *testing.T) {
+		f, _ := Compile(`contains_word(msg, "world") == true`, nil)
+		ctx := NewExecutionContext().SetStringField("msg", "hello world")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("wrong arg count", func(t *testing.T) {
+		f, _ := Compile(`contains_word(msg) == true`, nil)
+		ctx := NewExecutionContext().SetStringField("msg", "test")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+}
+
+func TestFnMath(t *testing.T) {
+	t.Run("abs int positive", func(t *testing.T) {
+		f, _ := Compile(`abs(x) == 5`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 5)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("abs int negative", func(t *testing.T) {
+		f, _ := Compile(`abs(x) == 5`, nil)
+		ctx := NewExecutionContext().SetIntField("x", -5)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("abs float", func(t *testing.T) {
+		f, _ := Compile(`abs(x) == 3.14`, nil)
+		ctx := NewExecutionContext().SetFloatField("x", -3.14)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("ceil", func(t *testing.T) {
+		f, _ := Compile(`ceil(x) == 4`, nil)
+		ctx := NewExecutionContext().SetFloatField("x", 3.2)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("ceil int passthrough", func(t *testing.T) {
+		f, _ := Compile(`ceil(x) == 5`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 5)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("floor", func(t *testing.T) {
+		f, _ := Compile(`floor(x) == 3`, nil)
+		ctx := NewExecutionContext().SetFloatField("x", 3.9)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("round", func(t *testing.T) {
+		f, _ := Compile(`round(x) == 4`, nil)
+		ctx := NewExecutionContext().SetFloatField("x", 3.6)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("round down", func(t *testing.T) {
+		f, _ := Compile(`round(x) == 3`, nil)
+		ctx := NewExecutionContext().SetFloatField("x", 3.4)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("wrong type", func(t *testing.T) {
+		f, _ := Compile(`abs(name) == 0`, nil)
+		ctx := NewExecutionContext().SetStringField("name", "test")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+}
+
+func TestFnIPClassification(t *testing.T) {
+	t.Run("is_ipv4 true", func(t *testing.T) {
+		f, _ := Compile(`is_ipv4(ip) == true`, nil)
+		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.1")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("is_ipv4 false for ipv6", func(t *testing.T) {
+		f, _ := Compile(`is_ipv4(ip) == true`, nil)
+		ctx := NewExecutionContext().SetIPField("ip", "2001:db8::1")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("is_ipv6 true", func(t *testing.T) {
+		f, _ := Compile(`is_ipv6(ip) == true`, nil)
+		ctx := NewExecutionContext().SetIPField("ip", "2001:db8::1")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("is_ipv6 false for ipv4", func(t *testing.T) {
+		f, _ := Compile(`is_ipv6(ip) == true`, nil)
+		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.1")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("is_loopback ipv4", func(t *testing.T) {
+		f, _ := Compile(`is_loopback(ip) == true`, nil)
+		ctx := NewExecutionContext().SetIPField("ip", "127.0.0.1")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("is_loopback ipv6", func(t *testing.T) {
+		f, _ := Compile(`is_loopback(ip) == true`, nil)
+		ctx := NewExecutionContext().SetIPField("ip", "::1")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("is_loopback false", func(t *testing.T) {
+		f, _ := Compile(`is_loopback(ip) == true`, nil)
+		ctx := NewExecutionContext().SetIPField("ip", "8.8.8.8")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("nil arg", func(t *testing.T) {
+		f, _ := Compile(`is_ipv4(missing) == true`, nil)
+		ctx := NewExecutionContext()
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("wrong type", func(t *testing.T) {
+		f, _ := Compile(`is_ipv4(name) == true`, nil)
+		ctx := NewExecutionContext().SetStringField("name", "192.168.1.1")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+}
+
+func TestFnRegexExtract(t *testing.T) {
+	t.Run("extract match", func(t *testing.T) {
+		f, _ := Compile(`regex_extract(path, "/api/v([0-9]+)/") == "/api/v2/"`, nil)
+		require.NotNil(t, f)
+		ctx := NewExecutionContext().SetStringField("path", "/api/v2/users")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("no match", func(t *testing.T) {
+		f, _ := Compile(`regex_extract(path, "/api/v([0-9]+)/") == ""`, nil)
+		ctx := NewExecutionContext().SetStringField("path", "/home")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("wrong arg count", func(t *testing.T) {
+		f, _ := Compile(`regex_extract(path) == ""`, nil)
+		ctx := NewExecutionContext().SetStringField("path", "test")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("invalid regex", func(t *testing.T) {
+		f, _ := Compile(`regex_extract(path, "[invalid") == ""`, nil)
+		ctx := NewExecutionContext().SetStringField("path", "test")
+		_, err := f.Execute(ctx)
+		assert.Error(t, err)
+	})
+}
+
+func TestFnSetOperations(t *testing.T) {
+	t.Run("intersection", func(t *testing.T) {
+		f, _ := Compile(`len(intersection(a, b)) == 2`, nil)
+		ctx := NewExecutionContext().
+			SetArrayField("a", []string{"x", "y", "z"}).
+			SetArrayField("b", []string{"y", "z", "w"})
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("intersection empty", func(t *testing.T) {
+		f, _ := Compile(`len(intersection(a, b)) == 0`, nil)
+		ctx := NewExecutionContext().
+			SetArrayField("a", []string{"x"}).
+			SetArrayField("b", []string{"y"})
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("union", func(t *testing.T) {
+		f, _ := Compile(`len(union(a, b)) == 3`, nil)
+		ctx := NewExecutionContext().
+			SetArrayField("a", []string{"x", "y"}).
+			SetArrayField("b", []string{"y", "z"})
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("difference", func(t *testing.T) {
+		f, _ := Compile(`len(difference(a, b)) == 1`, nil)
+		ctx := NewExecutionContext().
+			SetArrayField("a", []string{"x", "y", "z"}).
+			SetArrayField("b", []string{"y", "z"})
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("wrong types", func(t *testing.T) {
+		f, _ := Compile(`len(intersection(a, b)) == 0`, nil)
+		ctx := NewExecutionContext().
+			SetStringField("a", "hello").
+			SetStringField("b", "world")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("wrong arg count", func(t *testing.T) {
+		f, _ := Compile(`len(intersection(a)) == 0`, nil)
+		ctx := NewExecutionContext().SetArrayField("a", []string{"x"})
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+}
+
+func TestFnContainsAnyAll(t *testing.T) {
+	t.Run("contains_any true", func(t *testing.T) {
+		f, _ := Compile(`contains_any(tags, roles) == true`, nil)
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{"admin", "user"}).
+			SetArrayField("roles", []string{"guest", "admin"})
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("contains_any false", func(t *testing.T) {
+		f, _ := Compile(`contains_any(tags, roles) == true`, nil)
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{"admin", "user"}).
+			SetArrayField("roles", []string{"guest", "visitor"})
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("contains_all true", func(t *testing.T) {
+		f, _ := Compile(`contains_all(tags, required) == true`, nil)
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{"admin", "user", "guest"}).
+			SetArrayField("required", []string{"admin", "user"})
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("contains_all false", func(t *testing.T) {
+		f, _ := Compile(`contains_all(tags, required) == true`, nil)
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{"admin"}).
+			SetArrayField("required", []string{"admin", "user"})
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("wrong arg count", func(t *testing.T) {
+		f, _ := Compile(`contains_any(tags) == true`, nil)
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"x"})
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+}
+
+func TestArithmeticOperators(t *testing.T) {
+	t.Run("addition", func(t *testing.T) {
+		f, _ := Compile(`x + 1 == 6`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 5)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("subtraction", func(t *testing.T) {
+		f, _ := Compile(`x - 3 == 2`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 5)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("multiplication", func(t *testing.T) {
+		f, _ := Compile(`x * 3 == 15`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 5)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("division", func(t *testing.T) {
+		f, _ := Compile(`x / 2 == 5`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 10)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("modulo", func(t *testing.T) {
+		f, _ := Compile(`x % 3 == 1`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 10)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("division by zero returns nil", func(t *testing.T) {
+		f, _ := Compile(`x / 0 == 0`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 10)
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("modulo by zero returns nil", func(t *testing.T) {
+		f, _ := Compile(`x % 0 == 0`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 10)
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("float addition", func(t *testing.T) {
+		f, _ := Compile(`x + 1.5 == 3.5`, nil)
+		ctx := NewExecutionContext().SetFloatField("x", 2.0)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("float multiplication", func(t *testing.T) {
+		f, _ := Compile(`x * 2.0 == 6.28`, nil)
+		ctx := NewExecutionContext().SetFloatField("x", 3.14)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("float division", func(t *testing.T) {
+		f, _ := Compile(`x / 2.0 == 5.0`, nil)
+		ctx := NewExecutionContext().SetFloatField("x", 10.0)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("float division by zero", func(t *testing.T) {
+		f, _ := Compile(`x / 0.0 == 0`, nil)
+		ctx := NewExecutionContext().SetFloatField("x", 10.0)
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("mixed int and float", func(t *testing.T) {
+		f, _ := Compile(`x + 1 == 3.14`, nil)
+		ctx := NewExecutionContext().SetFloatField("x", 2.14)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("precedence mul before add", func(t *testing.T) {
+		f, _ := Compile(`x + y * 2 == 7`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 1).SetIntField("y", 3)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("arithmetic in comparison", func(t *testing.T) {
+		f, _ := Compile(`x * 2 > 5`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 3)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("arithmetic with non-numeric", func(t *testing.T) {
+		f, _ := Compile(`name + 1 == 1`, nil)
+		ctx := NewExecutionContext().SetStringField("name", "test")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("nil operand", func(t *testing.T) {
+		f, _ := Compile(`missing + 1 == 1`, nil)
+		ctx := NewExecutionContext()
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("complex expression", func(t *testing.T) {
+		f, _ := Compile(`(x + y) * 2 == 10`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 2).SetIntField("y", 3)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("arithmetic with logical", func(t *testing.T) {
+		f, _ := Compile(`x + 1 > 5 and y * 2 < 10`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 5).SetIntField("y", 4)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("schema type validation", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("x", TypeInt).
+			AddField("name", TypeString)
+
+		_, err := Compile(`x + 1 == 6`, schema)
+		assert.NoError(t, err)
+
+		_, err = Compile(`name + 1 == 6`, schema)
+		assert.Error(t, err)
 	})
 }

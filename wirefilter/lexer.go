@@ -140,6 +140,10 @@ func (l *Lexer) NextToken() Token {
 		}
 	case '*':
 		tok = Token{Type: TokenAsterisk, Literal: "*"}
+	case '+':
+		tok = Token{Type: TokenPlus, Literal: "+"}
+	case '%':
+		tok = Token{Type: TokenMod, Literal: "%"}
 	case '$':
 		tok.Type = TokenListRef
 		tok.Literal = l.readListName()
@@ -151,6 +155,10 @@ func (l *Lexer) NextToken() Token {
 			return l.readIdentifierToken()
 		case isDigit(l.ch) || (l.ch == '-' && isDigit(l.peekChar())):
 			return l.readNumberToken()
+		case l.ch == '-':
+			tok = Token{Type: TokenMinus, Literal: "-"}
+		case l.ch == '/':
+			tok = Token{Type: TokenDiv, Literal: "/"}
 		default:
 			tok = Token{Type: TokenError, Literal: string(l.ch), Value: fmt.Sprintf("unexpected character: %c", l.ch)}
 		}

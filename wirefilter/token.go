@@ -47,6 +47,12 @@ const (
 	TokenLBracket // [
 	TokenRBracket // ]
 
+	// Arithmetic operators
+	TokenPlus  // +
+	TokenMinus // -
+	TokenDiv   // /
+	TokenMod   // %
+
 	// Separators
 	TokenComma // ,
 	TokenRange // ..
@@ -90,6 +96,10 @@ var tokenNames = map[TokenType]string{
 	TokenRBrace:         "}",
 	TokenLBracket:       "[",
 	TokenRBracket:       "]",
+	TokenPlus:           "+",
+	TokenMinus:          "-",
+	TokenDiv:            "/",
+	TokenMod:            "%",
 	TokenComma:          ",",
 	TokenRange:          "..",
 	TokenAsterisk:       "*",

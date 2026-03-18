@@ -36,6 +36,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash/fnv"
+	"math"
 	"net"
 	"net/url"
 	"regexp"
@@ -391,6 +392,9 @@ func (f *Filter) evaluateBinaryExpr(expr *BinaryExpr, ctx *ExecutionContext) (Va
 
 	case TokenStrictWildcard:
 		return f.evaluateWildcard(left, right, true)
+
+	case TokenPlus, TokenMinus, TokenAsterisk, TokenDiv, TokenMod:
+		return f.evaluateArithmetic(left, right, expr.Operator)
 	}
 
 	return BoolValue(false), nil
@@ -499,6 +503,67 @@ func toFloat64(v Value) (float64, bool) {
 		return float64(val), true
 	}
 	return 0, false
+}
+
+func (f *Filter) evaluateArithmetic(left, right Value, op TokenType) (Value, error) {
+	if left == nil || right == nil {
+		return nil, nil
+	}
+
+	// If either operand is a float, do float arithmetic
+	if left.Type() == TypeFloat || right.Type() == TypeFloat {
+		lf, lok := toFloat64(left)
+		rf, rok := toFloat64(right)
+		if !lok || !rok {
+			return nil, nil
+		}
+		switch op {
+		case TokenPlus:
+			return FloatValue(lf + rf), nil
+		case TokenMinus:
+			return FloatValue(lf - rf), nil
+		case TokenAsterisk:
+			return FloatValue(lf * rf), nil
+		case TokenDiv:
+			if rf == 0 {
+				return nil, nil
+			}
+			return FloatValue(lf / rf), nil
+		case TokenMod:
+			if rf == 0 {
+				return nil, nil
+			}
+			return FloatValue(math.Mod(lf, rf)), nil
+		}
+		return nil, nil
+	}
+
+	// Integer arithmetic
+	if left.Type() != TypeInt || right.Type() != TypeInt {
+		return nil, nil
+	}
+	li := int64(left.(IntValue))
+	ri := int64(right.(IntValue))
+
+	switch op {
+	case TokenPlus:
+		return IntValue(li + ri), nil
+	case TokenMinus:
+		return IntValue(li - ri), nil
+	case TokenAsterisk:
+		return IntValue(li * ri), nil
+	case TokenDiv:
+		if ri == 0 {
+			return nil, nil
+		}
+		return IntValue(li / ri), nil
+	case TokenMod:
+		if ri == 0 {
+			return nil, nil
+		}
+		return IntValue(li % ri), nil
+	}
+	return nil, nil
 }
 
 // floatSign returns -1, 0, or 1 as an int64 based on the sign of f.
@@ -755,7 +820,17 @@ func globToRegex(glob string) string {
 }
 
 func (f *Filter) evaluateFunctionCall(expr *FunctionCallExpr, ctx *ExecutionContext) (Value, error) {
-	// Evaluate all arguments first
+	name := strings.ToLower(expr.Name)
+
+	// Special-case functions that need raw expressions (not evaluated args)
+	switch name {
+	case "any":
+		return f.fnAny(expr.Arguments, ctx)
+	case "all":
+		return f.fnAll(expr.Arguments, ctx)
+	}
+
+	// Evaluate all arguments for standard functions
 	args := make([]Value, len(expr.Arguments))
 	for i, arg := range expr.Arguments {
 		val, err := f.evaluate(arg, ctx)
@@ -765,44 +840,52 @@ func (f *Filter) evaluateFunctionCall(expr *FunctionCallExpr, ctx *ExecutionCont
 		args[i] = val
 	}
 
-	name := strings.ToLower(expr.Name)
-
-	switch name {
-	case "lower":
-		return f.fnLower(args)
-	case "upper":
-		return f.fnUpper(args)
-	case "len":
-		return f.fnLen(args)
-	case "starts_with":
-		return f.fnStartsWith(args)
-	case "ends_with":
-		return f.fnEndsWith(args)
-	case "any":
-		return f.fnAny(expr.Arguments, ctx)
-	case "all":
-		return f.fnAll(expr.Arguments, ctx)
-	case "concat":
-		return f.fnConcat(args)
-	case "substring":
-		return f.fnSubstring(args)
-	case "split":
-		return f.fnSplit(args)
-	case "join":
-		return f.fnJoin(args)
-	case "has_key":
-		return f.fnHasKey(args)
-	case "has_value":
-		return f.fnHasValue(args)
-	case "url_decode":
-		return f.fnURLDecode(args)
-	case "cidr":
-		return f.fnCIDR(args)
-	case "cidr6":
-		return f.fnCIDR6(args)
+	if fn, ok := f.builtinFuncs()[name]; ok {
+		return fn(args)
 	}
 
 	return nil, nil
+}
+
+// builtinFuncs returns the map of built-in function implementations.
+func (f *Filter) builtinFuncs() map[string]func([]Value) (Value, error) {
+	return map[string]func([]Value) (Value, error){
+		"lower":         f.fnLower,
+		"upper":         f.fnUpper,
+		"len":           f.fnLen,
+		"starts_with":   f.fnStartsWith,
+		"ends_with":     f.fnEndsWith,
+		"concat":        f.fnConcat,
+		"substring":     f.fnSubstring,
+		"split":         f.fnSplit,
+		"join":          f.fnJoin,
+		"has_key":       f.fnHasKey,
+		"has_value":     f.fnHasValue,
+		"url_decode":    f.fnURLDecode,
+		"cidr":          f.fnCIDR,
+		"cidr6":         f.fnCIDR6,
+		"regex_replace": f.fnRegexReplace,
+		"trim":          f.fnTrim,
+		"trim_left":     f.fnTrimLeft,
+		"trim_right":    f.fnTrimRight,
+		"replace":       f.fnReplace,
+		"count":         f.fnCount,
+		"coalesce":      f.fnCoalesce,
+		"contains_word": f.fnContainsWord,
+		"abs":           f.fnAbs,
+		"ceil":          f.fnCeil,
+		"floor":         f.fnFloor,
+		"round":         f.fnRound,
+		"is_ipv4":       f.fnIsIPv4,
+		"is_ipv6":       f.fnIsIPv6,
+		"is_loopback":   f.fnIsLoopback,
+		"regex_extract": f.fnRegexExtract,
+		"intersection":  f.fnIntersection,
+		"union":         f.fnUnion,
+		"difference":    f.fnDifference,
+		"contains_any":  f.fnContainsAny,
+		"contains_all":  f.fnContainsAll,
+	}
 }
 
 // lower(String) -> String
@@ -1187,4 +1270,357 @@ func applyCIDRMask(ip net.IP, ipv4Bits, ipv6Bits int) Value {
 	mask := net.CIDRMask(ipv6Bits, 128)
 	masked := ip.Mask(mask)
 	return IPValue{IP: masked}
+}
+
+// regex_replace(String, String, String) -> String
+func (f *Filter) fnRegexReplace(args []Value) (Value, error) {
+	if len(args) != 3 || args[0] == nil || args[1] == nil || args[2] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeString || args[1].Type() != TypeString || args[2].Type() != TypeString {
+		return nil, nil
+	}
+
+	str := string(args[0].(StringValue))
+	pattern := string(args[1].(StringValue))
+	replacement := string(args[2].(StringValue))
+
+	re, err := f.getCompiledRegex(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	return StringValue(re.ReplaceAllString(str, replacement)), nil
+}
+
+// trim(String) -> String
+func (f *Filter) fnTrim(args []Value) (Value, error) {
+	if len(args) != 1 || args[0] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeString {
+		return nil, nil
+	}
+	return StringValue(strings.TrimSpace(string(args[0].(StringValue)))), nil
+}
+
+// trim_left(String) -> String
+func (f *Filter) fnTrimLeft(args []Value) (Value, error) {
+	if len(args) != 1 || args[0] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeString {
+		return nil, nil
+	}
+	return StringValue(strings.TrimLeft(string(args[0].(StringValue)), " \t\n\r")), nil
+}
+
+// trim_right(String) -> String
+func (f *Filter) fnTrimRight(args []Value) (Value, error) {
+	if len(args) != 1 || args[0] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeString {
+		return nil, nil
+	}
+	return StringValue(strings.TrimRight(string(args[0].(StringValue)), " \t\n\r")), nil
+}
+
+// replace(String, String, String) -> String
+func (f *Filter) fnReplace(args []Value) (Value, error) {
+	if len(args) != 3 || args[0] == nil || args[1] == nil || args[2] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeString || args[1].Type() != TypeString || args[2].Type() != TypeString {
+		return nil, nil
+	}
+
+	str := string(args[0].(StringValue))
+	old := string(args[1].(StringValue))
+	newStr := string(args[2].(StringValue))
+
+	return StringValue(strings.ReplaceAll(str, old, newStr)), nil
+}
+
+// count(Array) -> Int
+func (f *Filter) fnCount(args []Value) (Value, error) {
+	if len(args) != 1 || args[0] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeArray {
+		return nil, nil
+	}
+
+	arr := args[0].(ArrayValue)
+	count := 0
+	for _, elem := range arr {
+		if elem != nil && elem.IsTruthy() {
+			count++
+		}
+	}
+	return IntValue(count), nil
+}
+
+// coalesce(Value...) -> Value
+func (f *Filter) fnCoalesce(args []Value) (Value, error) {
+	for _, arg := range args {
+		if arg != nil {
+			return arg, nil
+		}
+	}
+	return nil, nil
+}
+
+// contains_word(String, String) -> Bool
+func (f *Filter) fnContainsWord(args []Value) (Value, error) {
+	if len(args) != 2 || args[0] == nil || args[1] == nil {
+		return BoolValue(false), nil
+	}
+	if args[0].Type() != TypeString || args[1].Type() != TypeString {
+		return BoolValue(false), nil
+	}
+
+	str := string(args[0].(StringValue))
+	word := string(args[1].(StringValue))
+	pattern := fmt.Sprintf(`\b%s\b`, regexp.QuoteMeta(word))
+
+	re, err := f.getCompiledRegex(pattern)
+	if err != nil {
+		return BoolValue(false), err
+	}
+
+	return BoolValue(re.MatchString(str)), nil
+}
+
+// abs(Int|Float) -> Int|Float
+func (f *Filter) fnAbs(args []Value) (Value, error) {
+	if len(args) != 1 || args[0] == nil {
+		return nil, nil
+	}
+	switch v := args[0].(type) {
+	case IntValue:
+		if int64(v) < 0 {
+			return IntValue(-int64(v)), nil
+		}
+		return v, nil
+	case FloatValue:
+		return FloatValue(math.Abs(float64(v))), nil
+	}
+	return nil, nil
+}
+
+// ceil(Float) -> Int
+func (f *Filter) fnCeil(args []Value) (Value, error) {
+	if len(args) != 1 || args[0] == nil {
+		return nil, nil
+	}
+	switch v := args[0].(type) {
+	case FloatValue:
+		return IntValue(int64(math.Ceil(float64(v)))), nil
+	case IntValue:
+		return v, nil
+	}
+	return nil, nil
+}
+
+// floor(Float) -> Int
+func (f *Filter) fnFloor(args []Value) (Value, error) {
+	if len(args) != 1 || args[0] == nil {
+		return nil, nil
+	}
+	switch v := args[0].(type) {
+	case FloatValue:
+		return IntValue(int64(math.Floor(float64(v)))), nil
+	case IntValue:
+		return v, nil
+	}
+	return nil, nil
+}
+
+// round(Float) -> Int
+func (f *Filter) fnRound(args []Value) (Value, error) {
+	if len(args) != 1 || args[0] == nil {
+		return nil, nil
+	}
+	switch v := args[0].(type) {
+	case FloatValue:
+		return IntValue(int64(math.Round(float64(v)))), nil
+	case IntValue:
+		return v, nil
+	}
+	return nil, nil
+}
+
+// is_ipv4(IP) -> Bool
+func (f *Filter) fnIsIPv4(args []Value) (Value, error) {
+	if len(args) != 1 || args[0] == nil {
+		return BoolValue(false), nil
+	}
+	if args[0].Type() != TypeIP {
+		return BoolValue(false), nil
+	}
+	ip := args[0].(IPValue).IP
+	return BoolValue(ip.To4() != nil), nil
+}
+
+// is_ipv6(IP) -> Bool
+func (f *Filter) fnIsIPv6(args []Value) (Value, error) {
+	if len(args) != 1 || args[0] == nil {
+		return BoolValue(false), nil
+	}
+	if args[0].Type() != TypeIP {
+		return BoolValue(false), nil
+	}
+	ip := args[0].(IPValue).IP
+	return BoolValue(ip.To4() == nil && len(ip) == 16), nil
+}
+
+// is_loopback(IP) -> Bool
+func (f *Filter) fnIsLoopback(args []Value) (Value, error) {
+	if len(args) != 1 || args[0] == nil {
+		return BoolValue(false), nil
+	}
+	if args[0].Type() != TypeIP {
+		return BoolValue(false), nil
+	}
+	ip := args[0].(IPValue).IP
+	return BoolValue(ip.IsLoopback()), nil
+}
+
+// regex_extract(String, String) -> String
+func (f *Filter) fnRegexExtract(args []Value) (Value, error) {
+	if len(args) != 2 || args[0] == nil || args[1] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeString || args[1].Type() != TypeString {
+		return nil, nil
+	}
+
+	str := string(args[0].(StringValue))
+	pattern := string(args[1].(StringValue))
+
+	re, err := f.getCompiledRegex(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	match := re.FindString(str)
+	if match == "" {
+		return StringValue(""), nil
+	}
+	return StringValue(match), nil
+}
+
+// intersection(Array, Array) -> Array
+func (f *Filter) fnIntersection(args []Value) (Value, error) {
+	if len(args) != 2 || args[0] == nil || args[1] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeArray || args[1].Type() != TypeArray {
+		return nil, nil
+	}
+
+	left := args[0].(ArrayValue)
+	right := args[1].(ArrayValue)
+
+	var result ArrayValue
+	for _, lElem := range left {
+		if right.Contains(lElem) {
+			result = append(result, lElem)
+		}
+	}
+
+	if result == nil {
+		return ArrayValue{}, nil
+	}
+	return result, nil
+}
+
+// union(Array, Array) -> Array
+func (f *Filter) fnUnion(args []Value) (Value, error) {
+	if len(args) != 2 || args[0] == nil || args[1] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeArray || args[1].Type() != TypeArray {
+		return nil, nil
+	}
+
+	left := args[0].(ArrayValue)
+	right := args[1].(ArrayValue)
+
+	result := make(ArrayValue, len(left))
+	copy(result, left)
+
+	for _, rElem := range right {
+		if !result.Contains(rElem) {
+			result = append(result, rElem)
+		}
+	}
+
+	return result, nil
+}
+
+// difference(Array, Array) -> Array
+func (f *Filter) fnDifference(args []Value) (Value, error) {
+	if len(args) != 2 || args[0] == nil || args[1] == nil {
+		return nil, nil
+	}
+	if args[0].Type() != TypeArray || args[1].Type() != TypeArray {
+		return nil, nil
+	}
+
+	left := args[0].(ArrayValue)
+	right := args[1].(ArrayValue)
+
+	var result ArrayValue
+	for _, lElem := range left {
+		if !right.Contains(lElem) {
+			result = append(result, lElem)
+		}
+	}
+
+	if result == nil {
+		return ArrayValue{}, nil
+	}
+	return result, nil
+}
+
+// contains_any(Array, Array) -> Bool
+func (f *Filter) fnContainsAny(args []Value) (Value, error) {
+	if len(args) != 2 || args[0] == nil || args[1] == nil {
+		return BoolValue(false), nil
+	}
+	if args[0].Type() != TypeArray || args[1].Type() != TypeArray {
+		return BoolValue(false), nil
+	}
+
+	left := args[0].(ArrayValue)
+	right := args[1].(ArrayValue)
+
+	for _, rElem := range right {
+		if left.Contains(rElem) {
+			return BoolValue(true), nil
+		}
+	}
+	return BoolValue(false), nil
+}
+
+// contains_all(Array, Array) -> Bool
+func (f *Filter) fnContainsAll(args []Value) (Value, error) {
+	if len(args) != 2 || args[0] == nil || args[1] == nil {
+		return BoolValue(false), nil
+	}
+	if args[0].Type() != TypeArray || args[1].Type() != TypeArray {
+		return BoolValue(false), nil
+	}
+
+	left := args[0].(ArrayValue)
+	right := args[1].(ArrayValue)
+
+	for _, rElem := range right {
+		if !left.Contains(rElem) {
+			return BoolValue(false), nil
+		}
+	}
+	return BoolValue(true), nil
 }
