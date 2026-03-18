@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func BenchmarkCompile(b *testing.B) {
@@ -4178,6 +4179,146 @@ func TestFilter(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, result)
 	})
+}
+
+func TestFilterHash(t *testing.T) {
+	t.Run("identical expressions produce same hash", func(t *testing.T) {
+		f1, err := Compile(`name == "test"`, nil)
+		require.NoError(t, err)
+		f2, err := Compile(`name == "test"`, nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, f1.Hash(), f2.Hash())
+		assert.Len(t, f1.Hash(), 32) // 128-bit FNV = 16 bytes = 32 hex chars
+	})
+
+	t.Run("extra whitespace ignored", func(t *testing.T) {
+		f1, err := Compile(`name=="test"`, nil)
+		require.NoError(t, err)
+		f2, err := Compile(`name   ==   "test"`, nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, f1.Hash(), f2.Hash())
+	})
+
+	t.Run("tabs and newlines ignored", func(t *testing.T) {
+		f1, err := Compile(`name == "test"`, nil)
+		require.NoError(t, err)
+		f2, err := Compile("name\t==\n\"test\"", nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, f1.Hash(), f2.Hash())
+	})
+
+	t.Run("operator aliases produce same hash", func(t *testing.T) {
+		f1, err := Compile(`a and b`, nil)
+		require.NoError(t, err)
+		f2, err := Compile(`a && b`, nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, f1.Hash(), f2.Hash())
+	})
+
+	t.Run("or alias", func(t *testing.T) {
+		f1, err := Compile(`a or b`, nil)
+		require.NoError(t, err)
+		f2, err := Compile(`a || b`, nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, f1.Hash(), f2.Hash())
+	})
+
+	t.Run("not alias", func(t *testing.T) {
+		f1, err := Compile(`not a`, nil)
+		require.NoError(t, err)
+		f2, err := Compile(`! a`, nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, f1.Hash(), f2.Hash())
+	})
+
+	t.Run("xor alias", func(t *testing.T) {
+		f1, err := Compile(`a xor b`, nil)
+		require.NoError(t, err)
+		f2, err := Compile(`a ^^ b`, nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, f1.Hash(), f2.Hash())
+	})
+
+	t.Run("matches alias", func(t *testing.T) {
+		f1, err := Compile(`name matches "^test"`, nil)
+		require.NoError(t, err)
+		f2, err := Compile(`name ~ "^test"`, nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, f1.Hash(), f2.Hash())
+	})
+
+	t.Run("different expressions produce different hash", func(t *testing.T) {
+		f1, err := Compile(`name == "test"`, nil)
+		require.NoError(t, err)
+		f2, err := Compile(`name == "other"`, nil)
+		require.NoError(t, err)
+
+		assert.NotEqual(t, f1.Hash(), f2.Hash())
+	})
+
+	t.Run("different operators produce different hash", func(t *testing.T) {
+		f1, err := Compile(`x == 1`, nil)
+		require.NoError(t, err)
+		f2, err := Compile(`x != 1`, nil)
+		require.NoError(t, err)
+
+		assert.NotEqual(t, f1.Hash(), f2.Hash())
+	})
+
+	t.Run("different fields produce different hash", func(t *testing.T) {
+		f1, err := Compile(`name == "test"`, nil)
+		require.NoError(t, err)
+		f2, err := Compile(`host == "test"`, nil)
+		require.NoError(t, err)
+
+		assert.NotEqual(t, f1.Hash(), f2.Hash())
+	})
+
+	t.Run("complex expression with aliases", func(t *testing.T) {
+		f1, err := Compile(`name == "test" and status >= 400 or not active`, nil)
+		require.NoError(t, err)
+		f2, err := Compile(`name == "test" && status >= 400 || ! active`, nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, f1.Hash(), f2.Hash())
+	})
+}
+
+func TestFilterHashStable(t *testing.T) {
+	expected := map[string]string{
+		`name == "test"`:                "c07fc94cc06d690a59a55bfdb78fc2e7",
+		`status >= 400`:                 "e6ea4acee51cc59ab574c68a7666a11c",
+		`a and b`:                       "05256f2c3b0d433e8c3923dc28674251",
+		`a or b`:                        "8d37d268ba0d433e9085647d4515db7e",
+		`not a`:                         "c820a402b6659af17cda0cc15b69d1fe",
+		`a xor b`:                       "acab0930c40d433e87ecef0cf526983c",
+		`name matches "^test"`:          "f77ff03011eaf7ac31a1d379ef11ee95",
+		`ip in "10.0.0.0/8"`:            "9251d2baeb1c6a6e857dea57ca96be9f",
+		`ip not in $blocked`:            "ad4dfd9447faad2a0027f57489f8e154",
+		`tags[*] == "prod"`:             "e7509feb340cd4b54221fcd326bcd78c",
+		`lower(name) == "admin"`:        "06abe0e07a3b9769d2d035cb8bce2bf2",
+		`cidr(ip, 24) == "10.0.0.0"`:    "92c6f3a5ca8cf72b4df7588608099e2c",
+		`x in {1..100}`:                 "608d471e81000d146223096fa8b8e7d1",
+		`name not contains "admin"`:     "f71bc0b2e10bbbe62622074bc964077b",
+		`data["key"] == "val"`:          "95d44c37b3fa28db420a44ba079e4614",
+		`(a == 1 or b == 2) and c == 3`: "ee2c650e39fc9b9c4262c5c9a7efd4bb",
+	}
+
+	for expr, wantHash := range expected {
+		t.Run(expr, func(t *testing.T) {
+			f, err := Compile(expr, nil)
+			require.NoError(t, err)
+			assert.Equal(t, wantHash, f.Hash())
+		})
+	}
 }
 
 func TestFilterCoverageGaps(t *testing.T) {

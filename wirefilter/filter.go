@@ -33,7 +33,9 @@
 package wirefilter
 
 import (
+	"encoding/hex"
 	"fmt"
+	"hash/fnv"
 	"net"
 	"net/url"
 	"regexp"
@@ -76,6 +78,22 @@ func Compile(filterStr string, schema *Schema) (*Filter, error) {
 		regexCache: make(map[string]*regexp.Regexp),
 		cidrCache:  make(map[string]*net.IPNet),
 	}, nil
+}
+
+// Hash returns a hex-encoded hash of the compiled filter's canonical AST representation.
+// Two expressions that are semantically identical produce the same hash, even if they
+// differ in whitespace, operator aliases (and vs &&), or formatting.
+// This can be used to deduplicate filter expressions.
+func (f *Filter) Hash() string {
+	data, err := f.MarshalBinary()
+	if err != nil {
+		return ""
+	}
+
+	h := fnv.New128a()
+	h.Write(data)
+
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // Execute evaluates the compiled filter against the provided execution context.

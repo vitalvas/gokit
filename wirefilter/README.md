@@ -19,11 +19,13 @@ inspired by Cloudflare's Wirefilter.
 - Array unpack operations: `tags[*] == "value"` (ANY semantics)
 - Raw strings: `r"..."` (no escape processing)
 - Custom lists: `$list_name` for external list references
+- Negated membership: `not in`, `not contains`
 - Built-in functions: `lower()`, `upper()`, `len()`, `starts_with()`, and more
 - Field-to-field comparisons
 - IP/CIDR matching for IPv4 and IPv6
 - Regular expression matching
 - Schema validation for field references
+- Binary serialization for pre-compiled filter storage and fast loading
 
 ## Installation
 
@@ -438,6 +440,21 @@ ctx := wirefilter.NewExecutionContext().
 // Expression: ip.src not in $blocked_ips
 ```
 
+### Expression Hash
+
+Compiled filters expose a canonical hash for deduplication. The hash ignores
+whitespace differences and operator aliases (`and` vs `&&`, `or` vs `||`,
+`not` vs `!`, `xor` vs `^^`, `matches` vs `~`):
+
+```go
+f1, _ := wirefilter.Compile(`name == "test" and status >= 400`, schema)
+f2, _ := wirefilter.Compile(`name   ==   "test"  &&  status  >=  400`, schema)
+
+f1.Hash() == f2.Hash() // true - semantically identical
+```
+
+This is useful for deduplicating rules in large rule sets.
+
 ### Executing a Filter
 
 Evaluate the filter against the context:
@@ -811,6 +828,48 @@ matched1, _ := filter1.Execute(ctx) // true
 matched2, _ := filter2.Execute(ctx) // true
 ```
 
+## Binary Serialization
+
+Compiled filters can be serialized to bytes and restored later without re-parsing.
+This is useful for pre-compiling large rule sets and loading them from external
+storage (databases, caches, files) at runtime.
+
+### Saving a Compiled Filter
+
+```go
+filter, err := wirefilter.Compile(`ip.src not in $blocked and status < 500`, schema)
+if err != nil {
+    log.Fatal(err)
+}
+
+data, err := filter.MarshalBinary()
+if err != nil {
+    log.Fatal(err)
+}
+
+// Store data in Redis, database, file, etc.
+```
+
+### Loading a Compiled Filter
+
+```go
+// Load data from external storage
+filter := &wirefilter.Filter{}
+if err := filter.UnmarshalBinary(data); err != nil {
+    log.Fatal(err)
+}
+
+// Use the filter directly - no re-parsing needed
+result, err := filter.Execute(ctx)
+```
+
+The `Filter` type implements the standard `encoding.BinaryMarshaler` and
+`encoding.BinaryUnmarshaler` interfaces.
+
+Regex and CIDR caches are rebuilt lazily on first use after deserialization.
+Schema validation is not re-applied; the filter is assumed to have been
+validated at compile time.
+
 ## Performance
 
 The filter engine is designed for high performance:
@@ -819,8 +878,11 @@ The filter engine is designed for high performance:
 - Schema validation happens at compile time, not runtime
 - Efficient AST-based evaluation
 - No runtime reflection
+- Binary deserialization is ~2x faster than compiling from string
 
-For optimal performance, compile filters once and reuse them across multiple executions.
+For optimal performance, compile filters once and reuse them across multiple
+executions. For large rule sets, pre-compile and store the binary representation
+for fast loading.
 
 ## Error Handling
 
