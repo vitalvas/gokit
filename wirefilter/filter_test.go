@@ -176,8 +176,8 @@ func FuzzCompile(f *testing.F) {
 	f.Add(`role in $allowed[dept]`)
 	f.Add(`$config["key"] == "val"`)
 	f.Add(`name not contains "admin"`)
-	f.Add(`cidr(ip, 24) == "10.0.0.0"`)
-	f.Add(`cidr6(ip, 64) == "2001:db8::"`)
+	f.Add(`cidr(ip, 24) == 10.0.0.0/24`)
+	f.Add(`cidr6(ip, 64) == 2001:db8::/64`)
 	f.Add(`lower(name) == "test"`)
 	f.Add(`tags[*] == "prod"`)
 	f.Add(`all(tags[*] contains "a")`)
@@ -3463,7 +3463,7 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("function cidr - IPv4", func(t *testing.T) {
-		filter, err := Compile(`cidr(ip, 24) == "192.168.1.0"`, nil)
+		filter, err := Compile(`cidr(ip, 24) == 192.168.1.0/24`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.100")
@@ -3479,7 +3479,7 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("function cidr - IPv4 /16", func(t *testing.T) {
-		filter, err := Compile(`cidr(ip, 16) == "192.168.0.0"`, nil)
+		filter, err := Compile(`cidr(ip, 16) == 192.168.0.0/16`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext().SetIPField("ip", "192.168.100.50")
@@ -3489,7 +3489,7 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("function cidr - IPv6 returns nil", func(t *testing.T) {
-		filter, err := Compile(`cidr(ip, 24) == "2001:db8::"`, nil)
+		filter, err := Compile(`cidr(ip, 24) == 2001:db8::/24`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext().SetIPField("ip", "2001:db8::1234")
@@ -3500,7 +3500,7 @@ func TestFilter(t *testing.T) {
 
 	t.Run("function cidr - edge cases", func(t *testing.T) {
 		// /32 mask (full IP)
-		filter, err := Compile(`cidr(ip, 32) == "192.168.1.100"`, nil)
+		filter, err := Compile(`cidr(ip, 32) == 192.168.1.100/32`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.100")
@@ -3509,7 +3509,7 @@ func TestFilter(t *testing.T) {
 		assert.True(t, result)
 
 		// /0 mask (all zeros)
-		filter2, err := Compile(`cidr(ip, 0) == "0.0.0.0"`, nil)
+		filter2, err := Compile(`cidr(ip, 0) == 0.0.0.0/0`, nil)
 		assert.NoError(t, err)
 
 		result2, err := filter2.Execute(ctx)
@@ -3518,7 +3518,7 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("function cidr - wrong types", func(t *testing.T) {
-		filter, err := Compile(`cidr(name, 24) == "192.168.1.0"`, nil)
+		filter, err := Compile(`cidr(name, 24) == 192.168.1.0/24`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext().SetStringField("name", "not an ip")
@@ -3529,7 +3529,7 @@ func TestFilter(t *testing.T) {
 
 	t.Run("function cidr6 - IPv4", func(t *testing.T) {
 		// cidr6 with IPv4 caps at 32
-		filter, err := Compile(`cidr6(ip, 24) == "192.168.1.0"`, nil)
+		filter, err := Compile(`cidr6(ip, 24) == 192.168.1.0/24`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.100")
@@ -3540,7 +3540,7 @@ func TestFilter(t *testing.T) {
 
 	t.Run("function cidr6 - IPv4 with bits > 32", func(t *testing.T) {
 		// cidr6 with bits > 32 for IPv4 should cap at 32
-		filter, err := Compile(`cidr6(ip, 64) == "192.168.1.100"`, nil)
+		filter, err := Compile(`cidr6(ip, 64) == 192.168.1.100/32`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.100")
@@ -3550,7 +3550,7 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("function cidr6 - IPv6", func(t *testing.T) {
-		filter, err := Compile(`cidr6(ip, 64) == "2001:db8::"`, nil)
+		filter, err := Compile(`cidr6(ip, 64) == 2001:db8::/64`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext().SetIPField("ip", "2001:db8::abcd:1234")
@@ -3560,7 +3560,7 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("function cidr6 - wrong types", func(t *testing.T) {
-		filter, err := Compile(`cidr6(name, 64) == "2001:db8::"`, nil)
+		filter, err := Compile(`cidr6(name, 64) == 2001:db8::/64`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext().SetStringField("name", "not an ip")
@@ -3570,7 +3570,7 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("function cidr - nil arguments", func(t *testing.T) {
-		filter, err := Compile(`cidr(ip, 24) == "192.168.1.0"`, nil)
+		filter, err := Compile(`cidr(ip, 24) == 192.168.1.0/24`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext()
@@ -3580,7 +3580,7 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("function cidr6 - nil arguments", func(t *testing.T) {
-		filter, err := Compile(`cidr6(ip, 64) == "2001:db8::"`, nil)
+		filter, err := Compile(`cidr6(ip, 64) == 2001:db8::/64`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext()
@@ -4348,7 +4348,7 @@ func TestFilterHashStable(t *testing.T) {
 		`ip not in $blocked`:            "39d433affcd7e7a207116d845e2a9a90",
 		`tags[*] == "prod"`:             "ff16911f0e06efe44d5eb8288add6bef",
 		`lower(name) == "admin"`:        "ee93a7331fa511f603da995bab8a3ad5",
-		`cidr(ip, 24) == "10.0.0.0"`:    "30cd2ba0cd1225b43a6cef3e13d02885",
+		`cidr(ip, 24) == 10.0.0.0/24`:   "7b88e911d95eb856e3d2bcc7a7da10a5",
 		`x in {1..100}`:                 "22fa482e0fc63ac8541c43d27a475328",
 		`name not contains "admin"`:     "4074d01cb7420c78dea8b032e8307b1f",
 		`data["key"] == "val"`:          "3368e39bf8c533c6cff6b3a987a43ef5",
@@ -5295,7 +5295,7 @@ func TestFilterCoverageGaps(t *testing.T) {
 	})
 
 	t.Run("cidr with out of range bits", func(t *testing.T) {
-		filter, err := Compile(`cidr(ip, 50) == "192.168.1.100"`, nil)
+		filter, err := Compile(`cidr(ip, 50) == 192.168.1.100/32`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.100")
@@ -5306,7 +5306,7 @@ func TestFilterCoverageGaps(t *testing.T) {
 
 	t.Run("cidr with negative bits", func(t *testing.T) {
 		// Can't write negative literal in expression, but test via context
-		filter, err := Compile(`cidr(ip, 0) == "0.0.0.0"`, nil)
+		filter, err := Compile(`cidr(ip, 0) == 0.0.0.0/0`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.100")
@@ -5316,7 +5316,7 @@ func TestFilterCoverageGaps(t *testing.T) {
 	})
 
 	t.Run("cidr6 with IPv6 negative bits", func(t *testing.T) {
-		filter, err := Compile(`cidr6(ip, 0) == "::"`, nil)
+		filter, err := Compile(`cidr6(ip, 0) == "::/0"`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext().SetIPField("ip", "2001:db8::1")
@@ -5326,7 +5326,7 @@ func TestFilterCoverageGaps(t *testing.T) {
 	})
 
 	t.Run("cidr6 with IPv6 max bits", func(t *testing.T) {
-		filter, err := Compile(`cidr6(ip, 128) == "2001:db8::1"`, nil)
+		filter, err := Compile(`cidr6(ip, 128) == 2001:db8::1/128`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext().SetIPField("ip", "2001:db8::1")
@@ -5526,7 +5526,7 @@ func TestFilterCoverageGaps(t *testing.T) {
 					},
 				},
 				Operator: TokenEq,
-				Right:    &LiteralExpr{Value: StringValue("0.0.0.0")},
+				Right:    &LiteralExpr{Value: StringValue("0.0.0.0/0")},
 			},
 			regexCache: make(map[string]*regexp.Regexp),
 			cidrCache:  make(map[string]*net.IPNet),
@@ -5548,7 +5548,7 @@ func TestFilterCoverageGaps(t *testing.T) {
 					},
 				},
 				Operator: TokenEq,
-				Right:    &LiteralExpr{Value: StringValue("::")},
+				Right:    &LiteralExpr{Value: StringValue("::/0")},
 			},
 			regexCache: make(map[string]*regexp.Regexp),
 			cidrCache:  make(map[string]*net.IPNet),
@@ -5570,7 +5570,7 @@ func TestFilterCoverageGaps(t *testing.T) {
 					},
 				},
 				Operator: TokenEq,
-				Right:    &LiteralExpr{Value: StringValue("2001:db8::1")},
+				Right:    &LiteralExpr{Value: StringValue("2001:db8::1/128")},
 			},
 			regexCache: make(map[string]*regexp.Regexp),
 			cidrCache:  make(map[string]*net.IPNet),

@@ -456,18 +456,31 @@ func (f *Filter) evaluateEquality(left, right Value) (Value, error) {
 	if left == nil || right == nil {
 		return BoolValue(left == nil && right == nil), nil
 	}
-	if left.Type() == TypeIP && right.Type() == TypeString {
+	switch {
+	case left.Type() == TypeIP && right.Type() == TypeString:
 		ip := net.ParseIP(string(right.(StringValue)))
 		if ip == nil {
 			return BoolValue(false), nil
 		}
 		right = IPValue{IP: ip}
-	} else if left.Type() == TypeString && right.Type() == TypeIP {
+	case left.Type() == TypeString && right.Type() == TypeIP:
 		ip := net.ParseIP(string(left.(StringValue)))
 		if ip == nil {
 			return BoolValue(false), nil
 		}
 		left = IPValue{IP: ip}
+	case left.Type() == TypeCIDR && right.Type() == TypeString:
+		_, ipNet, err := net.ParseCIDR(string(right.(StringValue)))
+		if err != nil {
+			return BoolValue(false), nil
+		}
+		right = CIDRValue{IPNet: ipNet}
+	case left.Type() == TypeString && right.Type() == TypeCIDR:
+		_, ipNet, err := net.ParseCIDR(string(left.(StringValue)))
+		if err != nil {
+			return BoolValue(false), nil
+		}
+		left = CIDRValue{IPNet: ipNet}
 	}
 	return BoolValue(left.Equal(right)), nil
 }
@@ -1214,7 +1227,7 @@ func (f *Filter) fnCIDR(args []Value) (Value, error) {
 			ipv4Bits = 32
 		}
 		mask := net.CIDRMask(ipv4Bits, 32)
-		return IPValue{IP: ip4.Mask(mask)}, nil
+		return CIDRValue{IPNet: &net.IPNet{IP: ip4.Mask(mask), Mask: mask}}, nil
 	}
 
 	return nil, nil
@@ -1243,7 +1256,7 @@ func (f *Filter) fnCIDR6(args []Value) (Value, error) {
 	return applyCIDRMask(ipVal.IP, ipv4Bits, ipv6Bits), nil
 }
 
-// applyCIDRMask applies CIDR mask to an IP address
+// applyCIDRMask applies CIDR mask to an IP address and returns a CIDRValue.
 func applyCIDRMask(ip net.IP, ipv4Bits, ipv6Bits int) Value {
 	// Determine if IPv4 or IPv6
 	ip4 := ip.To4()
@@ -1256,8 +1269,7 @@ func applyCIDRMask(ip net.IP, ipv4Bits, ipv6Bits int) Value {
 			ipv4Bits = 32
 		}
 		mask := net.CIDRMask(ipv4Bits, 32)
-		masked := ip4.Mask(mask)
-		return IPValue{IP: masked}
+		return CIDRValue{IPNet: &net.IPNet{IP: ip4.Mask(mask), Mask: mask}}
 	}
 
 	// IPv6 address
@@ -1268,8 +1280,7 @@ func applyCIDRMask(ip net.IP, ipv4Bits, ipv6Bits int) Value {
 		ipv6Bits = 128
 	}
 	mask := net.CIDRMask(ipv6Bits, 128)
-	masked := ip.Mask(mask)
-	return IPValue{IP: masked}
+	return CIDRValue{IPNet: &net.IPNet{IP: ip.Mask(mask), Mask: mask}}
 }
 
 // regex_replace(String, String, String) -> String
