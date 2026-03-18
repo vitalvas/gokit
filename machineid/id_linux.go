@@ -2,10 +2,7 @@
 
 package machineid
 
-import (
-	"os"
-	"strings"
-)
+import "os"
 
 const (
 	dbusPath    = "/var/lib/dbus/machine-id"
@@ -23,8 +20,4 @@ func machineID() (string, error) {
 	}
 
 	return trim(string(id)), nil
-}
-
-func trim(s string) string {
-	return strings.TrimSpace(strings.Trim(s, "\n"))
 }

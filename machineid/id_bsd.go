@@ -45,7 +45,3 @@ func readKenv() (string, error) {
 
 	return trim(stdout.String()), nil
 }
-
-func trim(s string) string {
-	return strings.TrimSpace(strings.Trim(s, "\n"))
-}

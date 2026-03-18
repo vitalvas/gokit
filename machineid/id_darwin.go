@@ -42,7 +42,3 @@ func extractID(lines string) (string, error) {
 
 	return "", errors.New("failed to extract 'IOPlatformUUID' value from `ioreg` output")
 }
-
-func trim(s string) string {
-	return strings.TrimSpace(strings.Trim(s, "\n"))
-}
