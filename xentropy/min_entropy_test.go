@@ -2,6 +2,7 @@ package xentropy
 
 import (
 	"crypto/rand"
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -235,7 +236,7 @@ func TestMinEntropyEdgeCases(t *testing.T) {
 	})
 
 	t.Run("single outlier", func(t *testing.T) {
-		data := []byte(strings.Repeat("a", 99) + "b")
+		data := []byte(fmt.Sprintf("%sb", strings.Repeat("a", 99)))
 		entropy := MinEntropy(data)
 		expected := -math.Log2(99.0 / 100.0)
 		assert.InDelta(t, expected, entropy, 0.0001)
