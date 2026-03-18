@@ -1,7 +1,9 @@
 package xconfig
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
@@ -909,13 +911,13 @@ func TestHelpers(t *testing.T) {
 		tempDir := t.TempDir()
 
 		// Create subdirectories
-		require.NoError(t, os.MkdirAll(tempDir+"/subdir", 0755))
+		require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "subdir"), 0755))
 
 		// Create config files
-		require.NoError(t, os.WriteFile(tempDir+"/config.json", []byte(`{"test": "value"}`), 0644))
-		require.NoError(t, os.WriteFile(tempDir+"/config.yaml", []byte(`test: value`), 0644))
-		require.NoError(t, os.WriteFile(tempDir+"/config.txt", []byte(`not a config`), 0644))
-		require.NoError(t, os.WriteFile(tempDir+"/subdir/nested.json", []byte(`{"nested": true}`), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"test": "value"}`), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "config.yaml"), []byte(`test: value`), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "config.txt"), []byte(`not a config`), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "subdir", "nested.json"), []byte(`{"nested": true}`), 0644))
 
 		files, err := scanDirectory(tempDir)
 		require.NoError(t, err)
@@ -934,7 +936,7 @@ func TestHelpers(t *testing.T) {
 		tempDir := t.TempDir()
 
 		jsonContent := `{"logger": {"level": "debug"}, "health": {"address": ":9090"}}`
-		require.NoError(t, os.WriteFile(tempDir+"/config.json", []byte(jsonContent), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(jsonContent), 0644))
 
 		var config TestConfig
 		err := loadFromDirs(&config, []string{tempDir}, false)
@@ -1059,7 +1061,7 @@ func TestHelpers(t *testing.T) {
 			testStr := "${env:HOME}/config/${env:USER}.json"
 			strVal := reflect.ValueOf(&testStr).Elem()
 			expandMacrosInValue(strVal, defaultRegex)
-			expected := os.Getenv("HOME") + "/config/" + os.Getenv("USER") + ".json"
+			expected := fmt.Sprintf("%s/config/%s.json", os.Getenv("HOME"), os.Getenv("USER"))
 			assert.Equal(t, expected, testStr)
 
 			// Test undefined macro
@@ -1072,7 +1074,7 @@ func TestHelpers(t *testing.T) {
 			mixedStr := "prefix_${env:HOME}_suffix"
 			mixedVal := reflect.ValueOf(&mixedStr).Elem()
 			expandMacrosInValue(mixedVal, defaultRegex)
-			expectedMixed := "prefix_" + os.Getenv("HOME") + "_suffix"
+			expectedMixed := fmt.Sprintf("prefix_%s_suffix", os.Getenv("HOME"))
 			assert.Equal(t, expectedMixed, mixedStr)
 
 			// Test no macros
@@ -1085,7 +1087,7 @@ func TestHelpers(t *testing.T) {
 			testSlice := []string{"${env:HOME}/config", "plain"}
 			sliceVal := reflect.ValueOf(&testSlice).Elem()
 			expandMacrosInValue(sliceVal, defaultRegex)
-			assert.Equal(t, os.Getenv("HOME")+"/config", testSlice[0])
+			assert.Equal(t, fmt.Sprintf("%s/config", os.Getenv("HOME")), testSlice[0])
 			assert.Equal(t, "plain", testSlice[1])
 		})
 
@@ -1238,21 +1240,21 @@ func TestHelpers(t *testing.T) {
 			assert.NoError(t, err) // Missing files are treated as optional
 
 			// Test loading invalid JSON
-			tempFile := t.TempDir() + "/invalid.json"
+			tempFile := filepath.Join(t.TempDir(), "invalid.json")
 			require.NoError(t, os.WriteFile(tempFile, []byte(`{invalid json`), 0644))
 
 			err = loadFromFile(&config, tempFile, false)
 			assert.Error(t, err)
 
 			// Test loading invalid YAML
-			tempFile = t.TempDir() + "/invalid.yaml"
+			tempFile = filepath.Join(t.TempDir(), "invalid.yaml")
 			require.NoError(t, os.WriteFile(tempFile, []byte("invalid: yaml: content: ["), 0644))
 
 			err = loadFromFile(&config, tempFile, false)
 			assert.Error(t, err)
 
 			// Test unsupported file extension
-			tempFile = t.TempDir() + "/config.txt"
+			tempFile = filepath.Join(t.TempDir(), "config.txt")
 			require.NoError(t, os.WriteFile(tempFile, []byte(`some content`), 0644))
 
 			err = loadFromFile(&config, tempFile, false)
@@ -1278,7 +1280,7 @@ func TestHelpers(t *testing.T) {
 				testStruct := TestStruct{Field: "${env:HOME}/path"}
 				structVal := reflect.ValueOf(&testStruct).Elem()
 				expandMacrosInValue(structVal, defaultRegex)
-				assert.Equal(t, os.Getenv("HOME")+"/path", testStruct.Field)
+				assert.Equal(t, fmt.Sprintf("%s/path", os.Getenv("HOME")), testStruct.Field)
 
 				// Test map with string values
 				testMap := map[string]string{
@@ -1287,7 +1289,7 @@ func TestHelpers(t *testing.T) {
 				}
 				mapVal := reflect.ValueOf(&testMap).Elem()
 				expandMacrosInValue(mapVal, defaultRegex)
-				assert.Equal(t, os.Getenv("HOME")+"/path1", testMap["key1"])
+				assert.Equal(t, fmt.Sprintf("%s/path1", os.Getenv("HOME")), testMap["key1"])
 				assert.Equal(t, "plain_value", testMap["key2"])
 
 				// Test slice with different element types
@@ -1364,7 +1366,7 @@ func TestHelpers(t *testing.T) {
 
 				// Test scanDirectory with permission issues (create unreadable directory)
 				if os.Getuid() != 0 { // Skip this test if running as root
-					unreadableDir := t.TempDir() + "/unreadable"
+					unreadableDir := filepath.Join(t.TempDir(), "unreadable")
 					require.NoError(t, os.Mkdir(unreadableDir, 0000)) // No permissions
 					defer os.Chmod(unreadableDir, 0755)               // Restore permissions for cleanup
 
@@ -1402,7 +1404,7 @@ func TestHelpers(t *testing.T) {
 					ptrStruct := &PtrStruct{Field: "${env:HOME}/ptr_path"}
 					ptrVal := reflect.ValueOf(&ptrStruct).Elem()
 					expandMacrosInValue(ptrVal, edgeCaseRegex)
-					assert.Equal(t, os.Getenv("HOME")+"/ptr_path", ptrStruct.Field)
+					assert.Equal(t, fmt.Sprintf("%s/ptr_path", os.Getenv("HOME")), ptrStruct.Field)
 
 					// Test nil pointer
 					var nilPtr *PtrStruct
@@ -1423,7 +1425,7 @@ func TestHelpers(t *testing.T) {
 					}
 					mapVal := reflect.ValueOf(&testMap).Elem()
 					expandMacrosInValue(mapVal, edgeCaseRegex)
-					assert.Equal(t, os.Getenv("HOME")+"/path1", testMap["key1"])
+					assert.Equal(t, fmt.Sprintf("%s/path1", os.Getenv("HOME")), testMap["key1"])
 					assert.Equal(t, "plain_value", testMap["key2"])
 				})
 
@@ -1528,7 +1530,7 @@ func TestHelpers(t *testing.T) {
 					// Create a directory and then make it unreadable (if not root)
 					if os.Getuid() != 0 {
 						tempDir := t.TempDir()
-						unreadableDir := tempDir + "/unreadable"
+						unreadableDir := filepath.Join(tempDir, "unreadable")
 						require.NoError(t, os.Mkdir(unreadableDir, 0755))
 						require.NoError(t, os.Chmod(unreadableDir, 0000))
 						defer os.Chmod(unreadableDir, 0755) // Restore for cleanup
@@ -1567,11 +1569,11 @@ func TestHelpers(t *testing.T) {
 				// Create a directory that we can make problematic
 				if os.Getuid() != 0 { // Skip if root user
 					tempDir := t.TempDir()
-					problemDir := tempDir + "/problem"
+					problemDir := filepath.Join(tempDir, "problem")
 					require.NoError(t, os.Mkdir(problemDir, 0755))
 
 					// Create a file inside, then make directory unreadable
-					require.NoError(t, os.WriteFile(problemDir+"/file.json", []byte(`{}`), 0644))
+					require.NoError(t, os.WriteFile(filepath.Join(problemDir, "file.json"), []byte(`{}`), 0644))
 					require.NoError(t, os.Chmod(problemDir, 0000))
 					defer os.Chmod(problemDir, 0755) // Restore for cleanup
 

@@ -94,7 +94,7 @@ func loadFromEnvRecursive(v reflect.Value, prefix string) error {
 					envKey = strings.ToUpper(strings.Split(envTag, ",")[0])
 				} else {
 					rootPrefix := strings.Split(prefix, "_")[0] // Get the original prefix (e.g., "TEST")
-					envKey = rootPrefix + "_" + strings.ToUpper(strings.Split(envTag, ",")[0])
+					envKey = fmt.Sprintf("%s_%s", rootPrefix, strings.ToUpper(strings.Split(envTag, ",")[0]))
 				}
 			} else {
 				// Use standard prefix + tag name
@@ -102,7 +102,7 @@ func loadFromEnvRecursive(v reflect.Value, prefix string) error {
 					// No prefix case (WithEnv(EnvSkipPrefix))
 					envKey = strings.ToUpper(tagName)
 				} else {
-					envKey = prefix + "_" + strings.ToUpper(tagName)
+					envKey = fmt.Sprintf("%s_%s", prefix, strings.ToUpper(tagName))
 				}
 			}
 

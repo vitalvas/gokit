@@ -2,6 +2,7 @@ package xconfig
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,9 +15,9 @@ func TestScanDirectory(t *testing.T) {
 		require.NoError(t, err)
 		defer func() { _ = os.RemoveAll(tmpDir) }()
 
-		require.NoError(t, os.WriteFile(tmpDir+"/01-base.yaml", []byte("test: value"), 0644))
-		require.NoError(t, os.WriteFile(tmpDir+"/02-override.json", []byte("{}"), 0644))
-		require.NoError(t, os.WriteFile(tmpDir+"/readme.txt", []byte("ignore"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "01-base.yaml"), []byte("test: value"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "02-override.json"), []byte("{}"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "readme.txt"), []byte("ignore"), 0644))
 
 		files, err := scanDirectory(tmpDir)
 		require.NoError(t, err)
@@ -53,15 +54,15 @@ func TestLoadFromDirs(t *testing.T) {
   level: "debug"
 health:
   address: ":9090"`
-		require.NoError(t, os.WriteFile(tmpDir+"/01-base.yaml", []byte(file1Content), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "01-base.yaml"), []byte(file1Content), 0644))
 
 		file2Content := `logger:
   level: "info"
 db:
   host: "dbserver"`
-		require.NoError(t, os.WriteFile(tmpDir+"/02-override.yaml", []byte(file2Content), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "02-override.yaml"), []byte(file2Content), 0644))
 
-		require.NoError(t, os.WriteFile(tmpDir+"/readme.txt", []byte("ignore me"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "readme.txt"), []byte("ignore me"), 0644))
 
 		var cfg TestConfig
 		err = Load(&cfg, WithDirs(tmpDir))
@@ -79,7 +80,7 @@ db:
 
 		dirContent := `logger:
   level: "debug"`
-		require.NoError(t, os.WriteFile(tmpDir+"/config.yaml", []byte(dirContent), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "config.yaml"), []byte(dirContent), 0644))
 
 		tmpFile, err := os.CreateTemp("", "explicit-config-*.yaml")
 		require.NoError(t, err)
