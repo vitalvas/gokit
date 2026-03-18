@@ -16,6 +16,12 @@ const (
 	FunctionModeAllowlist
 )
 
+// Default complexity limits. Zero means unlimited.
+const (
+	DefaultMaxDepth = 0
+	DefaultMaxNodes = 0
+)
+
 // Field represents a named field with a specific type in a schema.
 type Field struct {
 	Name string
@@ -23,11 +29,50 @@ type Field struct {
 }
 
 // Schema defines the structure of fields that can be used in filter expressions.
-// It provides validation to ensure that filter expressions only reference defined fields.
+// It provides validation to ensure that filter expressions only reference defined fields,
+// operators are valid for field types, and expression complexity is within limits.
 type Schema struct {
 	fields        map[string]Field
 	functionMode  FunctionMode
 	functionRules map[string]bool // true = enabled, false = disabled
+	maxDepth      int             // max AST nesting depth (0 = unlimited)
+	maxNodes      int             // max AST node count (0 = unlimited)
+}
+
+// operatorsByType defines which operators are valid for each field type.
+var operatorsByType = map[Type]map[TokenType]bool{
+	TypeString: {
+		TokenEq: true, TokenNe: true,
+		TokenContains: true, TokenMatches: true,
+		TokenIn: true, TokenWildcard: true, TokenStrictWildcard: true,
+	},
+	TypeInt: {
+		TokenEq: true, TokenNe: true,
+		TokenLt: true, TokenGt: true, TokenLe: true, TokenGe: true,
+		TokenIn: true,
+	},
+	TypeBool: {
+		TokenEq: true, TokenNe: true,
+	},
+	TypeIP: {
+		TokenEq: true, TokenNe: true,
+		TokenIn: true,
+	},
+	TypeCIDR: {
+		TokenEq: true, TokenNe: true,
+	},
+	TypeBytes: {
+		TokenEq: true, TokenNe: true,
+		TokenContains: true,
+	},
+	TypeArray: {
+		TokenEq: true, TokenNe: true,
+		TokenAllEq: true, TokenAnyNe: true,
+		TokenContains: true, TokenIn: true,
+	},
+	TypeMap: {
+		TokenEq: true, TokenNe: true,
+	},
 }
 
 // NewSchema creates a new schema.
@@ -105,6 +150,24 @@ func (s *Schema) IsFunctionAllowed(name string) bool {
 	return true
 }
 
+// SetMaxDepth sets the maximum allowed AST nesting depth.
+// Zero means unlimited (default). This prevents deeply nested expressions
+// that could cause stack overflows or excessive resource consumption.
+// Returns the schema to allow method chaining.
+func (s *Schema) SetMaxDepth(depth int) *Schema {
+	s.maxDepth = depth
+	return s
+}
+
+// SetMaxNodes sets the maximum allowed number of AST nodes.
+// Zero means unlimited (default). This prevents overly complex expressions
+// that could cause excessive evaluation time.
+// Returns the schema to allow method chaining.
+func (s *Schema) SetMaxNodes(nodes int) *Schema {
+	s.maxNodes = nodes
+	return s
+}
+
 // AddField adds a field to the schema with the specified name and type.
 // Returns the schema to allow method chaining.
 func (s *Schema) AddField(name string, fieldType Type) *Schema {
@@ -122,61 +185,120 @@ func (s *Schema) GetField(name string) (Field, bool) {
 	return field, ok
 }
 
-// Validate checks that all field references in the expression exist in the schema.
-// Returns an error if any field is not defined in the schema.
+// Validate checks that all field references in the expression exist in the schema,
+// operators are valid for field types, and expression complexity is within limits.
+// Returns an error if validation fails.
 func (s *Schema) Validate(expr Expression) error {
-	return s.validateExpression(expr)
+	v := &validator{schema: s}
+	return v.validate(expr, 0)
 }
 
-func (s *Schema) validateExpression(expr Expression) error {
+// validator tracks state during expression validation.
+type validator struct {
+	schema *Schema
+	nodes  int
+}
+
+func (v *validator) validate(expr Expression, depth int) error {
+	v.nodes++
+	depth++
+
+	if v.schema.maxDepth > 0 && depth > v.schema.maxDepth {
+		return fmt.Errorf("expression exceeds maximum depth of %d", v.schema.maxDepth)
+	}
+	if v.schema.maxNodes > 0 && v.nodes > v.schema.maxNodes {
+		return fmt.Errorf("expression exceeds maximum node count of %d", v.schema.maxNodes)
+	}
+
 	switch e := expr.(type) {
 	case *BinaryExpr:
-		if err := s.validateExpression(e.Left); err != nil {
+		if err := v.validate(e.Left, depth); err != nil {
 			return err
 		}
-		if err := s.validateExpression(e.Right); err != nil {
+		if err := v.validate(e.Right, depth); err != nil {
 			return err
 		}
+		return v.validateOperatorType(e)
+
 	case *UnaryExpr:
-		if err := s.validateExpression(e.Operand); err != nil {
-			return err
-		}
+		return v.validate(e.Operand, depth)
+
 	case *FieldExpr:
-		if _, ok := s.GetField(e.Name); !ok {
+		if _, ok := v.schema.GetField(e.Name); !ok {
 			return fmt.Errorf("unknown field: %s", e.Name)
 		}
+
 	case *ArrayExpr:
 		for _, elem := range e.Elements {
-			if err := s.validateExpression(elem); err != nil {
+			if err := v.validate(elem, depth); err != nil {
 				return err
 			}
 		}
+
 	case *RangeExpr:
-		if err := s.validateExpression(e.Start); err != nil {
+		if err := v.validate(e.Start, depth); err != nil {
 			return err
 		}
-		if err := s.validateExpression(e.End); err != nil {
-			return err
-		}
+		return v.validate(e.End, depth)
+
 	case *IndexExpr:
-		if err := s.validateExpression(e.Object); err != nil {
-			return err
-		}
+		return v.validate(e.Object, depth)
+
 	case *UnpackExpr:
-		if err := s.validateExpression(e.Array); err != nil {
-			return err
-		}
+		return v.validate(e.Array, depth)
+
 	case *ListRefExpr:
 		// List references are validated at runtime
+
 	case *FunctionCallExpr:
-		if !s.IsFunctionAllowed(e.Name) {
+		if !v.schema.IsFunctionAllowed(e.Name) {
 			return fmt.Errorf("function not allowed: %s", e.Name)
 		}
 		for _, arg := range e.Arguments {
-			if err := s.validateExpression(arg); err != nil {
+			if err := v.validate(arg, depth); err != nil {
 				return err
 			}
 		}
 	}
+
 	return nil
+}
+
+// validateOperatorType checks that the operator in a binary expression is valid
+// for the field type on the left side. This is only checked when the left side
+// is a FieldExpr or UnpackExpr with a known field type.
+func (v *validator) validateOperatorType(expr *BinaryExpr) error {
+	// Skip logical operators - they work on any type
+	switch expr.Operator {
+	case TokenAnd, TokenOr, TokenXor:
+		return nil
+	}
+
+	fieldType, ok := v.resolveFieldType(expr.Left)
+	if !ok {
+		return nil // Can't determine type, skip validation
+	}
+
+	validOps, exists := operatorsByType[fieldType]
+	if !exists {
+		return nil // Unknown type, skip validation
+	}
+
+	if !validOps[expr.Operator] {
+		return fmt.Errorf("operator %s is not valid for field type %s", expr.Operator, fieldType)
+	}
+
+	return nil
+}
+
+// resolveFieldType returns the type of a direct field expression.
+// Unpack, index, and function call expressions are skipped since
+// the resulting element type is not known at the schema level.
+func (v *validator) resolveFieldType(expr Expression) (Type, bool) {
+	if e, ok := expr.(*FieldExpr); ok {
+		if field, ok := v.schema.GetField(e.Name); ok {
+			return field.Type, true
+		}
+	}
+	return 0, false
 }

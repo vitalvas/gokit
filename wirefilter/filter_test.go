@@ -831,11 +831,17 @@ func TestFilter(t *testing.T) {
 		assert.True(t, result2)
 	})
 
-	t.Run("all equal operator - non-array value", func(t *testing.T) {
+	t.Run("all equal operator - non-array value rejected by schema", func(t *testing.T) {
 		schema := NewSchema().
 			AddField("name", TypeString)
 
-		filter, err := Compile(`name === "test"`, schema)
+		_, err := Compile(`name === "test"`, schema)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not valid for field type")
+	})
+
+	t.Run("all equal operator - non-array value without schema", func(t *testing.T) {
+		filter, err := Compile(`name === "test"`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext().
@@ -846,11 +852,17 @@ func TestFilter(t *testing.T) {
 		assert.False(t, result)
 	})
 
-	t.Run("any not equal operator - non-array value", func(t *testing.T) {
+	t.Run("any not equal operator - non-array value rejected by schema", func(t *testing.T) {
 		schema := NewSchema().
 			AddField("name", TypeString)
 
-		filter, err := Compile(`name !== "test"`, schema)
+		_, err := Compile(`name !== "test"`, schema)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not valid for field type")
+	})
+
+	t.Run("any not equal operator - non-array value without schema", func(t *testing.T) {
+		filter, err := Compile(`name !== "test"`, nil)
 		assert.NoError(t, err)
 
 		ctx := NewExecutionContext().
@@ -2403,19 +2415,13 @@ func TestFilter(t *testing.T) {
 		assert.False(t, result)
 	})
 
-	t.Run("wildcard with non-string types", func(t *testing.T) {
+	t.Run("wildcard with non-string types rejected by schema", func(t *testing.T) {
 		schema := NewSchema().
 			AddField("count", TypeInt)
 
-		filter, err := Compile(`count wildcard "123"`, schema)
-		assert.NoError(t, err)
-
-		ctx := NewExecutionContext().
-			SetIntField("count", 123)
-
-		result, err := filter.Execute(ctx)
-		assert.NoError(t, err)
-		assert.False(t, result) // Non-string types should return false
+		_, err := Compile(`count wildcard "123"`, schema)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not valid for field type")
 	})
 
 	t.Run("xor with nil values", func(t *testing.T) {

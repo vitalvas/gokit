@@ -21,6 +21,30 @@ const (
 	TypeMap
 )
 
+// String returns the string representation of a data type.
+func (t Type) String() string {
+	switch t {
+	case TypeString:
+		return "String"
+	case TypeInt:
+		return "Int"
+	case TypeBool:
+		return "Bool"
+	case TypeIP:
+		return "IP"
+	case TypeCIDR:
+		return "CIDR"
+	case TypeBytes:
+		return "Bytes"
+	case TypeArray:
+		return "Array"
+	case TypeMap:
+		return "Map"
+	default:
+		return "Unknown"
+	}
+}
+
 // Value is the interface that all value types must implement.
 type Value interface {
 	Type() Type

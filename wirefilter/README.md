@@ -24,7 +24,8 @@ inspired by Cloudflare's Wirefilter.
 - Field-to-field comparisons
 - IP/CIDR matching for IPv4 and IPv6
 - Regular expression matching
-- Schema validation for field references
+- Schema validation for field references and operator-type compatibility
+- Expression complexity limits (max depth and node count)
 - Binary serialization for pre-compiled filter storage and fast loading
 
 ## Installation
@@ -352,6 +353,66 @@ _, err = wirefilter.Compile(`concat(name, "!") == "test!"`, schema)
 
 Function names are case-insensitive.
 Disabling "lower" also disables "LOWER" and "Lower".
+
+### Type Validation
+
+When a schema is provided, the compiler validates that operators are compatible
+with field types. This catches errors at compile time rather than runtime:
+
+```go
+schema := wirefilter.NewSchema().
+    AddField("status", wirefilter.TypeInt).
+    AddField("name", wirefilter.TypeString).
+    AddField("ip", wirefilter.TypeIP)
+
+// Valid: > works on Int
+_, err := wirefilter.Compile(`status > 400`, schema)
+
+// Invalid: > does not work on String
+_, err = wirefilter.Compile(`name > "test"`, schema)
+// Error: operator > is not valid for field type String
+
+// Invalid: contains does not work on IP
+_, err = wirefilter.Compile(`ip contains "10"`, schema)
+// Error: operator contains is not valid for field type IP
+```
+
+Type validation rules:
+
+| Type | Valid Operators |
+|------|----------------|
+| String | `==`, `!=`, `contains`, `matches`, `in`, `wildcard`, `strict wildcard` |
+| Int | `==`, `!=`, `<`, `>`, `<=`, `>=`, `in` |
+| Bool | `==`, `!=` |
+| IP | `==`, `!=`, `in` |
+| Array | `==`, `!=`, `===`, `!==`, `contains`, `in` |
+| Map | `==`, `!=` |
+| Bytes | `==`, `!=`, `contains` |
+
+Expressions using `[*]` (unpack), `["key"]` (index), or functions skip type
+validation since the resulting element type is not known at compile time.
+
+### Expression Complexity Limits
+
+Prevent overly complex or deeply nested expressions that could cause excessive
+resource consumption:
+
+```go
+schema := wirefilter.NewSchema().
+    AddField("x", wirefilter.TypeInt).
+    SetMaxDepth(32).   // max AST nesting depth
+    SetMaxNodes(1000)  // max total AST nodes
+
+// Deeply nested expressions are rejected
+_, err := wirefilter.Compile(deeplyNestedExpr, schema)
+// Error: expression exceeds maximum depth of 32
+
+// Extremely large expressions are rejected
+_, err = wirefilter.Compile(hugeExpr, schema)
+// Error: expression exceeds maximum node count of 1000
+```
+
+Both limits default to zero (unlimited). Set them on the schema to enable.
 
 ### Compiling a Filter
 

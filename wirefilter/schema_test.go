@@ -235,3 +235,312 @@ func TestSchemaFunctionControl(t *testing.T) {
 		assert.True(t, ok)
 	})
 }
+
+func TestSchemaTypeValidation(t *testing.T) {
+	schema := NewSchema().
+		AddField("name", TypeString).
+		AddField("status", TypeInt).
+		AddField("active", TypeBool).
+		AddField("ip", TypeIP).
+		AddField("tags", TypeArray).
+		AddField("data", TypeMap).
+		AddField("body", TypeBytes)
+
+	t.Run("string valid operators", func(t *testing.T) {
+		valid := []string{
+			`name == "test"`,
+			`name != "test"`,
+			`name contains "test"`,
+			`name matches "^test"`,
+			`name in {"a", "b"}`,
+			`name wildcard "*.com"`,
+			`name strict wildcard "*.COM"`,
+		}
+		for _, expr := range valid {
+			_, err := Compile(expr, schema)
+			assert.NoError(t, err, "should be valid: %s", expr)
+		}
+	})
+
+	t.Run("string invalid operators", func(t *testing.T) {
+		invalid := []string{
+			`name > "test"`,
+			`name < "test"`,
+			`name >= "test"`,
+			`name <= "test"`,
+			`name === "test"`,
+			`name !== "test"`,
+		}
+		for _, expr := range invalid {
+			_, err := Compile(expr, schema)
+			assert.Error(t, err, "should be invalid: %s", expr)
+			assert.Contains(t, err.Error(), "not valid for field type")
+		}
+	})
+
+	t.Run("int valid operators", func(t *testing.T) {
+		valid := []string{
+			`status == 200`,
+			`status != 404`,
+			`status > 400`,
+			`status < 500`,
+			`status >= 200`,
+			`status <= 299`,
+			`status in {200, 301, 404}`,
+		}
+		for _, expr := range valid {
+			_, err := Compile(expr, schema)
+			assert.NoError(t, err, "should be valid: %s", expr)
+		}
+	})
+
+	t.Run("int invalid operators", func(t *testing.T) {
+		invalid := []string{
+			`status contains 200`,
+			`status matches "200"`,
+			`status wildcard "2*"`,
+			`status === 200`,
+		}
+		for _, expr := range invalid {
+			_, err := Compile(expr, schema)
+			assert.Error(t, err, "should be invalid: %s", expr)
+		}
+	})
+
+	t.Run("bool valid operators", func(t *testing.T) {
+		valid := []string{
+			`active == true`,
+			`active != false`,
+		}
+		for _, expr := range valid {
+			_, err := Compile(expr, schema)
+			assert.NoError(t, err, "should be valid: %s", expr)
+		}
+	})
+
+	t.Run("bool invalid operators", func(t *testing.T) {
+		invalid := []string{
+			`active > true`,
+			`active contains true`,
+			`active in {true}`,
+		}
+		for _, expr := range invalid {
+			_, err := Compile(expr, schema)
+			assert.Error(t, err, "should be invalid: %s", expr)
+		}
+	})
+
+	t.Run("IP valid operators", func(t *testing.T) {
+		valid := []string{
+			`ip == 10.0.0.1`,
+			`ip != 10.0.0.1`,
+			`ip in "10.0.0.0/8"`,
+			`ip in {10.0.0.1, 192.168.0.0/16}`,
+		}
+		for _, expr := range valid {
+			_, err := Compile(expr, schema)
+			assert.NoError(t, err, "should be valid: %s", expr)
+		}
+	})
+
+	t.Run("IP invalid operators", func(t *testing.T) {
+		invalid := []string{
+			`ip > 10.0.0.1`,
+			`ip contains "10"`,
+			`ip matches "10\\..*"`,
+			`ip wildcard "10.*"`,
+		}
+		for _, expr := range invalid {
+			_, err := Compile(expr, schema)
+			assert.Error(t, err, "should be invalid: %s", expr)
+		}
+	})
+
+	t.Run("array valid operators", func(t *testing.T) {
+		valid := []string{
+			`tags == tags`,
+			`tags contains "admin"`,
+			`tags in {"a", "b"}`,
+			`tags === "admin"`,
+			`tags !== "admin"`,
+		}
+		for _, expr := range valid {
+			_, err := Compile(expr, schema)
+			assert.NoError(t, err, "should be valid: %s", expr)
+		}
+	})
+
+	t.Run("array invalid operators", func(t *testing.T) {
+		invalid := []string{
+			`tags > "admin"`,
+			`tags matches "admin"`,
+			`tags wildcard "admin*"`,
+		}
+		for _, expr := range invalid {
+			_, err := Compile(expr, schema)
+			assert.Error(t, err, "should be invalid: %s", expr)
+		}
+	})
+
+	t.Run("map valid operators", func(t *testing.T) {
+		valid := []string{
+			`data == data`,
+			`data != data`,
+		}
+		for _, expr := range valid {
+			_, err := Compile(expr, schema)
+			assert.NoError(t, err, "should be valid: %s", expr)
+		}
+	})
+
+	t.Run("map invalid operators", func(t *testing.T) {
+		invalid := []string{
+			`data > data`,
+			`data contains "key"`,
+		}
+		for _, expr := range invalid {
+			_, err := Compile(expr, schema)
+			assert.Error(t, err, "should be invalid: %s", expr)
+		}
+	})
+
+	t.Run("no schema skips type validation", func(t *testing.T) {
+		_, err := Compile(`name > "test"`, nil)
+		assert.NoError(t, err)
+	})
+
+	t.Run("logical operators always valid", func(t *testing.T) {
+		valid := []string{
+			`name == "test" and status > 200`,
+			`name == "test" or active == true`,
+			`active xor active`,
+		}
+		for _, expr := range valid {
+			_, err := Compile(expr, schema)
+			assert.NoError(t, err, "should be valid: %s", expr)
+		}
+	})
+
+	t.Run("unpack skips type validation", func(t *testing.T) {
+		// tags[*] unpacks array elements - operator applies to elements, not array
+		valid := []string{
+			`tags[*] matches "^admin"`,
+			`tags[*] > 5`,
+			`tags[*] wildcard "*.com"`,
+		}
+		for _, expr := range valid {
+			_, err := Compile(expr, schema)
+			assert.NoError(t, err, "should be valid (unpacked): %s", expr)
+		}
+	})
+
+	t.Run("index skips element type validation", func(t *testing.T) {
+		// data["key"] accesses map element - type of element unknown at schema level
+		_, err := Compile(`data["key"] matches "^test"`, schema)
+		assert.NoError(t, err)
+	})
+}
+
+func TestSchemaComplexityLimits(t *testing.T) {
+	t.Run("max depth - within limit", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("a", TypeBool).
+			SetMaxDepth(10)
+
+		_, err := Compile(`a and a and a`, schema)
+		assert.NoError(t, err)
+	})
+
+	t.Run("max depth - exceeds limit", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("a", TypeBool).
+			SetMaxDepth(3)
+
+		// "a and a and a and a" creates nested binary exprs > depth 3
+		_, err := Compile(`a and (a and (a and a))`, schema)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "exceeds maximum depth")
+	})
+
+	t.Run("max depth - exact limit", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("a", TypeInt).
+			SetMaxDepth(5)
+
+		_, err := Compile(`a == 1`, schema)
+		assert.NoError(t, err)
+	})
+
+	t.Run("max nodes - within limit", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("a", TypeBool).
+			SetMaxNodes(20)
+
+		_, err := Compile(`a and a`, schema)
+		assert.NoError(t, err)
+	})
+
+	t.Run("max nodes - exceeds limit", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("x", TypeInt).
+			SetMaxNodes(5)
+
+		_, err := Compile(`x == 1 and x == 2 and x == 3`, schema)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "exceeds maximum node count")
+	})
+
+	t.Run("zero limits means unlimited", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("x", TypeInt).
+			SetMaxDepth(0).
+			SetMaxNodes(0)
+
+		_, err := Compile(`x == 1 and x == 2 and x == 3 and x == 4`, schema)
+		assert.NoError(t, err)
+	})
+
+	t.Run("depth with nested functions", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("name", TypeString).
+			SetMaxDepth(3)
+
+		// lower(name) == "test" has depth: BinaryExpr > FunctionCallExpr > FieldExpr = 3
+		_, err := Compile(`lower(name) == "test"`, schema)
+		assert.NoError(t, err)
+	})
+
+	t.Run("depth with deeply nested functions", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("name", TypeString).
+			SetMaxDepth(3)
+
+		// nested: and > BinaryExpr > FunctionCallExpr > FieldExpr = 4
+		_, err := Compile(`lower(name) == "test" and name == "x"`, schema)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "exceeds maximum depth")
+	})
+
+	t.Run("nodes with array", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("x", TypeInt).
+			SetMaxNodes(10)
+
+		// x in {1, 2, 3, 4, 5, 6, 7, 8} = BinaryExpr + FieldExpr + ArrayExpr + 8 literals = 11
+		_, err := Compile(`x in {1, 2, 3, 4, 5, 6, 7, 8}`, schema)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "exceeds maximum node count")
+	})
+
+	t.Run("combined depth and nodes", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("a", TypeBool).
+			SetMaxDepth(100).
+			SetMaxNodes(5)
+
+		_, err := Compile(`a and a and a and a`, schema)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "exceeds maximum node count")
+	})
+}
+
