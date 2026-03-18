@@ -122,12 +122,16 @@ func (ctx *ExecutionContext) SetList(name string, values []string) *ExecutionCon
 }
 
 // SetIPList sets an IP address list in the execution context.
+// Values can be plain IPs (e.g., "10.0.0.1") or CIDR ranges (e.g., "10.0.0.0/8").
 // Returns the context to allow method chaining.
-func (ctx *ExecutionContext) SetIPList(name string, ips []string) *ExecutionContext {
-	arr := make(ArrayValue, 0, len(ips))
-	for _, ipStr := range ips {
-		ip := net.ParseIP(ipStr)
-		if ip != nil {
+func (ctx *ExecutionContext) SetIPList(name string, values []string) *ExecutionContext {
+	arr := make(ArrayValue, 0, len(values))
+	for _, v := range values {
+		if _, ipNet, err := net.ParseCIDR(v); err == nil {
+			arr = append(arr, CIDRValue{IPNet: ipNet})
+			continue
+		}
+		if ip := net.ParseIP(v); ip != nil {
 			arr = append(arr, IPValue{IP: ip})
 		}
 	}

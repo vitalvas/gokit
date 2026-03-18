@@ -2657,6 +2657,178 @@ func TestFilter(t *testing.T) {
 		assert.False(t, result2)
 	})
 
+	t.Run("custom list - IP list with CIDR", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("device.ip", TypeIP)
+
+		filter, err := Compile(`not device.ip in $management_nets`, schema)
+		assert.NoError(t, err)
+
+		nets := []string{"10.255.0.0/16", "172.16.0.0/12"}
+
+		// IP inside 10.255.0.0/16
+		ctx := NewExecutionContext().
+			SetIPField("device.ip", "10.255.1.50").
+			SetIPList("management_nets", nets)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+
+		// IP inside 172.16.0.0/12
+		ctx2 := NewExecutionContext().
+			SetIPField("device.ip", "172.20.5.1").
+			SetIPList("management_nets", nets)
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+
+		// IP outside both ranges
+		ctx3 := NewExecutionContext().
+			SetIPField("device.ip", "192.168.1.1").
+			SetIPList("management_nets", nets)
+		result3, err := filter.Execute(ctx3)
+		assert.NoError(t, err)
+		assert.True(t, result3)
+	})
+
+	t.Run("custom list - mixed IPv4 and IPv6 with CIDR", func(t *testing.T) {
+		filter, err := Compile(`ip.src in $nets`, nil)
+		assert.NoError(t, err)
+
+		nets := []string{
+			"10.0.0.0/8",
+			"192.168.1.1",
+			"2001:db8::/32",
+			"fd00::1",
+		}
+
+		// IPv4 in CIDR
+		ctx := NewExecutionContext().SetIPField("ip.src", "10.50.0.1").SetIPList("nets", nets)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		// IPv4 exact match
+		ctx2 := NewExecutionContext().SetIPField("ip.src", "192.168.1.1").SetIPList("nets", nets)
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.True(t, result2)
+
+		// IPv6 in CIDR
+		ctx3 := NewExecutionContext().SetIPField("ip.src", "2001:db8::abcd").SetIPList("nets", nets)
+		result3, err := filter.Execute(ctx3)
+		assert.NoError(t, err)
+		assert.True(t, result3)
+
+		// IPv6 exact match
+		ctx4 := NewExecutionContext().SetIPField("ip.src", "fd00::1").SetIPList("nets", nets)
+		result4, err := filter.Execute(ctx4)
+		assert.NoError(t, err)
+		assert.True(t, result4)
+
+		// No match
+		ctx5 := NewExecutionContext().SetIPField("ip.src", "8.8.8.8").SetIPList("nets", nets)
+		result5, err := filter.Execute(ctx5)
+		assert.NoError(t, err)
+		assert.False(t, result5)
+
+		// IPv6 no match
+		ctx6 := NewExecutionContext().SetIPField("ip.src", "fe80::1").SetIPList("nets", nets)
+		result6, err := filter.Execute(ctx6)
+		assert.NoError(t, err)
+		assert.False(t, result6)
+	})
+
+	t.Run("not in operator", func(t *testing.T) {
+		filter, err := Compile(`ip.src not in {192.168.1.0/24, 10.0.0.0/8}`, nil)
+		assert.NoError(t, err)
+
+		// IP inside range
+		ctx := NewExecutionContext().SetIPField("ip.src", "192.168.1.50")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+
+		// IP outside range
+		ctx2 := NewExecutionContext().SetIPField("ip.src", "8.8.8.8")
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.True(t, result2)
+	})
+
+	t.Run("not in with list ref", func(t *testing.T) {
+		filter, err := Compile(`device.ip not in $management_nets`, nil)
+		assert.NoError(t, err)
+
+		nets := []string{"10.255.0.0/16", "172.16.0.0/12"}
+
+		ctx := NewExecutionContext().
+			SetIPField("device.ip", "10.255.1.50").
+			SetIPList("management_nets", nets)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetIPField("device.ip", "8.8.8.8").
+			SetIPList("management_nets", nets)
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.True(t, result2)
+	})
+
+	t.Run("not contains operator", func(t *testing.T) {
+		filter, err := Compile(`name not contains "admin"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("name", "superadmin")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+
+		ctx2 := NewExecutionContext().SetStringField("name", "user")
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.True(t, result2)
+	})
+
+	t.Run("not in with logical operators", func(t *testing.T) {
+		filter, err := Compile(
+			`user.groups contains "network-admins" and device.ip not in $management_nets`,
+			nil,
+		)
+		assert.NoError(t, err)
+
+		nets := []string{"10.255.0.0/16", "172.16.0.0/12"}
+
+		// In group, outside nets
+		ctx := NewExecutionContext().
+			SetArrayField("user.groups", []string{"network-admins"}).
+			SetIPField("device.ip", "8.8.8.8").
+			SetIPList("management_nets", nets)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		// In group, inside nets
+		ctx2 := NewExecutionContext().
+			SetArrayField("user.groups", []string{"network-admins"}).
+			SetIPField("device.ip", "10.255.1.1").
+			SetIPList("management_nets", nets)
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+
+		// Not in group, outside nets
+		ctx3 := NewExecutionContext().
+			SetArrayField("user.groups", []string{"users"}).
+			SetIPField("device.ip", "8.8.8.8").
+			SetIPList("management_nets", nets)
+		result3, err := filter.Execute(ctx3)
+		assert.NoError(t, err)
+		assert.False(t, result3)
+	})
+
 	t.Run("context SetArrayField", func(t *testing.T) {
 		ctx := NewExecutionContext().
 			SetArrayField("tags", []string{"a", "b", "c"})

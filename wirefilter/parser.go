@@ -41,10 +41,11 @@ var precedences = map[TokenType]int{
 
 // Parser parses tokens from a lexer into an abstract syntax tree.
 type Parser struct {
-	lexer     *Lexer
-	curToken  Token
-	peekToken Token
-	errors    []string
+	lexer         *Lexer
+	curToken      Token
+	peekToken     Token
+	peekPeekToken Token
+	errors        []string
 }
 
 // NewParser creates a new parser for the given lexer.
@@ -52,12 +53,14 @@ func NewParser(lexer *Lexer) *Parser {
 	p := &Parser{lexer: lexer}
 	p.nextToken()
 	p.nextToken()
+	p.nextToken()
 	return p
 }
 
 func (p *Parser) nextToken() {
 	p.curToken = p.peekToken
-	p.peekToken = p.lexer.NextToken()
+	p.peekToken = p.peekPeekToken
+	p.peekPeekToken = p.lexer.NextToken()
 }
 
 // Errors returns the list of parsing errors encountered.
@@ -282,6 +285,30 @@ func (p *Parser) parseListRefExpression() Expression {
 }
 
 func (p *Parser) parseBinaryExpression(left Expression) Expression {
+	// Handle "not in" / "not contains" compound operators
+	if p.curToken.Type == TokenNot && (p.peekToken.Type == TokenIn || p.peekToken.Type == TokenContains) {
+		p.nextToken() // consume in/contains
+		operator := p.curToken.Type
+		precedence := p.curPrecedence()
+
+		p.nextToken()
+		var right Expression
+		if p.curToken.Type == TokenLBrace {
+			right = p.parseArrayExpression()
+		} else {
+			right = p.parseExpression(precedence)
+		}
+
+		return &UnaryExpr{
+			Operator: TokenNot,
+			Operand: &BinaryExpr{
+				Left:     left,
+				Operator: operator,
+				Right:    right,
+			},
+		}
+	}
+
 	operator := p.curToken.Type
 	precedence := p.curPrecedence()
 
@@ -364,8 +391,14 @@ func (p *Parser) curPrecedence() int {
 }
 
 func (p *Parser) peekPrecedence() int {
-	if p, ok := precedences[p.peekToken.Type]; ok {
-		return p
+	// Handle "not in" / "not contains" compound operators
+	if p.peekToken.Type == TokenNot {
+		if p.peekPeekToken.Type == TokenIn || p.peekPeekToken.Type == TokenContains {
+			return MEMBERSHIP
+		}
+	}
+	if prec, ok := precedences[p.peekToken.Type]; ok {
+		return prec
 	}
 	return LOWEST
 }

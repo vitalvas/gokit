@@ -432,9 +432,10 @@ For IP address lists:
 ```go
 ctx := wirefilter.NewExecutionContext().
     SetIPField("ip.src", "192.168.1.100").
-    SetIPList("blocked_ips", []string{"10.0.0.1", "192.168.1.100", "172.16.0.1"})
+    SetIPList("blocked_ips", []string{"10.0.0.1", "192.168.1.100", "172.16.0.0/12"})
 
 // Expression: ip.src in $blocked_ips
+// Expression: ip.src not in $blocked_ips
 ```
 
 ### Executing a Filter
@@ -491,7 +492,9 @@ if result {
 | Operator | Description | Example |
 |----------|-------------|---------|
 | `in` | Value in array, IP in CIDR, array ANY match | `port in {80, 443}` |
+| `not in` | Negated membership | `ip not in {10.0.0.0/8}` |
 | `contains` | Substring or array ALL match | `path contains "/api"` |
+| `not contains` | Negated containment | `path not contains "/admin"` |
 | `matches`, `~` | Regex match | `ua matches "^Mozilla"` |
 
 ### Wildcard Operators
