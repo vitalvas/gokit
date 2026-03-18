@@ -3,6 +3,7 @@ package shamir
 import (
 	"bytes"
 	"crypto/rand"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -179,7 +180,7 @@ func TestCombineWithDifferentShareSubsets(t *testing.T) {
 	}
 
 	for i, subset := range subsets {
-		t.Run("subset "+string(rune('A'+i)), func(t *testing.T) {
+		t.Run(fmt.Sprintf("subset %c", rune('A'+i)), func(t *testing.T) {
 			recovered, err := Combine(subset, len(secret))
 			require.NoError(t, err)
 			assert.Equal(t, secret, recovered)

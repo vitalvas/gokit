@@ -3,6 +3,7 @@ package shamir
 import (
 	"bytes"
 	"crypto/rand"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -242,7 +243,7 @@ func TestCombineGF256WithDifferentSubsets(t *testing.T) {
 	}
 
 	for i, subset := range subsets {
-		t.Run("subset "+string(rune('A'+i)), func(t *testing.T) {
+		t.Run(fmt.Sprintf("subset %c", rune('A'+i)), func(t *testing.T) {
 			recovered, err := CombineGF256(subset)
 			require.NoError(t, err)
 			assert.Equal(t, secret, recovered)
