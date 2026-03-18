@@ -9,6 +9,7 @@ const (
 	TokenString
 	TokenRawString // r"..."
 	TokenInt
+	TokenFloat
 	TokenBool
 	TokenIP
 	TokenCIDR // 192.168.0.0/24, 2001:db8::/32
@@ -62,6 +63,7 @@ var tokenNames = map[TokenType]string{
 	TokenString:         "STRING",
 	TokenRawString:      "RAWSTRING",
 	TokenInt:            "INT",
+	TokenFloat:          "FLOAT",
 	TokenBool:           "BOOL",
 	TokenIP:             "IP",
 	TokenCIDR:           "CIDR",

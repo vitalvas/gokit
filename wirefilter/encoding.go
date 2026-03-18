@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"regexp"
 	"sync"
@@ -38,6 +39,7 @@ const (
 	valTypeIP     byte = 0x04
 	valTypeCIDR   byte = 0x05
 	valTypeBytes  byte = 0x06
+	valTypeFloat  byte = 0x07
 )
 
 const (
@@ -122,6 +124,12 @@ func (w *encWriter) writeVarint(v int64) {
 	var tmp [binary.MaxVarintLen64]byte
 	n := binary.PutVarint(tmp[:], v)
 	w.buf = append(w.buf, tmp[:n]...)
+}
+
+func (w *encWriter) writeUint64(v uint64) {
+	var tmp [8]byte
+	binary.LittleEndian.PutUint64(tmp[:], v)
+	w.buf = append(w.buf, tmp[:]...)
 }
 
 func (w *encWriter) writeString(s string) {
@@ -221,6 +229,10 @@ func (w *encWriter) writeValue(v Value) error {
 		w.writeByte(valTypeInt)
 		w.writeVarint(int64(val))
 
+	case FloatValue:
+		w.writeByte(valTypeFloat)
+		w.writeUint64(math.Float64bits(float64(val)))
+
 	case BoolValue:
 		w.writeByte(valTypeBool)
 		if val {
@@ -286,6 +298,14 @@ func (r *decReader) readUvarint() (uint64, error) {
 	}
 	r.pos += n
 	return v, nil
+}
+
+func (r *decReader) readUint64() (uint64, error) {
+	b := r.readN(8)
+	if b == nil {
+		return 0, errTruncated
+	}
+	return binary.LittleEndian.Uint64(b), nil
 }
 
 func (r *decReader) readVarint() (int64, error) {
@@ -465,6 +485,13 @@ func (r *decReader) readValue() (Value, error) {
 			return nil, err
 		}
 		return IntValue(v), nil
+
+	case valTypeFloat:
+		bits, err := r.readUint64()
+		if err != nil {
+			return nil, err
+		}
+		return FloatValue(math.Float64frombits(bits)), nil
 
 	case valTypeBool:
 		return BoolValue(r.readByte() != 0), nil

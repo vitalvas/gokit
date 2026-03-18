@@ -465,10 +465,44 @@ func (f *Filter) evaluateComparison(left, right Value, cmp func(int64, int64) bo
 	if left == nil || right == nil {
 		return BoolValue(false), nil
 	}
+
+	// Handle Float and mixed Int/Float comparisons
+	if left.Type() == TypeFloat || right.Type() == TypeFloat {
+		leftF, leftOk := toFloat64(left)
+		rightF, rightOk := toFloat64(right)
+		if !leftOk || !rightOk {
+			return BoolValue(false), nil
+		}
+		// Map the int64 comparator to float64 by comparing equivalent sign values
+		return BoolValue(cmp(floatSign(leftF-rightF), 0)), nil
+	}
+
 	if left.Type() != TypeInt || right.Type() != TypeInt {
 		return BoolValue(false), nil
 	}
 	return BoolValue(cmp(int64(left.(IntValue)), int64(right.(IntValue)))), nil
+}
+
+// toFloat64 converts Int or Float values to float64 for mixed comparisons.
+func toFloat64(v Value) (float64, bool) {
+	switch val := v.(type) {
+	case FloatValue:
+		return float64(val), true
+	case IntValue:
+		return float64(val), true
+	}
+	return 0, false
+}
+
+// floatSign returns -1, 0, or 1 as an int64 based on the sign of f.
+func floatSign(f float64) int64 {
+	if f < 0 {
+		return -1
+	}
+	if f > 0 {
+		return 1
+	}
+	return 0
 }
 
 func (f *Filter) evaluateContains(left, right Value) (Value, error) {

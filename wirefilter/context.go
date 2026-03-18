@@ -37,6 +37,13 @@ func (ctx *ExecutionContext) SetIntField(name string, value int64) *ExecutionCon
 	return ctx
 }
 
+// SetFloatField sets a floating-point field value in the execution context.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) SetFloatField(name string, value float64) *ExecutionContext {
+	ctx.fields[name] = FloatValue(value)
+	return ctx
+}
+
 // SetBoolField sets a boolean field value in the execution context.
 // Returns the context to allow method chaining.
 func (ctx *ExecutionContext) SetBoolField(name string, value bool) *ExecutionContext {

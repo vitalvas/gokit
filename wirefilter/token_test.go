@@ -43,6 +43,7 @@ func TestTokenTypeString(t *testing.T) {
 			{TokenRawString, "RAWSTRING"},
 			{TokenAsterisk, "*"},
 			{TokenListRef, "$"},
+			{TokenFloat, "FLOAT"},
 		}
 
 		for _, tt := range tests {

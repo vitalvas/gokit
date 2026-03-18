@@ -628,4 +628,54 @@ func TestParser(t *testing.T) {
 		_, err := parser.Parse()
 		assert.Error(t, err)
 	})
+
+	t.Run("float literal expression", func(t *testing.T) {
+		input := `score > 3.14`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+		assert.NotNil(t, expr)
+
+		binExpr, ok := expr.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenGt, binExpr.Operator)
+
+		field, ok := binExpr.Left.(*FieldExpr)
+		assert.True(t, ok)
+		assert.Equal(t, "score", field.Name)
+
+		literal, ok := binExpr.Right.(*LiteralExpr)
+		assert.True(t, ok)
+		assert.Equal(t, FloatValue(3.14), literal.Value)
+	})
+
+	t.Run("negative float literal expression", func(t *testing.T) {
+		input := `temp > -10.5`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+
+		binExpr := expr.(*BinaryExpr)
+		literal := binExpr.Right.(*LiteralExpr)
+		assert.Equal(t, FloatValue(-10.5), literal.Value)
+	})
+
+	t.Run("float in array", func(t *testing.T) {
+		input := `x in {1.5, 2.5, 3.5}`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+
+		binExpr := expr.(*BinaryExpr)
+		assert.Equal(t, TokenIn, binExpr.Operator)
+
+		arrExpr := binExpr.Right.(*ArrayExpr)
+		assert.Len(t, arrExpr.Elements, 3)
+	})
 }

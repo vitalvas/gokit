@@ -54,6 +54,10 @@ func TestMarshalUnmarshal(t *testing.T) {
 		{"bool literal true", `active == true`},
 		{"bool literal false", `active == false`},
 		{"negative int", `count > -1`},
+		{"float literal", `score > 3.14`},
+		{"float equality", `score == 99.5`},
+		{"negative float", `temp > -10.5`},
+		{"float in set", `score in {1.5, 2.5, 3.5}`},
 		{"IP literal", `ip == 192.168.1.1`},
 		{"empty array", `x in {}`},
 		{"mixed array", `port in {80, 443, 8000..9000}`},
@@ -83,6 +87,8 @@ func TestMarshalUnmarshal(t *testing.T) {
 				SetIntField("port", 443).
 				SetIntField("count", 10).
 				SetIntField("x", 201).
+				SetFloatField("score", 99.5).
+				SetFloatField("temp", -5.0).
 				SetBoolField("active", true).
 				SetBoolField("a", true).
 				SetBoolField("b", false).

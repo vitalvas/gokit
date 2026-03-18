@@ -692,4 +692,57 @@ func TestLexer(t *testing.T) {
 		tok := lexer.NextToken()
 		assert.Equal(t, TokenError, tok.Type)
 	})
+
+	t.Run("float literal", func(t *testing.T) {
+		lexer := NewLexer(`3.14`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenFloat, tok.Type)
+		assert.Equal(t, "3.14", tok.Literal)
+		assert.Equal(t, 3.14, tok.Value)
+	})
+
+	t.Run("negative float literal", func(t *testing.T) {
+		lexer := NewLexer(`-2.5`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenFloat, tok.Type)
+		assert.Equal(t, "-2.5", tok.Literal)
+		assert.Equal(t, -2.5, tok.Value)
+	})
+
+	t.Run("float with leading zero", func(t *testing.T) {
+		lexer := NewLexer(`0.5`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenFloat, tok.Type)
+		assert.Equal(t, 0.5, tok.Value)
+	})
+
+	t.Run("float vs IP disambiguation", func(t *testing.T) {
+		// IP has multiple dots
+		lexer := NewLexer(`192.168.1.1`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIP, tok.Type)
+
+		// Float has single dot
+		lexer2 := NewLexer(`99.5`)
+		tok2 := lexer2.NextToken()
+		assert.Equal(t, TokenFloat, tok2.Type)
+	})
+
+	t.Run("float in expression", func(t *testing.T) {
+		lexer := NewLexer(`score > 3.14`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "score", tok.Literal)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenGt, tok.Type)
+
+		tok = lexer.NextToken()
+		assert.Equal(t, TokenFloat, tok.Type)
+		assert.Equal(t, 3.14, tok.Value)
+	})
+
+	t.Run("float token string", func(t *testing.T) {
+		assert.Equal(t, "FLOAT", TokenFloat.String())
+	})
 }

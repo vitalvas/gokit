@@ -543,4 +543,3 @@ func TestSchemaComplexityLimits(t *testing.T) {
 		assert.Contains(t, err.Error(), "exceeds maximum node count")
 	})
 }
-

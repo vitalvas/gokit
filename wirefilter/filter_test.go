@@ -1,6 +1,7 @@
 package wirefilter
 
 import (
+	"math"
 	"net"
 	"regexp"
 	"testing"
@@ -4300,22 +4301,22 @@ func TestFilterHash(t *testing.T) {
 
 func TestFilterHashStable(t *testing.T) {
 	expected := map[string]string{
-		`name == "test"`:                "c07fc94cc06d690a59a55bfdb78fc2e7",
-		`status >= 400`:                 "e6ea4acee51cc59ab574c68a7666a11c",
-		`a and b`:                       "05256f2c3b0d433e8c3923dc28674251",
-		`a or b`:                        "8d37d268ba0d433e9085647d4515db7e",
-		`not a`:                         "c820a402b6659af17cda0cc15b69d1fe",
-		`a xor b`:                       "acab0930c40d433e87ecef0cf526983c",
-		`name matches "^test"`:          "f77ff03011eaf7ac31a1d379ef11ee95",
-		`ip in "10.0.0.0/8"`:            "9251d2baeb1c6a6e857dea57ca96be9f",
-		`ip not in $blocked`:            "ad4dfd9447faad2a0027f57489f8e154",
-		`tags[*] == "prod"`:             "e7509feb340cd4b54221fcd326bcd78c",
-		`lower(name) == "admin"`:        "06abe0e07a3b9769d2d035cb8bce2bf2",
-		`cidr(ip, 24) == "10.0.0.0"`:    "92c6f3a5ca8cf72b4df7588608099e2c",
-		`x in {1..100}`:                 "608d471e81000d146223096fa8b8e7d1",
-		`name not contains "admin"`:     "f71bc0b2e10bbbe62622074bc964077b",
-		`data["key"] == "val"`:          "95d44c37b3fa28db420a44ba079e4614",
-		`(a == 1 or b == 2) and c == 3`: "ee2c650e39fc9b9c4262c5c9a7efd4bb",
+		`name == "test"`:                "c2889f4a7ccca7ff44f3d705ede3a9d2",
+		`status >= 400`:                 "4d0d67a73f751e14aacca5bb3502c749",
+		`a and b`:                       "8d37d268ba0d433e9085647d4515db7e",
+		`a or b`:                        "8cc4a49ad50d433e83bc73aaacd7db57",
+		`not a`:                         "c8194b89c2659af17cda0cbf1bbcba23",
+		`a xor b`:                       "ac37ffb8bf0d433e7b23fe3a6bcf6e85",
+		`name matches "^test"`:          "be80d3f9b61f58a7a706ad74e2763340",
+		`ip in "10.0.0.0/8"`:            "a90ffc4474bd91cc1e8539ee6c34dbee",
+		`ip not in $blocked`:            "39d433affcd7e7a207116d845e2a9a90",
+		`tags[*] == "prod"`:             "ff16911f0e06efe44d5eb8288add6bef",
+		`lower(name) == "admin"`:        "ee93a7331fa511f603da995bab8a3ad5",
+		`cidr(ip, 24) == "10.0.0.0"`:    "30cd2ba0cd1225b43a6cef3e13d02885",
+		`x in {1..100}`:                 "22fa482e0fc63ac8541c43d27a475328",
+		`name not contains "admin"`:     "4074d01cb7420c78dea8b032e8307b1f",
+		`data["key"] == "val"`:          "3368e39bf8c533c6cff6b3a987a43ef5",
+		`(a == 1 or b == 2) and c == 3`: "6acb7ec503e4dfdf1a5391f787845042",
 	}
 
 	for expr, wantHash := range expected {
@@ -4325,6 +4326,315 @@ func TestFilterHashStable(t *testing.T) {
 			assert.Equal(t, wantHash, f.Hash())
 		})
 	}
+}
+
+func TestFilterFloat(t *testing.T) {
+	t.Run("float literal comparison", func(t *testing.T) {
+		filter, err := Compile(`score > 3.14`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("score", 4.0)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetFloatField("score", 2.0)
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("float equality", func(t *testing.T) {
+		filter, err := Compile(`score == 3.14`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("score", 3.14)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("float inequality", func(t *testing.T) {
+		filter, err := Compile(`score != 3.14`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("score", 2.71)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("float less than", func(t *testing.T) {
+		filter, err := Compile(`score < 10.5`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("score", 9.9)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("float greater than or equal", func(t *testing.T) {
+		filter, err := Compile(`score >= 5.0`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("score", 5.0)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("float less than or equal", func(t *testing.T) {
+		filter, err := Compile(`score <= 5.0`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("score", 5.0)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetFloatField("score", 5.1)
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("mixed int and float comparison", func(t *testing.T) {
+		filter, err := Compile(`score > 3`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("score", 3.5)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("int field compared with float literal", func(t *testing.T) {
+		filter, err := Compile(`count > 2.5`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("count", 3)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetIntField("count", 2)
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("negative float", func(t *testing.T) {
+		filter, err := Compile(`temp > -10.5`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("temp", -5.0)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("float in set", func(t *testing.T) {
+		filter, err := Compile(`score in {1.5, 2.5, 3.5}`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("score", 2.5)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetFloatField("score", 4.0)
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("float schema type validation", func(t *testing.T) {
+		schema := NewSchema().AddField("score", TypeFloat)
+
+		_, err := Compile(`score > 3.14`, schema)
+		assert.NoError(t, err)
+
+		_, err = Compile(`score contains "x"`, schema)
+		assert.Error(t, err)
+	})
+
+	t.Run("float marshal unmarshal", func(t *testing.T) {
+		filter, err := Compile(`score > 3.14`, nil)
+		require.NoError(t, err)
+
+		data, err := filter.MarshalBinary()
+		require.NoError(t, err)
+
+		restored := &Filter{}
+		err = restored.UnmarshalBinary(data)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("score", 4.0)
+		r1, _ := filter.Execute(ctx)
+		r2, _ := restored.Execute(ctx)
+		assert.Equal(t, r1, r2)
+	})
+
+	t.Run("float truthiness", func(t *testing.T) {
+		assert.True(t, FloatValue(3.14).IsTruthy())
+		assert.True(t, FloatValue(0.0).IsTruthy())
+		assert.Equal(t, "3.14", FloatValue(3.14).String())
+		assert.Equal(t, TypeFloat, FloatValue(0).Type())
+	})
+
+	t.Run("float equal", func(t *testing.T) {
+		a, b := FloatValue(3.14), FloatValue(3.14)
+		assert.True(t, a.Equal(b))
+		assert.False(t, FloatValue(3.14).Equal(FloatValue(2.71)))
+		assert.False(t, FloatValue(3.14).Equal(IntValue(3)))
+	})
+
+	t.Run("float type string", func(t *testing.T) {
+		assert.Equal(t, "Float", TypeFloat.String())
+	})
+
+	t.Run("float comparison with non-numeric", func(t *testing.T) {
+		filter, err := Compile(`x > 3.14`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("x", "hello")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("float le and ge edge cases", func(t *testing.T) {
+		filterLe, err := Compile(`x <= 3.14`, nil)
+		require.NoError(t, err)
+
+		filterGe, err := Compile(`x >= 3.14`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("x", 3.14)
+		r1, _ := filterLe.Execute(ctx)
+		assert.True(t, r1)
+		r2, _ := filterGe.Execute(ctx)
+		assert.True(t, r2)
+
+		ctxLess := NewExecutionContext().SetFloatField("x", 2.0)
+		r3, _ := filterLe.Execute(ctxLess)
+		assert.True(t, r3)
+		r4, _ := filterGe.Execute(ctxLess)
+		assert.False(t, r4)
+	})
+
+	t.Run("float lt edge", func(t *testing.T) {
+		filter, err := Compile(`x < 3.14`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("x", 3.14)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("float max value", func(t *testing.T) {
+		filter, err := Compile(`x > 0`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("x", math.MaxFloat64)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("float max value equality", func(t *testing.T) {
+		ctx := NewExecutionContext().SetFloatField("x", math.MaxFloat64)
+
+		fv, ok := ctx.GetField("x")
+		require.True(t, ok)
+		assert.Equal(t, FloatValue(math.MaxFloat64), fv)
+	})
+
+	t.Run("float smallest positive", func(t *testing.T) {
+		filter, err := Compile(`x > 0`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("x", math.SmallestNonzeroFloat64)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("float negative max", func(t *testing.T) {
+		filter, err := Compile(`x < 0`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("x", -math.MaxFloat64)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("float infinity", func(t *testing.T) {
+		filter, err := Compile(`x > 0`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("x", math.Inf(1))
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetFloatField("x", math.Inf(-1))
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("float NaN", func(t *testing.T) {
+		filter, err := Compile(`x > 0`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("x", math.NaN())
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("float NaN equality", func(t *testing.T) {
+		filter, err := Compile(`x == x`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().SetFloatField("x", math.NaN())
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		// NaN != NaN per IEEE 754
+		assert.False(t, result)
+	})
+
+	t.Run("float marshal roundtrip extreme values", func(t *testing.T) {
+		extremes := []float64{
+			math.MaxFloat64,
+			-math.MaxFloat64,
+			math.SmallestNonzeroFloat64,
+			math.Inf(1),
+			math.Inf(-1),
+			0,
+			-0,
+		}
+
+		for _, val := range extremes {
+			filter, err := Compile(`x > 0`, nil)
+			require.NoError(t, err)
+
+			data, err := filter.MarshalBinary()
+			require.NoError(t, err)
+
+			restored := &Filter{}
+			require.NoError(t, restored.UnmarshalBinary(data))
+
+			ctx := NewExecutionContext().SetFloatField("x", val)
+			r1, _ := filter.Execute(ctx)
+			r2, _ := restored.Execute(ctx)
+			assert.Equal(t, r1, r2)
+		}
+	})
 }
 
 func TestFilterCoverageGaps(t *testing.T) {

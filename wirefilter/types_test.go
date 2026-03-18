@@ -196,6 +196,58 @@ func TestIntValue(t *testing.T) {
 	})
 }
 
+func TestFloatValue(t *testing.T) {
+	t.Run("type and string", func(t *testing.T) {
+		fv := FloatValue(3.14)
+		assert.Equal(t, TypeFloat, fv.Type())
+		assert.Equal(t, "3.14", fv.String())
+	})
+
+	t.Run("string formatting", func(t *testing.T) {
+		assert.Equal(t, "0", FloatValue(0).String())
+		assert.Equal(t, "-2.5", FloatValue(-2.5).String())
+		assert.Equal(t, "100", FloatValue(100).String())
+	})
+
+	t.Run("truthiness", func(t *testing.T) {
+		assert.True(t, FloatValue(3.14).IsTruthy())
+		assert.True(t, FloatValue(0).IsTruthy())
+		assert.True(t, FloatValue(-1).IsTruthy())
+	})
+
+	t.Run("equality", func(t *testing.T) {
+		fv1, fv2 := FloatValue(3.14), FloatValue(3.14)
+		assert.True(t, fv1.Equal(fv2))
+		assert.False(t, FloatValue(3.14).Equal(FloatValue(2.71)))
+	})
+
+	t.Run("not equal to other types", func(t *testing.T) {
+		assert.False(t, FloatValue(3).Equal(IntValue(3)))
+		assert.False(t, FloatValue(1).Equal(StringValue("1")))
+	})
+}
+
+func TestTypeString(t *testing.T) {
+	tests := []struct {
+		t    Type
+		name string
+	}{
+		{TypeString, "String"},
+		{TypeInt, "Int"},
+		{TypeFloat, "Float"},
+		{TypeBool, "Bool"},
+		{TypeIP, "IP"},
+		{TypeCIDR, "CIDR"},
+		{TypeBytes, "Bytes"},
+		{TypeArray, "Array"},
+		{TypeMap, "Map"},
+		{Type(99), "Unknown"},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.name, tt.t.String())
+	}
+}
+
 func TestBoolValue(t *testing.T) {
 	t.Run("type and string", func(t *testing.T) {
 		bv := BoolValue(true)

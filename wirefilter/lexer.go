@@ -468,6 +468,17 @@ func (l *Lexer) readNumberToken() Token {
 		}
 	}
 
+	// Try float (contains single dot, no colons/slashes)
+	if strings.Contains(literal, ".") && !strings.Contains(literal, ":") && !strings.Contains(literal, "/") {
+		if fval, err := strconv.ParseFloat(literal, 64); err == nil {
+			return Token{
+				Type:    TokenFloat,
+				Literal: literal,
+				Value:   fval,
+			}
+		}
+	}
+
 	// Fall back to integer
 	val, err := strconv.ParseInt(literal, 10, 64)
 	if err != nil {

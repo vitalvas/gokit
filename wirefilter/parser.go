@@ -118,6 +118,8 @@ func (p *Parser) parseExpression(precedence int) Expression {
 		left = p.parseLiteralExpression()
 	case TokenInt:
 		left = p.parseLiteralExpression()
+	case TokenFloat:
+		left = p.parseLiteralExpression()
 	case TokenBool:
 		left = p.parseLiteralExpression()
 	case TokenIP:
@@ -269,6 +271,8 @@ func (p *Parser) parseLiteralExpression() Expression {
 		value = StringValue(p.curToken.Literal)
 	case TokenInt:
 		value = IntValue(p.curToken.Value.(int64))
+	case TokenFloat:
+		value = FloatValue(p.curToken.Value.(float64))
 	case TokenBool:
 		value = BoolValue(p.curToken.Value.(bool))
 	case TokenIP:

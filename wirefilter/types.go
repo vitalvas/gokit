@@ -13,6 +13,7 @@ type Type uint8
 const (
 	TypeString Type = iota
 	TypeInt
+	TypeFloat
 	TypeBool
 	TypeIP
 	TypeCIDR
@@ -28,6 +29,8 @@ func (t Type) String() string {
 		return "String"
 	case TypeInt:
 		return "Int"
+	case TypeFloat:
+		return "Float"
 	case TypeBool:
 		return "Bool"
 	case TypeIP:
@@ -77,6 +80,19 @@ func (i IntValue) Equal(v Value) bool {
 		return false
 	}
 	return int64(i) == int64(v.(IntValue))
+}
+
+// FloatValue represents a floating-point value.
+type FloatValue float64
+
+func (f FloatValue) Type() Type     { return TypeFloat }
+func (f FloatValue) String() string { return fmt.Sprintf("%g", f) }
+func (f FloatValue) IsTruthy() bool { return true }
+func (f FloatValue) Equal(v Value) bool {
+	if v.Type() != TypeFloat {
+		return false
+	}
+	return float64(f) == float64(v.(FloatValue))
 }
 
 // BoolValue represents a boolean value.

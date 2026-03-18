@@ -29,6 +29,14 @@ func TestExecutionContext(t *testing.T) {
 		assert.Equal(t, BoolValue(true), val)
 	})
 
+	t.Run("set and get float field", func(t *testing.T) {
+		ctx := NewExecutionContext().SetFloatField("score", 3.14)
+		val, ok := ctx.GetField("score")
+		assert.True(t, ok)
+		assert.Equal(t, TypeFloat, val.Type())
+		assert.Equal(t, FloatValue(3.14), val)
+	})
+
 	t.Run("set and get IP field", func(t *testing.T) {
 		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.1")
 		val, ok := ctx.GetField("ip")
