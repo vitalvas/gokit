@@ -151,7 +151,7 @@ func (l *Lexer) NextToken() Token {
 		case isDigit(l.ch) || (l.ch == '-' && isDigit(l.peekChar())):
 			return l.readNumberToken()
 		default:
-			tok = Token{Type: TokenError, Literal: string(l.ch), Value: "unexpected character: " + string(l.ch)}
+			tok = Token{Type: TokenError, Literal: string(l.ch), Value: fmt.Sprintf("unexpected character: %c", l.ch)}
 		}
 	}
 
@@ -483,9 +483,9 @@ func (l *Lexer) readNumberToken() Token {
 				break
 			}
 		}
-		errMsg := "invalid number or IP: " + literal
+		errMsg := fmt.Sprintf("invalid number or IP: %s", literal)
 		if isDigitsOnly {
-			errMsg = "integer overflow: " + literal
+			errMsg = fmt.Sprintf("integer overflow: %s", literal)
 		}
 		return Token{
 			Type:    TokenError,

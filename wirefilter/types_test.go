@@ -2,6 +2,7 @@ package wirefilter
 
 import (
 	"net"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -77,7 +78,7 @@ func BenchmarkStringOperations(b *testing.B) {
 		needle := "contains"
 		b.ReportAllocs()
 		for b.Loop() {
-			ContainsString(haystack, needle)
+			strings.Contains(haystack, needle)
 		}
 	})
 
@@ -261,18 +262,6 @@ func TestMatchesRegex(t *testing.T) {
 	t.Run("invalid regex", func(t *testing.T) {
 		_, err := MatchesRegex("test", "[invalid")
 		assert.Error(t, err)
-	})
-}
-
-func TestContainsString(t *testing.T) {
-	t.Run("contains substring", func(t *testing.T) {
-		result := ContainsString("hello world", "world")
-		assert.True(t, result)
-	})
-
-	t.Run("does not contain substring", func(t *testing.T) {
-		result := ContainsString("hello world", "goodbye")
-		assert.False(t, result)
 	})
 }
 

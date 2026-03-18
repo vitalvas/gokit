@@ -33,6 +33,7 @@
 package wirefilter
 
 import (
+	"fmt"
 	"net"
 	"net/url"
 	"regexp"
@@ -457,7 +458,7 @@ func (f *Filter) evaluateContains(left, right Value) (Value, error) {
 		return BoolValue(false), nil
 	}
 	if left.Type() == TypeString && right.Type() == TypeString {
-		return BoolValue(ContainsString(string(left.(StringValue)), string(right.(StringValue)))), nil
+		return BoolValue(strings.Contains(string(left.(StringValue)), string(right.(StringValue)))), nil
 	}
 	if left.Type() == TypeArray {
 		leftArr := left.(ArrayValue)
@@ -662,7 +663,7 @@ func (f *Filter) evaluateWildcard(left, right Value, caseSensitive bool) (Value,
 
 	regexPattern := globToRegex(pattern)
 	if !caseSensitive {
-		regexPattern = "(?i)" + regexPattern
+		regexPattern = fmt.Sprintf("(?i)%s", regexPattern)
 	}
 
 	re, err := f.getCompiledRegex(regexPattern)

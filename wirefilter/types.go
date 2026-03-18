@@ -140,7 +140,7 @@ func (a ArrayValue) String() string {
 			parts[i] = v.String()
 		}
 	}
-	return "[" + strings.Join(parts, ", ") + "]"
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
 }
 func (a ArrayValue) Equal(v Value) bool {
 	if v == nil || v.Type() != TypeArray {
@@ -197,7 +197,7 @@ func (m MapValue) String() string {
 			parts = append(parts, fmt.Sprintf("%q: %s", k, v.String()))
 		}
 	}
-	return "{" + strings.Join(parts, ", ") + "}"
+	return fmt.Sprintf("{%s}", strings.Join(parts, ", "))
 }
 func (m MapValue) Equal(v Value) bool {
 	if v == nil || v.Type() != TypeMap {
@@ -258,11 +258,6 @@ func MatchesRegex(value string, pattern string) (bool, error) {
 		return false, err
 	}
 	return re.MatchString(value), nil
-}
-
-// ContainsString checks if haystack contains needle as a substring.
-func ContainsString(haystack, needle string) bool {
-	return strings.Contains(haystack, needle)
 }
 
 // UnpackedArrayValue wraps an ArrayValue to indicate it should be unpacked in operations.
