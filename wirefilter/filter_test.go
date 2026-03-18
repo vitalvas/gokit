@@ -1,6 +1,8 @@
 package wirefilter
 
 import (
+	"net"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -167,6 +169,31 @@ func FuzzCompile(f *testing.F) {
 	f.Add(`http.path matches "^/api/v[0-9]+/"`)
 	f.Add(`not http.host == "blocked.com"`)
 	f.Add(`true and false`)
+	f.Add(`ip not in $blocked`)
+	f.Add(`name not contains "admin"`)
+	f.Add(`cidr(ip, 24) == "10.0.0.0"`)
+	f.Add(`cidr6(ip, 64) == "2001:db8::"`)
+	f.Add(`lower(name) == "test"`)
+	f.Add(`tags[*] == "prod"`)
+	f.Add(`all(tags[*] contains "a")`)
+	f.Add(`any(ports[*] > 80)`)
+	f.Add(`data["key"] == "val"`)
+	f.Add(`a xor b`)
+	f.Add(`name wildcard "*.com"`)
+	f.Add(`name strict wildcard "*.COM"`)
+	f.Add(`tags === "a"`)
+	f.Add(`tags !== "b"`)
+	f.Add(`ip.src in 192.168.0.0/24`)
+	f.Add(`concat("a", "b") == "ab"`)
+	f.Add(`split(name, ",")[0] == "a"`)
+	f.Add(`join(tags, ",") == "a,b"`)
+	f.Add(`has_key(data, "key")`)
+	f.Add(`has_value(tags, "a")`)
+	f.Add(`starts_with(name, "test")`)
+	f.Add(`ends_with(name, ".com")`)
+	f.Add(`len(name) > 0`)
+	f.Add(`url_decode(name) == "a b"`)
+	f.Add(`substring(name, 0, 3) == "tes"`)
 
 	f.Fuzz(func(_ *testing.T, input string) {
 		_, _ = Compile(input, nil)
@@ -197,6 +224,112 @@ func FuzzExecute(f *testing.F) {
 			SetIntField("http.status", status)
 
 		_, _ = filter.Execute(ctx)
+	})
+}
+
+func FuzzExecuteMultiType(f *testing.F) {
+	f.Add(`name == value`, "test", "test", int64(0), "10.0.0.1")
+	f.Add(`name contains value`, "hello world", "world", int64(0), "10.0.0.1")
+	f.Add(`count > 5`, "x", "x", int64(10), "10.0.0.1")
+	f.Add(`ip == "10.0.0.1"`, "x", "x", int64(0), "10.0.0.1")
+	f.Add(`name not contains "admin"`, "user", "admin", int64(0), "10.0.0.1")
+	f.Add(`count in {1..100}`, "x", "x", int64(50), "10.0.0.1")
+	f.Add(`lower(name) == value`, "TEST", "test", int64(0), "10.0.0.1")
+	f.Add(`len(name) > count`, "hello", "x", int64(3), "10.0.0.1")
+
+	f.Fuzz(func(_ *testing.T, expression, strVal1, strVal2 string, intVal int64, ipVal string) {
+		filter, err := Compile(expression, nil)
+		if err != nil {
+			return
+		}
+
+		ctx := NewExecutionContext().
+			SetStringField("name", strVal1).
+			SetStringField("value", strVal2).
+			SetIntField("count", intVal).
+			SetIPField("ip", ipVal).
+			SetBoolField("active", intVal > 0).
+			SetArrayField("tags", []string{strVal1, strVal2}).
+			SetIntArrayField("ports", []int64{intVal, intVal + 1}).
+			SetMapField("data", map[string]string{"key": strVal1}).
+			SetList("names", []string{strVal1, strVal2}).
+			SetIPList("nets", []string{"10.0.0.0/8", "192.168.0.0/16"})
+
+		_, _ = filter.Execute(ctx)
+	})
+}
+
+func FuzzIPListOperations(f *testing.F) {
+	f.Add("10.0.0.1", "10.0.0.0/8")
+	f.Add("192.168.1.100", "192.168.0.0/16")
+	f.Add("172.16.5.1", "172.16.0.0/12")
+	f.Add("8.8.8.8", "8.8.8.0/24")
+	f.Add("2001:db8::1", "2001:db8::/32")
+	f.Add("fe80::1", "fe80::/10")
+	f.Add("invalid", "invalid/cidr")
+
+	f.Fuzz(func(_ *testing.T, ipStr, cidrStr string) {
+		filter, err := Compile(`ip not in $nets`, nil)
+		if err != nil {
+			return
+		}
+
+		ctx := NewExecutionContext().
+			SetIPField("ip", ipStr).
+			SetIPList("nets", []string{cidrStr})
+
+		_, _ = filter.Execute(ctx)
+	})
+}
+
+func FuzzFunctions(f *testing.F) {
+	f.Add(`lower(name)`, "HELLO")
+	f.Add(`upper(name)`, "hello")
+	f.Add(`len(name)`, "test")
+	f.Add(`starts_with(name, "he")`, "hello")
+	f.Add(`ends_with(name, "lo")`, "hello")
+	f.Add(`concat(name, "!")`, "hello")
+	f.Add(`substring(name, 0, 3)`, "hello")
+	f.Add(`split(name, ",")`, "a,b,c")
+	f.Add(`url_decode(name)`, "hello%20world")
+	f.Add(`cidr(ip, 24)`, "192.168.1.100")
+	f.Add(`cidr6(ip, 64)`, "2001:db8::1")
+
+	f.Fuzz(func(_ *testing.T, expression, value string) {
+		filter, err := Compile(expression, nil)
+		if err != nil {
+			return
+		}
+
+		ctx := NewExecutionContext().
+			SetStringField("name", value).
+			SetIPField("ip", value).
+			SetIntField("n", int64(len(value)))
+
+		_, _ = filter.Execute(ctx)
+	})
+}
+
+func FuzzSchemaValidation(f *testing.F) {
+	f.Add(`name == "test"`)
+	f.Add(`name contains "test"`)
+	f.Add(`count > 5`)
+	f.Add(`ip in $blocked`)
+	f.Add(`tags[*] == "a"`)
+	f.Add(`data["key"] == "val"`)
+	f.Add(`lower(name) == "test"`)
+	f.Add(`name not in {"a", "b"}`)
+	f.Add(`unknown_field == "x"`)
+
+	schema := NewSchema().
+		AddField("name", TypeString).
+		AddField("count", TypeInt).
+		AddField("ip", TypeIP).
+		AddField("tags", TypeArray).
+		AddField("data", TypeMap)
+
+	f.Fuzz(func(_ *testing.T, expression string) {
+		_, _ = Compile(expression, schema)
 	})
 }
 
@@ -4044,5 +4177,888 @@ func TestFilter(t *testing.T) {
 		result, err := filter.Execute(ctx)
 		assert.NoError(t, err)
 		assert.True(t, result)
+	})
+}
+
+func TestFilterCoverageGaps(t *testing.T) {
+	t.Run("range with start greater than end", func(t *testing.T) {
+		filter, err := Compile(`x in {10..5}`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("x", 7)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("range with nil values", func(t *testing.T) {
+		filter, err := Compile(`x in {a..b}`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("x", 5)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("range with non-int types", func(t *testing.T) {
+		filter, err := Compile(`x in {a..b}`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIntField("x", 5).
+			SetStringField("a", "hello").
+			SetStringField("b", "world")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("index on non-array non-map", func(t *testing.T) {
+		filter, err := Compile(`data["key"] == "val"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("data", "not a map")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("index on nil object", func(t *testing.T) {
+		filter, err := Compile(`data["key"] == "val"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("map access with missing key", func(t *testing.T) {
+		filter, err := Compile(`data["missing"] == "val"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetMapField("data", map[string]string{"key": "val"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("array index out of bounds", func(t *testing.T) {
+		filter, err := Compile(`tags[5] == "a"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"a", "b"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("array index negative", func(t *testing.T) {
+		// Can't directly write negative index in the expression, but let's test
+		// via int array field access where the index evaluates to a valid int
+		filter, err := Compile(`tags[0] == "a"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"a"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("unpack on non-array", func(t *testing.T) {
+		filter, err := Compile(`name[*] == "a"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("name", "test")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("unpack on nil field", func(t *testing.T) {
+		filter, err := Compile(`tags[*] == "a"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("not with nil operand", func(t *testing.T) {
+		filter, err := Compile(`not missing`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("xor operator", func(t *testing.T) {
+		filter, err := Compile(`a xor b`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetBoolField("a", true).SetBoolField("b", false)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetBoolField("a", true).SetBoolField("b", true)
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+
+		ctx3 := NewExecutionContext().SetBoolField("a", false).SetBoolField("b", false)
+		result3, err := filter.Execute(ctx3)
+		assert.NoError(t, err)
+		assert.False(t, result3)
+	})
+
+	t.Run("wildcard with nil left", func(t *testing.T) {
+		filter, err := Compile(`name wildcard "*.com"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("wildcard with non-string types", func(t *testing.T) {
+		filter, err := Compile(`x wildcard "*.com"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("x", 42)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("all equal with nil left", func(t *testing.T) {
+		filter, err := Compile(`tags === "a"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("all equal with non-array", func(t *testing.T) {
+		filter, err := Compile(`name === "a"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("name", "a")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("all equal with empty array", func(t *testing.T) {
+		filter, err := Compile(`tags === "a"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetField("tags", ArrayValue{})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("any not equal with nil left", func(t *testing.T) {
+		filter, err := Compile(`tags !== "a"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("any not equal with non-array", func(t *testing.T) {
+		filter, err := Compile(`name !== "a"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("name", "a")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("any not equal with empty array", func(t *testing.T) {
+		filter, err := Compile(`tags !== "a"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetField("tags", ArrayValue{})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("in with nil left", func(t *testing.T) {
+		filter, err := Compile(`x in {1, 2, 3}`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("in with non-array non-cidr right", func(t *testing.T) {
+		filter, err := Compile(`x in y`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("x", 1).SetIntField("y", 1)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("unknown function returns nil", func(t *testing.T) {
+		filter, err := Compile(`unknown_func("test") == "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("all with non-binary expression", func(t *testing.T) {
+		filter, err := Compile(`all(active)`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetBoolField("active", true)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext()
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("all with empty unpacked array", func(t *testing.T) {
+		filter, err := Compile(`all(tags[*] == "a")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetField("tags", ArrayValue{})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("all with contains operator", func(t *testing.T) {
+		filter, err := Compile(`all(tags[*] contains "a")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"apple", "avocado"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetArrayField("tags", []string{"apple", "berry"})
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("all with matches operator", func(t *testing.T) {
+		filter, err := Compile(`all(tags[*] matches "^a")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"apple", "avocado"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("all with in operator", func(t *testing.T) {
+		filter, err := Compile(`all(ports[*] in {80, 443})`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntArrayField("ports", []int64{80, 443})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetIntArrayField("ports", []int64{80, 8080})
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("all with comparison operators", func(t *testing.T) {
+		filter, err := Compile(`all(vals[*] > 0)`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntArrayField("vals", []int64{1, 2, 3})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetIntArrayField("vals", []int64{0, 1, 2})
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("all with lt operator", func(t *testing.T) {
+		filter, err := Compile(`all(vals[*] < 10)`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntArrayField("vals", []int64{1, 5, 9})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("all with le operator", func(t *testing.T) {
+		filter, err := Compile(`all(vals[*] <= 10)`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntArrayField("vals", []int64{1, 5, 10})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("all with ge operator", func(t *testing.T) {
+		filter, err := Compile(`all(vals[*] >= 0)`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntArrayField("vals", []int64{0, 1, 2})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("all with ne operator", func(t *testing.T) {
+		filter, err := Compile(`all(tags[*] != "bad")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"good", "ok"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetArrayField("tags", []string{"good", "bad"})
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("any with nil result", func(t *testing.T) {
+		filter, err := Compile(`any(missing == "x")`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("unpacked array with wildcard operator", func(t *testing.T) {
+		filter, err := Compile(`names[*] wildcard "*.com"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("names", []string{"example.com", "test.org"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetArrayField("names", []string{"test.org", "test.net"})
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("unpacked array with strict wildcard operator", func(t *testing.T) {
+		filter, err := Compile(`names[*] strict wildcard "*.COM"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("names", []string{"test.COM", "test.org"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetArrayField("names", []string{"test.com"})
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("unpacked array with in operator", func(t *testing.T) {
+		filter, err := Compile(`ports[*] in {80, 443}`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntArrayField("ports", []int64{8080, 80})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("unpacked array empty", func(t *testing.T) {
+		filter, err := Compile(`tags[*] == "a"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetField("tags", ArrayValue{})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("cidr with out of range bits", func(t *testing.T) {
+		filter, err := Compile(`cidr(ip, 50) == "192.168.1.100"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.100")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("cidr with negative bits", func(t *testing.T) {
+		// Can't write negative literal in expression, but test via context
+		filter, err := Compile(`cidr(ip, 0) == "0.0.0.0"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.100")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("cidr6 with IPv6 negative bits", func(t *testing.T) {
+		filter, err := Compile(`cidr6(ip, 0) == "::"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIPField("ip", "2001:db8::1")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("cidr6 with IPv6 max bits", func(t *testing.T) {
+		filter, err := Compile(`cidr6(ip, 128) == "2001:db8::1"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIPField("ip", "2001:db8::1")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("matches with nil left", func(t *testing.T) {
+		filter, err := Compile(`name matches "^test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("matches with non-string types", func(t *testing.T) {
+		filter, err := Compile(`x matches "^test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("x", 42)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("contains with nil operands", func(t *testing.T) {
+		filter, err := Compile(`name contains "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("contains with non-string non-array", func(t *testing.T) {
+		filter, err := Compile(`x contains "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("x", 42)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("comparison with nil operands", func(t *testing.T) {
+		filter, err := Compile(`x > 5`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("comparison with non-int types", func(t *testing.T) {
+		filter, err := Compile(`x > 5`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetStringField("x", "hello")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("equality with nil values", func(t *testing.T) {
+		filter, err := Compile(`x == "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("equality both nil", func(t *testing.T) {
+		filter, err := Compile(`x == y`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("IP equality with string right", func(t *testing.T) {
+		filter, err := Compile(`ip == "192.168.1.1"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.1")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("IP equality with invalid string", func(t *testing.T) {
+		filter, err := Compile(`ip == "not-an-ip"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.1")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("string left equality with IP right", func(t *testing.T) {
+		filter, err := Compile(`name == ip`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("name", "192.168.1.1").
+			SetIPField("ip", "192.168.1.1")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("string left equality with IP right invalid string", func(t *testing.T) {
+		filter, err := Compile(`name == ip`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("name", "not-an-ip").
+			SetIPField("ip", "192.168.1.1")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("array in array - OR semantics", func(t *testing.T) {
+		filter, err := Compile(`tags in allowed`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{"x", "a"}).
+			SetArrayField("allowed", []string{"a", "b", "c"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().
+			SetArrayField("tags", []string{"x", "y"}).
+			SetArrayField("allowed", []string{"a", "b", "c"})
+		result2, err := filter.Execute(ctx2)
+		assert.NoError(t, err)
+		assert.False(t, result2)
+	})
+
+	t.Run("IP in array with CIDR element nil skip", func(t *testing.T) {
+		filter, err := Compile(`ip in ips`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip", "10.0.0.1").
+			SetField("ips", ArrayValue{nil, IPValue{IP: nil}})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("any with wrong arg count", func(t *testing.T) {
+		// Construct a FunctionCallExpr directly with 0 args for any()
+		filter := &Filter{
+			expr:       &FunctionCallExpr{Name: "any", Arguments: []Expression{}},
+			regexCache: make(map[string]*regexp.Regexp),
+			cidrCache:  make(map[string]*net.IPNet),
+		}
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("all with wrong arg count", func(t *testing.T) {
+		filter := &Filter{
+			expr:       &FunctionCallExpr{Name: "all", Arguments: []Expression{}},
+			regexCache: make(map[string]*regexp.Regexp),
+			cidrCache:  make(map[string]*net.IPNet),
+		}
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("cidr with negative bits via direct construction", func(t *testing.T) {
+		filter := &Filter{
+			expr: &BinaryExpr{
+				Left: &FunctionCallExpr{
+					Name: "cidr",
+					Arguments: []Expression{
+						&FieldExpr{Name: "ip"},
+						&LiteralExpr{Value: IntValue(-5)},
+					},
+				},
+				Operator: TokenEq,
+				Right:    &LiteralExpr{Value: StringValue("0.0.0.0")},
+			},
+			regexCache: make(map[string]*regexp.Regexp),
+			cidrCache:  make(map[string]*net.IPNet),
+		}
+		ctx := NewExecutionContext().SetIPField("ip", "192.168.1.100")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("cidr6 with negative bits via direct construction", func(t *testing.T) {
+		filter := &Filter{
+			expr: &BinaryExpr{
+				Left: &FunctionCallExpr{
+					Name: "cidr6",
+					Arguments: []Expression{
+						&FieldExpr{Name: "ip"},
+						&LiteralExpr{Value: IntValue(-5)},
+					},
+				},
+				Operator: TokenEq,
+				Right:    &LiteralExpr{Value: StringValue("::")},
+			},
+			regexCache: make(map[string]*regexp.Regexp),
+			cidrCache:  make(map[string]*net.IPNet),
+		}
+		ctx := NewExecutionContext().SetIPField("ip", "2001:db8::1")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("cidr6 with bits over 128", func(t *testing.T) {
+		filter := &Filter{
+			expr: &BinaryExpr{
+				Left: &FunctionCallExpr{
+					Name: "cidr6",
+					Arguments: []Expression{
+						&FieldExpr{Name: "ip"},
+						&LiteralExpr{Value: IntValue(200)},
+					},
+				},
+				Operator: TokenEq,
+				Right:    &LiteralExpr{Value: StringValue("2001:db8::1")},
+			},
+			regexCache: make(map[string]*regexp.Regexp),
+			cidrCache:  make(map[string]*net.IPNet),
+		}
+		ctx := NewExecutionContext().SetIPField("ip", "2001:db8::1")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("schema validates range expr with unknown field", func(t *testing.T) {
+		schema := NewSchema().AddField("x", TypeInt)
+		_, err := Compile(`x in {unknown_start..10}`, schema)
+		assert.Error(t, err)
+	})
+
+	t.Run("schema validates range expr end with unknown field", func(t *testing.T) {
+		schema := NewSchema().AddField("x", TypeInt)
+		_, err := Compile(`x in {1..unknown_end}`, schema)
+		assert.Error(t, err)
+	})
+
+	t.Run("schema validates array elements with unknown field", func(t *testing.T) {
+		schema := NewSchema().AddField("x", TypeInt)
+		_, err := Compile(`x in {unknown, 1}`, schema)
+		assert.Error(t, err)
+	})
+
+	t.Run("any with error in evaluation", func(t *testing.T) {
+		filter, err := Compile(`any(tags[*] matches pattern)`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{"test"}).
+			SetStringField("pattern", "[invalid")
+		_, err = filter.Execute(ctx)
+		assert.Error(t, err)
+	})
+
+	t.Run("all with error in matches evaluation", func(t *testing.T) {
+		filter, err := Compile(`all(tags[*] matches pattern)`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetArrayField("tags", []string{"test"}).
+			SetStringField("pattern", "[invalid")
+		_, err = filter.Execute(ctx)
+		assert.Error(t, err)
+	})
+
+	t.Run("all with binary expr and non-unpacked left", func(t *testing.T) {
+		filter, err := Compile(`all(x == 1)`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntField("x", 1)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("unpacked array with ne operator", func(t *testing.T) {
+		filter, err := Compile(`tags[*] != "bad"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"good", "bad"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result) // ANY semantics: "good" != "bad" is true
+	})
+
+	t.Run("unpacked array with lt operator", func(t *testing.T) {
+		filter, err := Compile(`vals[*] < 5`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntArrayField("vals", []int64{10, 3})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("unpacked array with gt operator", func(t *testing.T) {
+		filter, err := Compile(`vals[*] > 5`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntArrayField("vals", []int64{1, 10})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("unpacked array with le operator", func(t *testing.T) {
+		filter, err := Compile(`vals[*] <= 5`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntArrayField("vals", []int64{10, 5})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("unpacked array with ge operator", func(t *testing.T) {
+		filter, err := Compile(`vals[*] >= 5`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetIntArrayField("vals", []int64{1, 5})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("unpacked array with contains operator", func(t *testing.T) {
+		filter, err := Compile(`tags[*] contains "test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"no", "testing"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("unpacked array with matches operator", func(t *testing.T) {
+		filter, err := Compile(`tags[*] matches "^test"`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetArrayField("tags", []string{"no", "testing"})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("logical or short circuit true", func(t *testing.T) {
+		filter, err := Compile(`a or b`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetBoolField("a", true)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("logical and short circuit false", func(t *testing.T) {
+		filter, err := Compile(`a and b`, nil)
+		assert.NoError(t, err)
+
+		ctx := NewExecutionContext().SetBoolField("a", false)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("lexer unterminated string with escape", func(t *testing.T) {
+		lexer := NewLexer(`"test\`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenError, tok.Type)
+	})
+
+	t.Run("lexer CIDR in number context", func(t *testing.T) {
+		lexer := NewLexer(`192.168.0.0/24`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenCIDR, tok.Type)
+	})
+
+	t.Run("lexer IPv6 CIDR", func(t *testing.T) {
+		lexer := NewLexer(`2001:db8::/32`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenCIDR, tok.Type)
+	})
+
+	t.Run("lexer negative number overflow", func(t *testing.T) {
+		lexer := NewLexer(`-99999999999999999999999`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenError, tok.Type)
 	})
 }

@@ -173,4 +173,65 @@ func TestSchemaFunctionControl(t *testing.T) {
 		_, err := Compile(`lower(name) == "test"`, nil)
 		assert.NoError(t, err)
 	})
+
+	t.Run("blocklist with enabled function", func(t *testing.T) {
+		schema := NewSchema().
+			SetFunctionMode(FunctionModeBlocklist).
+			DisableFunctions("lower").
+			EnableFunctions("lower") // re-enable
+		assert.True(t, schema.IsFunctionAllowed("lower"))
+	})
+
+	t.Run("validate unpack expression", func(t *testing.T) {
+		schema := NewSchema().AddField("tags", TypeArray)
+		_, err := Compile(`tags[*] == "a"`, schema)
+		assert.NoError(t, err)
+	})
+
+	t.Run("validate unpack with unknown field", func(t *testing.T) {
+		schema := NewSchema()
+		_, err := Compile(`unknown[*] == "a"`, schema)
+		assert.Error(t, err)
+	})
+
+	t.Run("validate index expression", func(t *testing.T) {
+		schema := NewSchema().AddField("data", TypeMap)
+		_, err := Compile(`data["key"] == "val"`, schema)
+		assert.NoError(t, err)
+	})
+
+	t.Run("validate index with unknown field", func(t *testing.T) {
+		schema := NewSchema()
+		_, err := Compile(`unknown["key"] == "val"`, schema)
+		assert.Error(t, err)
+	})
+
+	t.Run("validate list ref expression", func(t *testing.T) {
+		schema := NewSchema().AddField("ip", TypeIP)
+		_, err := Compile(`ip in $blocked`, schema)
+		assert.NoError(t, err)
+	})
+
+	t.Run("validate range expression", func(t *testing.T) {
+		schema := NewSchema().AddField("x", TypeInt)
+		_, err := Compile(`x in {1..10}`, schema)
+		assert.NoError(t, err)
+	})
+
+	t.Run("validate function args with unknown field", func(t *testing.T) {
+		schema := NewSchema()
+		_, err := Compile(`lower(unknown) == "test"`, schema)
+		assert.Error(t, err)
+	})
+
+	t.Run("schema with field map constructor", func(t *testing.T) {
+		schema := NewSchema(map[string]Type{
+			"name": TypeString,
+			"age":  TypeInt,
+		})
+		_, ok := schema.GetField("name")
+		assert.True(t, ok)
+		_, ok = schema.GetField("age")
+		assert.True(t, ok)
+	})
 }

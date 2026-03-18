@@ -60,12 +60,24 @@ func FuzzLexer(f *testing.F) {
 	f.Add(`"string with \"escape\""`)
 	f.Add(`field === "value"`)
 	f.Add(`field !== "value"`)
+	f.Add(`ip not in $blocked`)
+	f.Add(`name not contains "admin"`)
+	f.Add(`$list_ref`)
+	f.Add(`192.168.0.0/24`)
+	f.Add(`2001:db8::/32`)
+	f.Add(`r"raw\nstring"`)
+	f.Add(`strict wildcard "*.com"`)
+	f.Add(`strict other`)
+	f.Add(`-42`)
+	f.Add(`a xor b`)
+	f.Add(`cidr(ip, 24)`)
+	f.Add(`cidr6(ip, 64)`)
 
 	f.Fuzz(func(_ *testing.T, input string) {
 		lexer := NewLexer(input)
 		for {
 			tok := lexer.NextToken()
-			if tok.Type == TokenEOF {
+			if tok.Type == TokenEOF || tok.Type == TokenError {
 				break
 			}
 		}
@@ -619,5 +631,65 @@ func TestLexer(t *testing.T) {
 
 		tok = lexer.NextToken()
 		assert.Equal(t, TokenRBracket, tok.Type)
+	})
+
+	t.Run("unterminated string", func(t *testing.T) {
+		lexer := NewLexer(`"unterminated`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenError, tok.Type)
+	})
+
+	t.Run("unterminated raw string", func(t *testing.T) {
+		lexer := NewLexer(`r"unterminated`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenError, tok.Type)
+	})
+
+	t.Run("integer overflow", func(t *testing.T) {
+		lexer := NewLexer(`99999999999999999999999`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenError, tok.Type)
+		assert.Contains(t, tok.Value.(string), "integer overflow")
+	})
+
+	t.Run("invalid number or IP", func(t *testing.T) {
+		lexer := NewLexer(`123.456.789.0`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenError, tok.Type)
+		assert.Contains(t, tok.Value.(string), "invalid number or IP")
+	})
+
+	t.Run("strict without wildcard", func(t *testing.T) {
+		lexer := NewLexer(`strict == "test"`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "strict", tok.Literal)
+	})
+
+	t.Run("strict at end of input", func(t *testing.T) {
+		lexer := NewLexer(`strict`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "strict", tok.Literal)
+	})
+
+	t.Run("strict followed by non-wildcard identifier", func(t *testing.T) {
+		lexer := NewLexer(`strict other`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenIdent, tok.Type)
+		assert.Equal(t, "strict", tok.Literal)
+	})
+
+	t.Run("negative integer", func(t *testing.T) {
+		lexer := NewLexer(`-42`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenInt, tok.Type)
+		assert.Equal(t, int64(-42), tok.Value)
+	})
+
+	t.Run("unexpected character", func(t *testing.T) {
+		lexer := NewLexer(`@`)
+		tok := lexer.NextToken()
+		assert.Equal(t, TokenError, tok.Type)
 	})
 }

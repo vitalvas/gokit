@@ -110,6 +110,48 @@ func FuzzIPInCIDR(f *testing.F) {
 	})
 }
 
+func FuzzValueEquality(f *testing.F) {
+	f.Add("hello", "hello", int64(42), int64(42))
+	f.Add("abc", "def", int64(1), int64(2))
+	f.Add("", "", int64(0), int64(0))
+	f.Add("test", "test", int64(-1), int64(1))
+
+	f.Fuzz(func(_ *testing.T, s1, s2 string, i1, i2 int64) {
+		sv1 := StringValue(s1)
+		sv2 := StringValue(s2)
+		sv1.Equal(sv2)
+
+		iv1 := IntValue(i1)
+		iv2 := IntValue(i2)
+		iv1.Equal(iv2)
+
+		bv1 := BoolValue(i1 > 0)
+		bv2 := BoolValue(i2 > 0)
+		bv1.Equal(bv2)
+
+		_ = sv1.String()
+		_ = iv1.String()
+		_ = bv1.String()
+		_ = sv1.IsTruthy()
+		_ = iv1.IsTruthy()
+		_ = bv1.IsTruthy()
+
+		arr := ArrayValue{sv1, iv1, bv1}
+		_ = arr.String()
+		_ = arr.Contains(sv2)
+		_ = arr.Contains(iv2)
+
+		m := MapValue{"key": sv1}
+		_ = m.String()
+		_, _ = m.Get("key")
+		_, _ = m.Get("missing")
+
+		by1 := BytesValue([]byte(s1))
+		by2 := BytesValue([]byte(s2))
+		by1.Equal(by2)
+	})
+}
+
 func FuzzMatchesRegex(f *testing.F) {
 	f.Add("example.com", "^example\\..*")
 	f.Add("test123", "[a-z]+[0-9]+")
@@ -431,4 +473,71 @@ func TestBytesValueEqualSameLengthDifferentContent(t *testing.T) {
 	bv1 := BytesValue([]byte("test"))
 	bv2 := BytesValue([]byte("best"))
 	assert.False(t, bv1.Equal(bv2))
+}
+
+func TestCIDRValue(t *testing.T) {
+	_, ipNet, _ := net.ParseCIDR("192.168.1.0/24")
+	cidr := CIDRValue{IPNet: ipNet}
+
+	t.Run("type", func(t *testing.T) {
+		assert.Equal(t, TypeCIDR, cidr.Type())
+	})
+
+	t.Run("string", func(t *testing.T) {
+		assert.Equal(t, "192.168.1.0/24", cidr.String())
+	})
+
+	t.Run("is truthy", func(t *testing.T) {
+		assert.True(t, cidr.IsTruthy())
+	})
+
+	t.Run("equal same", func(t *testing.T) {
+		_, ipNet2, _ := net.ParseCIDR("192.168.1.0/24")
+		assert.True(t, cidr.Equal(CIDRValue{IPNet: ipNet2}))
+	})
+
+	t.Run("equal different mask", func(t *testing.T) {
+		_, ipNet2, _ := net.ParseCIDR("192.168.1.0/16")
+		assert.False(t, cidr.Equal(CIDRValue{IPNet: ipNet2}))
+	})
+
+	t.Run("equal different IP", func(t *testing.T) {
+		_, ipNet2, _ := net.ParseCIDR("10.0.0.0/24")
+		assert.False(t, cidr.Equal(CIDRValue{IPNet: ipNet2}))
+	})
+
+	t.Run("equal non-CIDR type", func(t *testing.T) {
+		assert.False(t, cidr.Equal(StringValue("192.168.1.0/24")))
+	})
+
+	t.Run("contains", func(t *testing.T) {
+		assert.True(t, cidr.Contains(net.ParseIP("192.168.1.100")))
+		assert.False(t, cidr.Contains(net.ParseIP("192.168.2.1")))
+	})
+}
+
+func TestMapValueEqual(t *testing.T) {
+	t.Run("equal with nil value in map", func(t *testing.T) {
+		m1 := MapValue{"key": nil}
+		m2 := MapValue{"key": nil}
+		assert.True(t, m1.Equal(m2))
+	})
+
+	t.Run("not equal with nil vs non-nil value", func(t *testing.T) {
+		m1 := MapValue{"key": nil}
+		m2 := MapValue{"key": StringValue("val")}
+		assert.False(t, m1.Equal(m2))
+	})
+
+	t.Run("not equal with non-nil vs nil value", func(t *testing.T) {
+		m1 := MapValue{"key": StringValue("val")}
+		m2 := MapValue{"key": nil}
+		assert.False(t, m1.Equal(m2))
+	})
+
+	t.Run("not equal different keys", func(t *testing.T) {
+		m1 := MapValue{"a": StringValue("1")}
+		m2 := MapValue{"b": StringValue("1")}
+		assert.False(t, m1.Equal(m2))
+	})
 }

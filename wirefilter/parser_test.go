@@ -56,6 +56,23 @@ func FuzzParser(f *testing.F) {
 	f.Add(`not http.host == "blocked.com"`)
 	f.Add(`true and false`)
 	f.Add(`((a == 1) or (b == 2)) and c == 3`)
+	f.Add(`ip not in $blocked`)
+	f.Add(`name not contains "admin"`)
+	f.Add(`ip not in {10.0.0.0/8, 192.168.0.0/16}`)
+	f.Add(`cidr(ip, 24) == "10.0.0.0"`)
+	f.Add(`cidr6(ip, 64) == "2001:db8::"`)
+	f.Add(`all(tags[*] contains "a")`)
+	f.Add(`any(ports[*] > 80)`)
+	f.Add(`data["key"] == "val"`)
+	f.Add(`tags[*] == "prod"`)
+	f.Add(`tags === "a"`)
+	f.Add(`tags !== "b"`)
+	f.Add(`a xor b`)
+	f.Add(`name wildcard "*.com"`)
+	f.Add(`name strict wildcard "*.COM"`)
+	f.Add(`concat("a", "b", "c")`)
+	f.Add(`split(name, ",")[0]`)
+	f.Add(`func()`)
 
 	f.Fuzz(func(_ *testing.T, input string) {
 		lexer := NewLexer(input)
@@ -480,5 +497,135 @@ func TestParser(t *testing.T) {
 		binExpr, ok := expr.(*BinaryExpr)
 		assert.True(t, ok)
 		assert.Equal(t, TokenStrictWildcard, binExpr.Operator)
+	})
+
+	t.Run("function with no args", func(t *testing.T) {
+		input := `func()`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+		assert.NotNil(t, expr)
+
+		fnExpr, ok := expr.(*FunctionCallExpr)
+		assert.True(t, ok)
+		assert.Equal(t, "func", fnExpr.Name)
+		assert.Empty(t, fnExpr.Arguments)
+	})
+
+	t.Run("function missing closing paren", func(t *testing.T) {
+		input := `lower("test"`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		_, err := parser.Parse()
+		assert.Error(t, err)
+	})
+
+	t.Run("index with non-literal type", func(t *testing.T) {
+		input := `data[true]`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		_, err := parser.Parse()
+		assert.Error(t, err)
+	})
+
+	t.Run("index missing closing bracket", func(t *testing.T) {
+		input := `data["key"`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		_, err := parser.Parse()
+		assert.Error(t, err)
+	})
+
+	t.Run("unpack missing closing bracket", func(t *testing.T) {
+		input := `data[*`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		_, err := parser.Parse()
+		assert.Error(t, err)
+	})
+
+	t.Run("grouped expression missing closing paren", func(t *testing.T) {
+		input := `(a == 1`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		_, err := parser.Parse()
+		assert.Error(t, err)
+	})
+
+	t.Run("trailing tokens error", func(t *testing.T) {
+		input := `a == 1 )`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		_, err := parser.Parse()
+		assert.Error(t, err)
+	})
+
+	t.Run("not in compound operator", func(t *testing.T) {
+		input := `x not in {1, 2, 3}`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+
+		unaryExpr, ok := expr.(*UnaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenNot, unaryExpr.Operator)
+
+		binExpr, ok := unaryExpr.Operand.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenIn, binExpr.Operator)
+	})
+
+	t.Run("not contains compound operator", func(t *testing.T) {
+		input := `name not contains "test"`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		expr, err := parser.Parse()
+		assert.NoError(t, err)
+
+		unaryExpr, ok := expr.(*UnaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenNot, unaryExpr.Operator)
+
+		binExpr, ok := unaryExpr.Operand.(*BinaryExpr)
+		assert.True(t, ok)
+		assert.Equal(t, TokenContains, binExpr.Operator)
+	})
+
+	t.Run("lexer error propagation", func(t *testing.T) {
+		input := `a == @`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		_, err := parser.Parse()
+		assert.Error(t, err)
+	})
+
+	t.Run("lexer error at start", func(t *testing.T) {
+		input := `@`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		_, err := parser.Parse()
+		assert.Error(t, err)
+	})
+
+	t.Run("array expression missing closing brace", func(t *testing.T) {
+		input := `x in {1, 2`
+		lexer := NewLexer(input)
+		parser := NewParser(lexer)
+
+		_, err := parser.Parse()
+		assert.Error(t, err)
 	})
 }
