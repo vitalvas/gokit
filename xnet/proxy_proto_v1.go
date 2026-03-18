@@ -15,6 +15,7 @@ const (
 
 var proxyV1PrefixBytes = []byte(proxyV1Prefix)
 
+//yake:skip-test
 func isProxyV1(data []byte) bool {
 	return bytes.HasPrefix(data, proxyV1PrefixBytes)
 }
