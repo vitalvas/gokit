@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.31.0](https://github.com/vitalvas/gokit/compare/v0.30.0...v0.31.0) (2026-03-19)
+
+
+### Features
+
+* **radixtree:** add generic concurrent-safe radix tree package ([a221be8](https://github.com/vitalvas/gokit/commit/a221be8a9464abd0d1d1781504299b399099923d))
+* **wirefilter:** add "not in"/"not contains" operators and CIDR support in IP lists ([1193ba0](https://github.com/vitalvas/gokit/commit/1193ba0ba625e37eb96055f177984ea3fcdf90c3))
+* **wirefilter:** add 21 functions and arithmetic operators ([f23d4e9](https://github.com/vitalvas/gokit/commit/f23d4e999a740bda868410431250b3ca8617f4fb))
+* **wirefilter:** add binary serialization and expression hash ([8233faf](https://github.com/vitalvas/gokit/commit/8233fafdebdb0ff3d412f2191738c0a8ce8f1bf5))
+* **wirefilter:** add lookup tables with $table[field] syntax ([5e02165](https://github.com/vitalvas/gokit/commit/5e021653821800b9b7aaf5ae07ee23ded7e54532))
+* **wirefilter:** add rule metadata, exists(), context timeout, tracing, and caching ([eb84c0a](https://github.com/vitalvas/gokit/commit/eb84c0a22508ea8b98e47a16df86f442d364c528))
+* **wirefilter:** add schema type validation and expression complexity limits ([e65ba61](https://github.com/vitalvas/gokit/commit/e65ba61acd679a9753ce15b0bbd0bcff833f3f3e))
+* **wirefilter:** add TypeFloat data type with full stack support ([965de13](https://github.com/vitalvas/gokit/commit/965de135c64c6b2eb31871a630aa0df707c14676))
+* **wirefilter:** add user-defined functions and SetMapArrayField ([bf12ce9](https://github.com/vitalvas/gokit/commit/bf12ce941dd79eab5eccf0d1ed27cbfe4df6e554))
+
+
+### Bug Fixes
+
+* **fastcdc:** move hash tests to hash_test.go to satisfy naming convention ([2c2dd06](https://github.com/vitalvas/gokit/commit/2c2dd065179409d009806c3e6ad4306dee6959ac))
+* **machineid:** extract trim to tools.go and add platform test files ([e2b6e89](https://github.com/vitalvas/gokit/commit/e2b6e896f1771afc39a58d738f45d2bfbd4eff8d))
+* **shamir:** replace string concatenation with fmt.Sprintf ([b0f5ae2](https://github.com/vitalvas/gokit/commit/b0f5ae25060ce3cea6c5f058aeb9e09e63f01c17))
+* **wirefilter:** change cidr() from cidr(IP, Int, Int) to cidr(IP, Int) ([6807ed2](https://github.com/vitalvas/gokit/commit/6807ed2b3a858aa125d6193ce3a1caa3a406e809))
+* **wirefilter:** cidr/cidr6 functions return CIDRValue instead of IPValue ([479a682](https://github.com/vitalvas/gokit/commit/479a682aae8a4aa4b6d88bd3fc0a5c50644bf0a5))
+* **wirefilter:** resolve policy violations ([648bdda](https://github.com/vitalvas/gokit/commit/648bdda1951d2c0f05e1c2dbd96ca87aae8012aa))
+* **xconfig:** replace string concatenation with fmt.Sprintf and filepath.Join ([75295c5](https://github.com/vitalvas/gokit/commit/75295c5281157c9c9297256842ac26b378ad1625))
+* **xentropy:** replace string concatenation with fmt.Sprintf ([c3fdca7](https://github.com/vitalvas/gokit/commit/c3fdca78ba51427a9ffbfa7ac9c8f9337a00aef3))
+* **xnet:** replace string concatenation with fmt.Sprintf ([2bc1f97](https://github.com/vitalvas/gokit/commit/2bc1f97d8401c99de2128c02e3aa47c61146af32))
+* **xnet:** skip policy check for internal isProxyV1 helper ([d3bf273](https://github.com/vitalvas/gokit/commit/d3bf273ff55c5fd27234a35d2ff3ec54f9bde2e8))
+* **xstrings:** add missing test files and skip policy for StringClean wrapper ([763c1b3](https://github.com/vitalvas/gokit/commit/763c1b3019006fb852490e122108bb88c1b60755))
+
 ## [0.30.0](https://github.com/vitalvas/gokit/compare/v0.29.0...v0.30.0) (2026-03-04)
 
 
