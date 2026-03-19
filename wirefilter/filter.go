@@ -42,17 +42,37 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 )
+
+// RuleMeta holds metadata for a compiled filter rule.
+type RuleMeta struct {
+	ID   string
+	Tags map[string]string
+}
 
 // Filter represents a compiled filter expression that can be executed against an execution context.
 // Filter is safe for concurrent use across goroutines.
 type Filter struct {
 	expr       Expression
 	schema     *Schema
+	meta       RuleMeta
 	regexCache map[string]*regexp.Regexp
 	regexMu    sync.RWMutex
 	cidrCache  map[string]*net.IPNet
 	cidrMu     sync.RWMutex
+}
+
+// SetMeta attaches metadata to the compiled filter.
+// Returns the filter to allow method chaining.
+func (f *Filter) SetMeta(meta RuleMeta) *Filter {
+	f.meta = meta
+	return f
+}
+
+// Meta returns the metadata attached to this filter.
+func (f *Filter) Meta() RuleMeta {
+	return f.meta
 }
 
 // Compile parses and compiles a filter expression string into an executable Filter.
@@ -114,6 +134,24 @@ func (f *Filter) Execute(ctx *ExecutionContext) (bool, error) {
 }
 
 func (f *Filter) evaluate(expr Expression, ctx *ExecutionContext) (Value, error) {
+	// Check for context cancellation/timeout
+	if err := ctx.checkContext(); err != nil {
+		return nil, err
+	}
+
+	// Tracing: push before, pop after
+	if ctx.traceEnabled() {
+		ctx.pushTrace(exprString(expr))
+		start := time.Now()
+		result, err := f.evaluateInner(expr, ctx)
+		ctx.popTrace(result, time.Since(start))
+		return result, err
+	}
+
+	return f.evaluateInner(expr, ctx)
+}
+
+func (f *Filter) evaluateInner(expr Expression, ctx *ExecutionContext) (Value, error) {
 	switch e := expr.(type) {
 	case *BinaryExpr:
 		return f.evaluateBinaryExpr(e, ctx)
@@ -857,9 +895,18 @@ func (f *Filter) evaluateFunctionCall(expr *FunctionCallExpr, ctx *ExecutionCont
 		return fn(args)
 	}
 
-	// Check user-defined functions in the execution context
+	// Check user-defined functions in the execution context (with optional caching)
 	if fn, ok := ctx.GetFunc(name); ok {
-		return fn(args)
+		key := cacheKey(name, args)
+		if cached, ok := ctx.getCached(key); ok {
+			return cached, nil
+		}
+		result, err := fn(args)
+		if err != nil {
+			return nil, err
+		}
+		ctx.setCache(key, result)
+		return result, nil
 	}
 
 	return nil, nil
@@ -903,6 +950,7 @@ func (f *Filter) builtinFuncs() map[string]func([]Value) (Value, error) {
 		"difference":    f.fnDifference,
 		"contains_any":  f.fnContainsAny,
 		"contains_all":  f.fnContainsAll,
+		"exists":        f.fnExists,
 	}
 }
 
@@ -1639,4 +1687,47 @@ func (f *Filter) fnContainsAll(args []Value) (Value, error) {
 		}
 	}
 	return BoolValue(true), nil
+}
+
+// exists(Value) -> Bool
+// Returns true if the argument is not nil (field is set in context).
+func (f *Filter) fnExists(args []Value) (Value, error) {
+	if len(args) != 1 {
+		return BoolValue(false), nil
+	}
+	return BoolValue(args[0] != nil), nil
+}
+
+// exprString returns a short string representation of an expression for tracing.
+func exprString(expr Expression) string {
+	switch e := expr.(type) {
+	case *BinaryExpr:
+		return fmt.Sprintf("(%s %s %s)", exprString(e.Left), e.Operator, exprString(e.Right))
+	case *UnaryExpr:
+		return fmt.Sprintf("(%s %s)", e.Operator, exprString(e.Operand))
+	case *FieldExpr:
+		return e.Name
+	case *LiteralExpr:
+		if e.Value == nil {
+			return "nil"
+		}
+		return e.Value.String()
+	case *FunctionCallExpr:
+		args := make([]string, len(e.Arguments))
+		for i, arg := range e.Arguments {
+			args[i] = exprString(arg)
+		}
+		return fmt.Sprintf("%s(%s)", e.Name, strings.Join(args, ", "))
+	case *ArrayExpr:
+		return fmt.Sprintf("{...%d}", len(e.Elements))
+	case *IndexExpr:
+		return fmt.Sprintf("%s[%s]", exprString(e.Object), exprString(e.Index))
+	case *UnpackExpr:
+		return fmt.Sprintf("%s[*]", exprString(e.Array))
+	case *ListRefExpr:
+		return fmt.Sprintf("$%s", e.Name)
+	case *RangeExpr:
+		return fmt.Sprintf("%s..%s", exprString(e.Start), exprString(e.End))
+	}
+	return "?"
 }

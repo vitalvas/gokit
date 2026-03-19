@@ -1,11 +1,13 @@
 package wirefilter
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"net"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -222,6 +224,9 @@ func FuzzCompile(f *testing.F) {
 	f.Add(`get_score(name) > 5.0`)
 	f.Add(`is_tor(ip) and name == "test"`)
 	f.Add(`ip in get_cidrs(name)`)
+	f.Add(`exists(name)`)
+	f.Add(`not exists(missing)`)
+	f.Add(`exists(name) and name == "test"`)
 	f.Add(`x + 1 > 5`)
 	f.Add(`x * 2 == 10`)
 	f.Add(`x / 3 == 1`)
@@ -6552,4 +6557,475 @@ func mustParseCIDR(s string) *net.IPNet {
 		panic(err)
 	}
 	return ipNet
+}
+
+func TestRuleMeta(t *testing.T) {
+	t.Run("set and get meta", func(t *testing.T) {
+		filter, _ := Compile(`name == "test"`, nil)
+		filter.SetMeta(RuleMeta{
+			ID:   "WAF-1001",
+			Tags: map[string]string{"severity": "high", "category": "xss"},
+		})
+
+		meta := filter.Meta()
+		assert.Equal(t, "WAF-1001", meta.ID)
+		assert.Equal(t, "high", meta.Tags["severity"])
+		assert.Equal(t, "xss", meta.Tags["category"])
+	})
+
+	t.Run("default meta is empty", func(t *testing.T) {
+		filter, _ := Compile(`name == "test"`, nil)
+		meta := filter.Meta()
+		assert.Empty(t, meta.ID)
+		assert.Nil(t, meta.Tags)
+	})
+
+	t.Run("chaining", func(t *testing.T) {
+		filter, _ := Compile(`name == "test"`, nil)
+		f := filter.SetMeta(RuleMeta{ID: "R1"})
+		assert.Equal(t, "R1", f.Meta().ID)
+	})
+}
+
+func TestExists(t *testing.T) {
+	t.Run("field exists", func(t *testing.T) {
+		filter, _ := Compile(`exists(name)`, nil)
+		ctx := NewExecutionContext().SetStringField("name", "hello")
+		result, _ := filter.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("field missing", func(t *testing.T) {
+		filter, _ := Compile(`exists(name)`, nil)
+		ctx := NewExecutionContext()
+		result, _ := filter.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("field with empty string exists", func(t *testing.T) {
+		filter, _ := Compile(`exists(name)`, nil)
+		ctx := NewExecutionContext().SetStringField("name", "")
+		result, _ := filter.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("field with zero int exists", func(t *testing.T) {
+		filter, _ := Compile(`exists(count)`, nil)
+		ctx := NewExecutionContext().SetIntField("count", 0)
+		result, _ := filter.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("combined with logic", func(t *testing.T) {
+		filter, _ := Compile(`exists(referer) and name == "test"`, nil)
+		ctx := NewExecutionContext().
+			SetStringField("name", "test").
+			SetStringField("referer", "https://example.com")
+		result, _ := filter.Execute(ctx)
+		assert.True(t, result)
+
+		ctx2 := NewExecutionContext().SetStringField("name", "test")
+		result2, _ := filter.Execute(ctx2)
+		assert.False(t, result2)
+	})
+
+	t.Run("not exists", func(t *testing.T) {
+		filter, _ := Compile(`not exists(referer)`, nil)
+		ctx := NewExecutionContext()
+		result, _ := filter.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("wrong arg count", func(t *testing.T) {
+		filter, _ := Compile(`exists(a, b)`, nil)
+		ctx := NewExecutionContext().SetStringField("a", "x").SetStringField("b", "y")
+		result, _ := filter.Execute(ctx)
+		assert.False(t, result)
+	})
+}
+
+func TestExecuteWithContext(t *testing.T) {
+	t.Run("normal execution with context", func(t *testing.T) {
+		filter, _ := Compile(`name == "test"`, nil)
+		goCtx := context.Background()
+		ctx := NewExecutionContext().
+			WithContext(goCtx).
+			SetStringField("name", "test")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("cancelled context returns error", func(t *testing.T) {
+		filter, _ := Compile(`name == "test"`, nil)
+		goCtx, cancel := context.WithCancel(context.Background())
+		cancel() // cancel immediately
+		ctx := NewExecutionContext().
+			WithContext(goCtx).
+			SetStringField("name", "test")
+		_, err := filter.Execute(ctx)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+	})
+
+	t.Run("timeout context", func(t *testing.T) {
+		filter, _ := Compile(`name == "test"`, nil)
+		goCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		ctx := NewExecutionContext().
+			WithContext(goCtx).
+			SetStringField("name", "test")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("timeout with slow UDF", func(t *testing.T) {
+		filter, _ := Compile(`slow_func() == true`, nil)
+		goCtx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		defer cancel()
+		ctx := NewExecutionContext().
+			WithContext(goCtx).
+			SetFunc("slow_func", func(_ []Value) (Value, error) {
+				time.Sleep(100 * time.Millisecond)
+				return BoolValue(true), nil
+			})
+		// The UDF sleeps 100ms, context expires at 10ms.
+		// After UDF returns, the next evaluate call detects the expired context.
+		_, err := filter.Execute(ctx)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	})
+
+	t.Run("no context is fine", func(t *testing.T) {
+		filter, _ := Compile(`name == "test"`, nil)
+		ctx := NewExecutionContext().SetStringField("name", "test")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+}
+
+func TestExecuteWithTrace(t *testing.T) {
+	t.Run("simple trace", func(t *testing.T) {
+		filter, _ := Compile(`name == "test"`, nil)
+		ctx := NewExecutionContext().
+			EnableTrace().
+			SetStringField("name", "test")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		trace := ctx.Trace()
+		assert.NotNil(t, trace)
+		assert.Equal(t, "root", trace.Expression)
+		assert.NotEmpty(t, trace.Children)
+	})
+
+	t.Run("trace shows sub-expressions", func(t *testing.T) {
+		filter, _ := Compile(`name == "test" and status > 200`, nil)
+		ctx := NewExecutionContext().
+			EnableTrace().
+			SetStringField("name", "test").
+			SetIntField("status", 500)
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+
+		trace := ctx.Trace()
+		assert.NotNil(t, trace)
+		// Root should have the top-level AND expression as a child
+		assert.NotEmpty(t, trace.Children)
+	})
+
+	t.Run("trace without enable returns nil", func(t *testing.T) {
+		ctx := NewExecutionContext()
+		assert.Nil(t, ctx.Trace())
+	})
+
+	t.Run("trace has duration", func(t *testing.T) {
+		filter, _ := Compile(`name == "test"`, nil)
+		ctx := NewExecutionContext().
+			EnableTrace().
+			SetStringField("name", "test")
+		_, _ = filter.Execute(ctx)
+
+		trace := ctx.Trace()
+		assert.NotNil(t, trace)
+		if len(trace.Children) > 0 {
+			assert.GreaterOrEqual(t, int64(trace.Children[0].Duration), int64(0))
+		}
+	})
+}
+
+func TestExecuteWithCache(t *testing.T) {
+	t.Run("caches UDF results", func(t *testing.T) {
+		callCount := 0
+		filter, _ := Compile(`get_score(name) > 5 and get_score(name) < 100`, nil)
+		ctx := NewExecutionContext().
+			EnableCache().
+			SetStringField("name", "test").
+			SetFunc("get_score", func(_ []Value) (Value, error) {
+				callCount++
+				return FloatValue(50.0), nil
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+		// With caching, get_score("test") should only be called once
+		assert.Equal(t, 1, callCount)
+	})
+
+	t.Run("without cache calls multiple times", func(t *testing.T) {
+		callCount := 0
+		filter, _ := Compile(`get_score(name) > 5 and get_score(name) < 100`, nil)
+		ctx := NewExecutionContext().
+			SetStringField("name", "test").
+			SetFunc("get_score", func(_ []Value) (Value, error) {
+				callCount++
+				return FloatValue(50.0), nil
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+		assert.Equal(t, 2, callCount)
+	})
+
+	t.Run("different args not cached", func(t *testing.T) {
+		callCount := 0
+		filter, _ := Compile(`get_score(a) > 5 and get_score(b) > 5`, nil)
+		ctx := NewExecutionContext().
+			EnableCache().
+			SetStringField("a", "foo").
+			SetStringField("b", "bar").
+			SetFunc("get_score", func(_ []Value) (Value, error) {
+				callCount++
+				return FloatValue(50.0), nil
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+		// Different args = different cache keys = 2 calls
+		assert.Equal(t, 2, callCount)
+	})
+
+	t.Run("cache does not affect builtins", func(t *testing.T) {
+		filter, _ := Compile(`lower(name) == "test" and lower(name) == "test"`, nil)
+		ctx := NewExecutionContext().
+			EnableCache().
+			SetStringField("name", "TEST")
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("cache max size limits entries", func(t *testing.T) {
+		callCount := 0
+		ctx := NewExecutionContext().
+			EnableCache().
+			SetCacheMaxSize(2).
+			SetFunc("score", func(_ []Value) (Value, error) {
+				callCount++
+				return FloatValue(1.0), nil
+			})
+
+		// Fill cache with 2 entries
+		f1, _ := Compile(`score("a") > 0`, nil)
+		f2, _ := Compile(`score("b") > 0`, nil)
+		f3, _ := Compile(`score("c") > 0`, nil)
+
+		_, _ = f1.Execute(ctx)
+		_, _ = f2.Execute(ctx)
+		assert.Equal(t, 2, ctx.CacheLen())
+		assert.Equal(t, 2, callCount)
+
+		// Third entry should not be cached (cache full)
+		_, _ = f3.Execute(ctx)
+		assert.Equal(t, 2, ctx.CacheLen())
+		assert.Equal(t, 3, callCount)
+
+		// But "a" and "b" are still cached
+		_, _ = f1.Execute(ctx)
+		_, _ = f2.Execute(ctx)
+		assert.Equal(t, 3, callCount) // no new calls
+	})
+
+	t.Run("cache reset clears entries", func(t *testing.T) {
+		callCount := 0
+		ctx := NewExecutionContext().
+			EnableCache().
+			SetFunc("score", func(_ []Value) (Value, error) {
+				callCount++
+				return FloatValue(1.0), nil
+			})
+
+		f, _ := Compile(`score("a") > 0`, nil)
+		_, _ = f.Execute(ctx)
+		assert.Equal(t, 1, callCount)
+		assert.Equal(t, 1, ctx.CacheLen())
+
+		ctx.ResetCache()
+		assert.Equal(t, 0, ctx.CacheLen())
+
+		_, _ = f.Execute(ctx)
+		assert.Equal(t, 2, callCount) // called again after reset
+	})
+
+	t.Run("cache persists across rules", func(t *testing.T) {
+		callCount := 0
+		ctx := NewExecutionContext().
+			EnableCache().
+			SetStringField("domain", "test.com").
+			SetFunc("get_score", func(_ []Value) (Value, error) {
+				callCount++
+				return FloatValue(8.0), nil
+			})
+
+		f1, _ := Compile(`get_score(domain) > 5`, nil)
+		f2, _ := Compile(`get_score(domain) > 3`, nil)
+
+		_, _ = f1.Execute(ctx)
+		_, _ = f2.Execute(ctx)
+		// Same function + same args across two rules = 1 call
+		assert.Equal(t, 1, callCount)
+	})
+
+	t.Run("set cache max size zero uses default", func(t *testing.T) {
+		ctx := NewExecutionContext().EnableCache().SetCacheMaxSize(0)
+		assert.Equal(t, defaultCacheMaxSize, ctx.cacheMaxSize)
+	})
+}
+
+func TestCoverageNewFeatures(t *testing.T) {
+	t.Run("trim_left nil", func(t *testing.T) {
+		f, _ := Compile(`trim_left(missing) == ""`, nil)
+		ctx := NewExecutionContext()
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("trim_left wrong type", func(t *testing.T) {
+		f, _ := Compile(`trim_left(x) == ""`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 42)
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("trim_right nil", func(t *testing.T) {
+		f, _ := Compile(`trim_right(missing) == ""`, nil)
+		ctx := NewExecutionContext()
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("trim_right wrong type", func(t *testing.T) {
+		f, _ := Compile(`trim_right(x) == ""`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 42)
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("arithmetic float mod", func(t *testing.T) {
+		f, _ := Compile(`x % 2.0 == 1.5`, nil)
+		ctx := NewExecutionContext().SetFloatField("x", 5.5)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("arithmetic float subtraction", func(t *testing.T) {
+		f, _ := Compile(`x - 1.5 == 1.5`, nil)
+		ctx := NewExecutionContext().SetFloatField("x", 3.0)
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("arithmetic float mod by zero", func(t *testing.T) {
+		f, _ := Compile(`x % 0.0 == 0`, nil)
+		ctx := NewExecutionContext().SetFloatField("x", 5.0)
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("arithmetic float div by zero", func(t *testing.T) {
+		f, _ := Compile(`x / 0.0 == 0`, nil)
+		ctx := NewExecutionContext().SetFloatField("x", 5.0)
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("arithmetic with non-numeric float", func(t *testing.T) {
+		f, _ := Compile(`x + 1.5 == 0`, nil)
+		ctx := NewExecutionContext().SetStringField("x", "hello")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("equality CIDR with string left", func(t *testing.T) {
+		f, _ := Compile(`"10.0.0.0/8" == cidr(ip, 8)`, nil)
+		ctx := NewExecutionContext().SetIPField("ip", "10.1.2.3")
+		result, _ := f.Execute(ctx)
+		assert.True(t, result)
+	})
+
+	t.Run("equality CIDR with invalid string", func(t *testing.T) {
+		f, _ := Compile(`cidr(ip, 24) == "not-a-cidr"`, nil)
+		ctx := NewExecutionContext().SetIPField("ip", "10.0.0.1")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("equality string left invalid CIDR", func(t *testing.T) {
+		f, _ := Compile(`"not-a-cidr" == cidr(ip, 24)`, nil)
+		ctx := NewExecutionContext().SetIPField("ip", "10.0.0.1")
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("cache key with nil arg", func(t *testing.T) {
+		callCount := 0
+		filter, _ := Compile(`get_val(missing) == get_val(missing)`, nil)
+		ctx := NewExecutionContext().
+			EnableCache().
+			SetFunc("get_val", func(_ []Value) (Value, error) {
+				callCount++
+				return IntValue(1), nil
+			})
+		result, _ := filter.Execute(ctx)
+		assert.True(t, result)
+		assert.Equal(t, 1, callCount)
+	})
+
+	t.Run("contains_word nil args", func(t *testing.T) {
+		f, _ := Compile(`contains_word(missing, "test") == true`, nil)
+		ctx := NewExecutionContext()
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("contains_word wrong types", func(t *testing.T) {
+		f, _ := Compile(`contains_word(x, "test") == true`, nil)
+		ctx := NewExecutionContext().SetIntField("x", 42)
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("regex_replace nil args", func(t *testing.T) {
+		f, _ := Compile(`regex_replace(missing, "a", "b") == ""`, nil)
+		ctx := NewExecutionContext()
+		result, _ := f.Execute(ctx)
+		assert.False(t, result)
+	})
+
+	t.Run("exprString coverage", func(t *testing.T) {
+		// Exercise exprString through tracing
+		filter, _ := Compile(`x in {1..5} and tags[*] == "a" and $list contains "b"`, nil)
+		ctx := NewExecutionContext().
+			EnableTrace().
+			SetIntField("x", 3).
+			SetArrayField("tags", []string{"a"}).
+			SetList("list", []string{"b"})
+		_, _ = filter.Execute(ctx)
+		trace := ctx.Trace()
+		assert.NotNil(t, trace)
+		assert.NotEmpty(t, trace.Children)
+	})
 }

@@ -1,9 +1,26 @@
 package wirefilter
 
-import "net"
+import (
+	"context"
+	"net"
+	"strings"
+	"time"
+)
 
 // FuncHandler is the type for user-defined function handlers.
 type FuncHandler func(args []Value) (Value, error)
+
+// TraceNode represents the evaluation trace of a single expression node.
+type TraceNode struct {
+	Expression string        `json:"expression"`
+	Result     interface{}   `json:"result"`
+	Duration   time.Duration `json:"duration,omitempty"`
+	Children   []*TraceNode  `json:"children,omitempty"`
+}
+
+func (t *TraceNode) addChild(child *TraceNode) {
+	t.Children = append(t.Children, child)
+}
 
 // ExecutionContext holds the runtime values for fields that are evaluated during filter execution.
 type ExecutionContext struct {
@@ -11,7 +28,17 @@ type ExecutionContext struct {
 	lists  map[string]ArrayValue
 	tables map[string]MapValue
 	funcs  map[string]FuncHandler
+
+	// Evaluation options
+	goCtx        context.Context  // cancellation/timeout
+	traceRoot    *TraceNode       // trace tree root
+	traceStack   []*TraceNode     // current trace path
+	cacheEnabled bool             // enable result caching
+	cacheMaxSize int              // max cache entries (0 = default 1024)
+	cache        map[string]Value // cached function results
 }
+
+const defaultCacheMaxSize = 1024
 
 // NewExecutionContext creates a new empty execution context.
 func NewExecutionContext() *ExecutionContext {
@@ -254,4 +281,138 @@ func (ctx *ExecutionContext) GetFunc(name string) (FuncHandler, bool) {
 	}
 	fn, ok := ctx.funcs[name]
 	return fn, ok
+}
+
+// WithContext sets a Go context for cancellation and timeout support.
+// The evaluator checks for context cancellation at key evaluation points.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) WithContext(goCtx context.Context) *ExecutionContext {
+	ctx.goCtx = goCtx
+	return ctx
+}
+
+// EnableTrace enables expression evaluation tracing.
+// After Execute, call Trace() to retrieve the evaluation trace tree.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) EnableTrace() *ExecutionContext {
+	ctx.traceRoot = &TraceNode{Expression: "root"}
+	ctx.traceStack = []*TraceNode{ctx.traceRoot}
+	return ctx
+}
+
+// Trace returns the evaluation trace tree after Execute completes.
+// Returns nil if tracing was not enabled.
+func (ctx *ExecutionContext) Trace() *TraceNode {
+	return ctx.traceRoot
+}
+
+// EnableCache enables result caching for user-defined function calls.
+// Repeated calls to the same function with the same arguments return cached results.
+// The cache persists across multiple Execute() calls on the same context,
+// which is useful for evaluating many rules against the same request.
+// Default max size is 1024 entries; use SetCacheMaxSize to change.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) EnableCache() *ExecutionContext {
+	ctx.cacheEnabled = true
+	ctx.cacheMaxSize = defaultCacheMaxSize
+	ctx.cache = make(map[string]Value)
+	return ctx
+}
+
+// SetCacheMaxSize sets the maximum number of cached function results.
+// When the cache is full, new entries are not cached (existing entries are kept).
+// Must be called after EnableCache. Zero resets to default (1024).
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) SetCacheMaxSize(size int) *ExecutionContext {
+	if size <= 0 {
+		size = defaultCacheMaxSize
+	}
+	ctx.cacheMaxSize = size
+	return ctx
+}
+
+// ResetCache clears all cached function results.
+// Useful between batches of rule evaluations to free memory.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) ResetCache() *ExecutionContext {
+	if ctx.cache != nil {
+		clear(ctx.cache)
+	}
+	return ctx
+}
+
+// CacheLen returns the number of entries currently in the cache.
+func (ctx *ExecutionContext) CacheLen() int {
+	return len(ctx.cache)
+}
+
+// checkContext checks if the Go context has been cancelled or timed out.
+func (ctx *ExecutionContext) checkContext() error {
+	if ctx.goCtx == nil {
+		return nil
+	}
+	select {
+	case <-ctx.goCtx.Done():
+		return ctx.goCtx.Err()
+	default:
+		return nil
+	}
+}
+
+// traceEnabled returns true if tracing is active.
+func (ctx *ExecutionContext) traceEnabled() bool {
+	return ctx.traceRoot != nil
+}
+
+// pushTrace starts tracing a sub-expression.
+func (ctx *ExecutionContext) pushTrace(expr string) {
+	node := &TraceNode{Expression: expr}
+	parent := ctx.traceStack[len(ctx.traceStack)-1]
+	parent.addChild(node)
+	ctx.traceStack = append(ctx.traceStack, node)
+}
+
+// popTrace completes tracing a sub-expression with its result.
+func (ctx *ExecutionContext) popTrace(result Value, dur time.Duration) {
+	node := ctx.traceStack[len(ctx.traceStack)-1]
+	ctx.traceStack = ctx.traceStack[:len(ctx.traceStack)-1]
+	if result != nil {
+		node.Result = result.String()
+	}
+	node.Duration = dur
+}
+
+// getCached retrieves a cached function result.
+func (ctx *ExecutionContext) getCached(key string) (Value, bool) {
+	if !ctx.cacheEnabled {
+		return nil, false
+	}
+	v, ok := ctx.cache[key]
+	return v, ok
+}
+
+// setCache stores a function result in the cache, respecting max size.
+func (ctx *ExecutionContext) setCache(key string, val Value) {
+	if !ctx.cacheEnabled {
+		return
+	}
+	if len(ctx.cache) >= ctx.cacheMaxSize {
+		return // cache full, skip new entries
+	}
+	ctx.cache[key] = val
+}
+
+// cacheKey builds a cache key for a function call.
+func cacheKey(name string, args []Value) string {
+	var sb strings.Builder
+	sb.WriteString(name)
+	for _, arg := range args {
+		sb.WriteByte(':')
+		if arg == nil {
+			sb.WriteString("nil")
+		} else {
+			sb.WriteString(arg.String())
+		}
+	}
+	return sb.String()
 }

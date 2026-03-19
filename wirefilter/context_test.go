@@ -1,6 +1,7 @@
 package wirefilter
 
 import (
+	"context"
 	"net"
 	"testing"
 
@@ -306,5 +307,134 @@ func TestExecutionContext(t *testing.T) {
 		ctx := NewExecutionContext()
 		_, ok := ctx.GetFunc("missing")
 		assert.False(t, ok)
+	})
+
+	t.Run("with context", func(t *testing.T) {
+		goCtx := context.Background()
+		ctx := NewExecutionContext().WithContext(goCtx)
+		assert.NoError(t, ctx.checkContext())
+	})
+
+	t.Run("with cancelled context", func(t *testing.T) {
+		goCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+		ctx := NewExecutionContext().WithContext(goCtx)
+		assert.ErrorIs(t, ctx.checkContext(), context.Canceled)
+	})
+
+	t.Run("check context without context set", func(t *testing.T) {
+		ctx := NewExecutionContext()
+		assert.NoError(t, ctx.checkContext())
+	})
+
+	t.Run("enable trace", func(t *testing.T) {
+		ctx := NewExecutionContext().EnableTrace()
+		assert.True(t, ctx.traceEnabled())
+		assert.NotNil(t, ctx.Trace())
+		assert.Equal(t, "root", ctx.Trace().Expression)
+	})
+
+	t.Run("trace disabled by default", func(t *testing.T) {
+		ctx := NewExecutionContext()
+		assert.False(t, ctx.traceEnabled())
+		assert.Nil(t, ctx.Trace())
+	})
+
+	t.Run("enable cache", func(t *testing.T) {
+		ctx := NewExecutionContext().EnableCache()
+		assert.Equal(t, defaultCacheMaxSize, ctx.cacheMaxSize)
+		assert.Equal(t, 0, ctx.CacheLen())
+	})
+
+	t.Run("set cache max size", func(t *testing.T) {
+		ctx := NewExecutionContext().EnableCache().SetCacheMaxSize(100)
+		assert.Equal(t, 100, ctx.cacheMaxSize)
+	})
+
+	t.Run("set cache max size zero resets to default", func(t *testing.T) {
+		ctx := NewExecutionContext().EnableCache().SetCacheMaxSize(0)
+		assert.Equal(t, defaultCacheMaxSize, ctx.cacheMaxSize)
+	})
+
+	t.Run("reset cache", func(t *testing.T) {
+		ctx := NewExecutionContext().EnableCache()
+		ctx.setCache("key", StringValue("val"))
+		assert.Equal(t, 1, ctx.CacheLen())
+		ctx.ResetCache()
+		assert.Equal(t, 0, ctx.CacheLen())
+	})
+
+	t.Run("cache get and set", func(t *testing.T) {
+		ctx := NewExecutionContext().EnableCache()
+		ctx.setCache("fn:arg", IntValue(42))
+		val, ok := ctx.getCached("fn:arg")
+		assert.True(t, ok)
+		assert.Equal(t, IntValue(42), val)
+	})
+
+	t.Run("cache miss", func(t *testing.T) {
+		ctx := NewExecutionContext().EnableCache()
+		_, ok := ctx.getCached("missing")
+		assert.False(t, ok)
+	})
+
+	t.Run("cache disabled get returns false", func(t *testing.T) {
+		ctx := NewExecutionContext()
+		_, ok := ctx.getCached("key")
+		assert.False(t, ok)
+	})
+
+	t.Run("cache disabled set is no-op", func(t *testing.T) {
+		ctx := NewExecutionContext()
+		ctx.setCache("key", IntValue(1))
+		assert.Equal(t, 0, ctx.CacheLen())
+	})
+
+	t.Run("cache respects max size", func(t *testing.T) {
+		ctx := NewExecutionContext().EnableCache().SetCacheMaxSize(2)
+		ctx.setCache("a", IntValue(1))
+		ctx.setCache("b", IntValue(2))
+		ctx.setCache("c", IntValue(3)) // should be dropped
+		assert.Equal(t, 2, ctx.CacheLen())
+		_, ok := ctx.getCached("a")
+		assert.True(t, ok)
+		_, ok = ctx.getCached("c")
+		assert.False(t, ok)
+	})
+
+	t.Run("reset cache on nil cache", func(t *testing.T) {
+		ctx := NewExecutionContext()
+		ctx.ResetCache() // should not panic
+		assert.Equal(t, 0, ctx.CacheLen())
+	})
+
+	t.Run("trace push and pop", func(t *testing.T) {
+		ctx := NewExecutionContext().EnableTrace()
+		ctx.pushTrace("a == 1")
+		ctx.popTrace(BoolValue(true), 0)
+		trace := ctx.Trace()
+		assert.Len(t, trace.Children, 1)
+		assert.Equal(t, "a == 1", trace.Children[0].Expression)
+		assert.Equal(t, "true", trace.Children[0].Result)
+	})
+
+	t.Run("trace pop with nil result", func(t *testing.T) {
+		ctx := NewExecutionContext().EnableTrace()
+		ctx.pushTrace("missing")
+		ctx.popTrace(nil, 0)
+		assert.Nil(t, ctx.Trace().Children[0].Result)
+	})
+
+	t.Run("cache key", func(t *testing.T) {
+		key1 := cacheKey("fn", []Value{StringValue("a"), IntValue(1)})
+		key2 := cacheKey("fn", []Value{StringValue("a"), IntValue(1)})
+		key3 := cacheKey("fn", []Value{StringValue("b"), IntValue(1)})
+		assert.Equal(t, key1, key2)
+		assert.NotEqual(t, key1, key3)
+	})
+
+	t.Run("cache key with nil", func(t *testing.T) {
+		key := cacheKey("fn", []Value{nil})
+		assert.Contains(t, key, "nil")
 	})
 }

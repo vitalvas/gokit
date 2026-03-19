@@ -28,6 +28,10 @@ inspired by Cloudflare's Wirefilter.
 - Regular expression matching
 - Schema validation for field references and operator-type compatibility
 - Expression complexity limits (max depth and node count)
+- Rule metadata (ID, tags)
+- Execution timeout via `context.Context`
+- Expression evaluation tracing for debugging
+- Configurable result caching for UDF calls
 - Binary serialization for pre-compiled filter storage and fast loading
 
 ## Installation
@@ -776,6 +780,7 @@ Wirefilter provides built-in functions for transforming and inspecting values.
 | Function | Description | Example |
 |----------|-------------|---------|
 | `coalesce(Value...)` | First non-nil value | `coalesce(a, b, "default")` |
+| `exists(Value)` | Check if field is set | `exists(http.referer)` |
 
 ### Function Examples
 
