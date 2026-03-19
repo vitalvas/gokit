@@ -13,7 +13,7 @@ inspired by Cloudflare's Wirefilter.
 - Wildcard matching: `wildcard` (case-insensitive), `strict wildcard` (case-sensitive)
 - Field presence/absence checking
 - Range expressions: `{1..10}`
-- Multiple data types: string, int, bool, IP, bytes, arrays, maps
+- Multiple data types: string, int, float, bool, IP, CIDR, bytes, arrays, maps
 - Map field access with bracket notation
 - Array index access: `tags[0]`
 - Array unpack operations: `tags[*] == "value"` (ANY semantics)
@@ -428,9 +428,11 @@ Type validation rules:
 | Type | Valid Operators |
 |------|----------------|
 | String | `==`, `!=`, `contains`, `matches`, `in`, `wildcard`, `strict wildcard` |
-| Int | `==`, `!=`, `<`, `>`, `<=`, `>=`, `in` |
+| Int | `==`, `!=`, `<`, `>`, `<=`, `>=`, `in`, `+`, `-`, `*`, `/`, `%` |
+| Float | `==`, `!=`, `<`, `>`, `<=`, `>=`, `in`, `+`, `-`, `*`, `/`, `%` |
 | Bool | `==`, `!=` |
 | IP | `==`, `!=`, `in` |
+| CIDR | `==`, `!=` |
 | Array | `==`, `!=`, `===`, `!==`, `contains`, `in` |
 | Map | `==`, `!=` |
 | Bytes | `==`, `!=`, `contains` |
@@ -524,6 +526,23 @@ ctx := wirefilter.NewExecutionContext().
     SetIntArrayField("ports", []int64{80, 443, 8080})
 ```
 
+For float fields:
+
+```go
+ctx := wirefilter.NewExecutionContext().
+    SetFloatField("score", 3.14)
+```
+
+For map fields where each key maps to an array of values (e.g., HTTP headers):
+
+```go
+ctx := wirefilter.NewExecutionContext().
+    SetMapArrayField("http.headers", map[string][]wirefilter.Value{
+        "Accept": {wirefilter.StringValue("text/html"), wirefilter.StringValue("application/json")},
+        "X-Forwarded-For": {wirefilter.StringValue("10.0.0.1")},
+    })
+```
+
 #### Setting Custom Lists
 
 Custom lists are referenced in expressions with `$list_name` syntax:
@@ -588,19 +607,45 @@ ctx := wirefilter.NewExecutionContext().
 result, _ := filter.Execute(ctx)
 ```
 
-Functions can return any value type. A function returning `ArrayValue` with `CIDRValue`
-elements works with `in`:
+Functions can return any value type and work with all operators:
 
 ```go
+// Return ArrayValue of CIDRValue for use with "in"
 // ip.src in get_spf_cidrs(smtp.sender.domain)
 ctx.SetFunc("get_spf_cidrs", func(args []wirefilter.Value) (wirefilter.Value, error) {
     domain := string(args[0].(wirefilter.StringValue))
     cidrs := spfResolver.GetCIDRs(domain)
-    // return ArrayValue of CIDRValue...
+    arr := make(wirefilter.ArrayValue, 0, len(cidrs))
+    for _, c := range cidrs {
+        _, ipNet, _ := net.ParseCIDR(c)
+        arr = append(arr, wirefilter.CIDRValue{IPNet: ipNet})
+    }
+    return arr, nil
+})
+
+// Return CIDRValue for direct "in" check
+// ip.src in get_network(zone)
+ctx.SetFunc("get_network", func(args []wirefilter.Value) (wirefilter.Value, error) {
+    // ...
+    return wirefilter.CIDRValue{IPNet: ipNet}, nil
+})
+
+// Use with arithmetic
+// get_score(domain) * 2 + get_ip_score(src.ip) > 10.0
+
+// Receive MapValue (e.g., HTTP headers with map[string][]string)
+// is_valid_headers(http.headers)
+ctx.SetFunc("is_valid_headers", func(args []wirefilter.Value) (wirefilter.Value, error) {
+    headers := args[0].(wirefilter.MapValue)
+    // inspect headers...
+    return wirefilter.BoolValue(true), nil
 })
 ```
 
 If a function handler is not bound at runtime, it returns nil (same as a missing field).
+
+UDF results are cached when `EnableCache()` is active on the execution context.
+Same function with same arguments is only called once across multiple rule evaluations.
 
 ### Expression Hash
 
@@ -632,14 +677,78 @@ if result {
 }
 ```
 
+### Execution Timeout
+
+Use `context.Context` for cancellation and timeout support:
+
+```go
+goCtx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+defer cancel()
+
+ctx := wirefilter.NewExecutionContext().
+    WithContext(goCtx).
+    SetStringField("name", "test")
+
+result, err := filter.Execute(ctx) // returns context.DeadlineExceeded on timeout
+```
+
+### Evaluation Tracing
+
+Enable tracing to debug which sub-expressions matched:
+
+```go
+ctx := wirefilter.NewExecutionContext().
+    EnableTrace().
+    SetStringField("name", "test").
+    SetIntField("status", 500)
+
+result, _ := filter.Execute(ctx)
+trace := ctx.Trace() // returns *TraceNode tree with expression, result, duration
+```
+
+### Result Caching
+
+Cache user-defined function results across multiple rule evaluations:
+
+```go
+ctx := wirefilter.NewExecutionContext().
+    EnableCache().              // default max 1024 entries
+    SetCacheMaxSize(5000).      // or set custom limit
+    SetFunc("get_score", handler)
+
+// Same function+args only calls handler once across all rules
+filter1.Execute(ctx)
+filter2.Execute(ctx) // get_score results served from cache
+
+ctx.ResetCache()     // clear cache between request batches
+```
+
+### Rule Metadata
+
+Attach metadata to compiled filters for rule management:
+
+```go
+filter, _ := wirefilter.Compile(expr, schema)
+filter.SetMeta(wirefilter.RuleMeta{
+    ID:   "WAF-1001",
+    Tags: map[string]string{"severity": "high", "category": "xss"},
+})
+
+meta := filter.Meta()
+fmt.Println(meta.ID)              // "WAF-1001"
+fmt.Println(meta.Tags["severity"]) // "high"
+```
+
 ## Data Types
 
 | Type | Description | Example |
 |------|-------------|---------|
 | `TypeString` | String values | `"example.com"` |
 | `TypeInt` | Integer values | `200`, `-5` |
+| `TypeFloat` | Floating-point values | `3.14`, `-2.5` |
 | `TypeBool` | Boolean values | `true`, `false` |
 | `TypeIP` | IP addresses (IPv4/IPv6) | `192.168.1.1`, `2001:db8::1` |
+| `TypeCIDR` | CIDR network ranges | `192.168.0.0/24`, `2001:db8::/32` |
 | `TypeBytes` | Byte arrays | `[]byte("data")` |
 | `TypeArray` | Arrays of values | `{1, 2, 3}` |
 | `TypeMap` | Map of string keys to values | `{"key": "value"}` |
@@ -812,11 +921,20 @@ split(header, ",")[0] == "value1"
 // Check map key exists
 has_key(request.headers, "X-Auth-Token")
 
-// Apply /24 CIDR mask to IPv4
-cidr(ip.src, 24) == "192.168.1.0"
+// Apply /24 CIDR mask to IPv4 (returns CIDRValue)
+cidr(ip.src, 24) == 192.168.1.0/24
 
 // Apply /64 CIDR mask for IPv6 networks
-cidr6(ip.src, 64) == "2001:db8::"
+cidr6(ip.src, 64) == "2001:db8::/64"
+
+// Check if two IPs are in the same /24 network
+cidr(ip.src, 24) == cidr(ip.dst, 24)
+
+// Check if IP is in the network of another IP
+ip.src in cidr(ip.dst, 24)
+
+// Check if field exists
+exists(http.referer)
 ```
 
 ## Advanced Examples
@@ -1097,8 +1215,11 @@ The library returns errors for:
 
 - Malformed filter expressions
 - Unknown field references (when schema is provided)
+- Operator-type mismatches (when schema is provided)
+- Expression complexity limits exceeded
 - Invalid regex patterns
-- Type mismatches during evaluation
+- Context cancellation or timeout (`context.DeadlineExceeded`, `context.Canceled`)
+- User-defined function errors
 
 Always check returned errors:
 
