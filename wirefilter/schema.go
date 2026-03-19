@@ -28,15 +28,22 @@ type Field struct {
 	Type Type
 }
 
+// FuncSignature defines the compile-time signature of a user-defined function.
+type FuncSignature struct {
+	ArgTypes   []Type // expected argument types (nil means any count/type)
+	ReturnType Type   // return type for schema validation
+}
+
 // Schema defines the structure of fields that can be used in filter expressions.
 // It provides validation to ensure that filter expressions only reference defined fields,
 // operators are valid for field types, and expression complexity is within limits.
 type Schema struct {
 	fields        map[string]Field
 	functionMode  FunctionMode
-	functionRules map[string]bool // true = enabled, false = disabled
-	maxDepth      int             // max AST nesting depth (0 = unlimited)
-	maxNodes      int             // max AST node count (0 = unlimited)
+	functionRules map[string]bool          // true = enabled, false = disabled
+	customFuncs   map[string]FuncSignature // registered user-defined functions
+	maxDepth      int                      // max AST nesting depth (0 = unlimited)
+	maxNodes      int                      // max AST node count (0 = unlimited)
 }
 
 // operatorsByType defines which operators are valid for each field type.
@@ -141,6 +148,14 @@ func (s *Schema) DisableFunctions(names ...string) *Schema {
 // Function names are case-insensitive.
 func (s *Schema) IsFunctionAllowed(name string) bool {
 	name = strings.ToLower(name)
+
+	// Custom registered functions are always allowed
+	if s.customFuncs != nil {
+		if _, ok := s.customFuncs[name]; ok {
+			return true
+		}
+	}
+
 	enabled, hasRule := s.functionRules[name]
 
 	switch s.functionMode {
@@ -155,6 +170,22 @@ func (s *Schema) IsFunctionAllowed(name string) bool {
 		return true
 	}
 	return true
+}
+
+// RegisterFunction registers a user-defined function with its argument and return types.
+// This enables compile-time validation of argument count and types.
+// The actual function handler is bound at runtime via ExecutionContext.SetFunc.
+// If argTypes is nil, argument validation is skipped.
+// Returns the schema to allow method chaining.
+func (s *Schema) RegisterFunction(name string, returnType Type, argTypes []Type) *Schema {
+	if s.customFuncs == nil {
+		s.customFuncs = make(map[string]FuncSignature)
+	}
+	s.customFuncs[strings.ToLower(name)] = FuncSignature{
+		ArgTypes:   argTypes,
+		ReturnType: returnType,
+	}
+	return s
 }
 
 // SetMaxDepth sets the maximum allowed AST nesting depth.
@@ -266,8 +297,36 @@ func (v *validator) validate(expr Expression, depth int) error {
 				return err
 			}
 		}
+		if err := v.validateFuncArgs(e); err != nil {
+			return err
+		}
 	}
 
+	return nil
+}
+
+// validateFuncArgs checks argument count and types for registered custom functions.
+func (v *validator) validateFuncArgs(expr *FunctionCallExpr) error {
+	if v.schema.customFuncs == nil {
+		return nil
+	}
+	sig, ok := v.schema.customFuncs[strings.ToLower(expr.Name)]
+	if !ok {
+		return nil // built-in function, skip custom validation
+	}
+	if sig.ArgTypes == nil {
+		return nil // no type constraints
+	}
+	if len(expr.Arguments) != len(sig.ArgTypes) {
+		return fmt.Errorf("function %s expects %d arguments, got %d", expr.Name, len(sig.ArgTypes), len(expr.Arguments))
+	}
+	for i, argExpr := range expr.Arguments {
+		if argType, ok := v.resolveFieldType(argExpr); ok {
+			if argType != sig.ArgTypes[i] {
+				return fmt.Errorf("function %s argument %d: expected %s, got %s", expr.Name, i+1, sig.ArgTypes[i], argType)
+			}
+		}
+	}
 	return nil
 }
 

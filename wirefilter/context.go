@@ -2,11 +2,15 @@ package wirefilter
 
 import "net"
 
+// FuncHandler is the type for user-defined function handlers.
+type FuncHandler func(args []Value) (Value, error)
+
 // ExecutionContext holds the runtime values for fields that are evaluated during filter execution.
 type ExecutionContext struct {
 	fields map[string]Value
 	lists  map[string]ArrayValue
 	tables map[string]MapValue
+	funcs  map[string]FuncHandler
 }
 
 // NewExecutionContext creates a new empty execution context.
@@ -87,6 +91,19 @@ func (ctx *ExecutionContext) SetMapField(name string, value map[string]string) *
 // Returns the context to allow method chaining.
 func (ctx *ExecutionContext) SetMapFieldValues(name string, value map[string]Value) *ExecutionContext {
 	ctx.fields[name] = MapValue(value)
+	return ctx
+}
+
+// SetMapArrayField sets a map field where each key maps to an array of Values.
+// This supports any value types in the arrays (strings, ints, floats, IPs, CIDRs, etc.).
+// Useful for HTTP headers, ACL rules, and similar map[string][]T structures.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) SetMapArrayField(name string, value map[string][]Value) *ExecutionContext {
+	m := make(MapValue, len(value))
+	for k, values := range value {
+		m[k] = ArrayValue(values)
+	}
+	ctx.fields[name] = m
 	return ctx
 }
 
@@ -216,4 +233,25 @@ func (ctx *ExecutionContext) SetTableIPList(name string, data map[string][]strin
 func (ctx *ExecutionContext) GetTable(name string) (MapValue, bool) {
 	val, ok := ctx.tables[name]
 	return val, ok
+}
+
+// SetFunc registers a user-defined function handler in the execution context.
+// The handler will be called when the function is invoked in a filter expression.
+// Returns the context to allow method chaining.
+func (ctx *ExecutionContext) SetFunc(name string, handler FuncHandler) *ExecutionContext {
+	if ctx.funcs == nil {
+		ctx.funcs = make(map[string]FuncHandler)
+	}
+	ctx.funcs[name] = handler
+	return ctx
+}
+
+// GetFunc retrieves a user-defined function handler from the execution context.
+// Returns the handler and true if found, or nil and false if not found.
+func (ctx *ExecutionContext) GetFunc(name string) (FuncHandler, bool) {
+	if ctx.funcs == nil {
+		return nil, false
+	}
+	fn, ok := ctx.funcs[name]
+	return fn, ok
 }

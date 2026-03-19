@@ -76,6 +76,10 @@ func FuzzParser(f *testing.F) {
 	f.Add(`$geo[ip.src] == "US"`)
 	f.Add(`role in $allowed[dept]`)
 	f.Add(`$config["key"] == "val"`)
+	f.Add(`custom_func() == true`)
+	f.Add(`get_score(name) > 5.0`)
+	f.Add(`ip in get_cidrs(domain)`)
+	f.Add(`is_tor(ip) and maintenance()`)
 
 	f.Fuzz(func(_ *testing.T, input string) {
 		lexer := NewLexer(input)

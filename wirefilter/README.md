@@ -22,6 +22,7 @@ inspired by Cloudflare's Wirefilter.
 - Lookup tables: `$table_name[field]` for key-value lookups
 - Negated membership: `not in`, `not contains`
 - Built-in functions: `lower()`, `upper()`, `len()`, `starts_with()`, and more
+- User-defined functions: `maintenance()`, `get_score(domain)`, `is_tor(ip)`
 - Field-to-field comparisons
 - IP/CIDR matching for IPv4 and IPv6
 - Regular expression matching
@@ -541,6 +542,61 @@ ctx := wirefilter.NewExecutionContext().
 // Expression: ip.src in $blocked_ips
 // Expression: ip.src not in $blocked_ips
 ```
+
+### User-Defined Functions
+
+Register custom functions for domain-specific logic that runs at evaluation time.
+Functions are registered in two steps: declare the signature on the schema (optional,
+for compile-time validation), then bind the handler on the execution context.
+
+```go
+// Step 1: Register signature on schema (optional, enables compile-time validation)
+schema := wirefilter.NewSchema().
+    AddField("smtp.sender.domain", wirefilter.TypeString).
+    AddField("src.ip", wirefilter.TypeIP).
+    RegisterFunction("maintenance", wirefilter.TypeBool, nil).
+    RegisterFunction("get_domain_score", wirefilter.TypeFloat, []wirefilter.Type{wirefilter.TypeString}).
+    RegisterFunction("is_tor", wirefilter.TypeBool, []wirefilter.Type{wirefilter.TypeIP})
+
+// Step 2: Compile the expression
+filter, _ := wirefilter.Compile(
+    `not is_tor(src.ip) and get_domain_score(smtp.sender.domain) > 5.0`,
+    schema,
+)
+
+// Step 3: Bind handlers on the execution context
+ctx := wirefilter.NewExecutionContext().
+    SetIPField("src.ip", srcIP).
+    SetStringField("smtp.sender.domain", senderDomain).
+    SetFunc("maintenance", func(args []wirefilter.Value) (wirefilter.Value, error) {
+        return wirefilter.BoolValue(isMaintenanceWindow()), nil
+    }).
+    SetFunc("get_domain_score", func(args []wirefilter.Value) (wirefilter.Value, error) {
+        domain := string(args[0].(wirefilter.StringValue))
+        score, err := reputationDB.GetScore(domain)
+        return wirefilter.FloatValue(score), err
+    }).
+    SetFunc("is_tor", func(args []wirefilter.Value) (wirefilter.Value, error) {
+        ip := args[0].(wirefilter.IPValue).IP
+        return wirefilter.BoolValue(torExitNodes.Contains(ip)), nil
+    })
+
+result, _ := filter.Execute(ctx)
+```
+
+Functions can return any value type. A function returning `ArrayValue` with `CIDRValue`
+elements works with `in`:
+
+```go
+// ip.src in get_spf_cidrs(smtp.sender.domain)
+ctx.SetFunc("get_spf_cidrs", func(args []wirefilter.Value) (wirefilter.Value, error) {
+    domain := string(args[0].(wirefilter.StringValue))
+    cidrs := spfResolver.GetCIDRs(domain)
+    // return ArrayValue of CIDRValue...
+})
+```
+
+If a function handler is not bound at runtime, it returns nil (same as a missing field).
 
 ### Expression Hash
 

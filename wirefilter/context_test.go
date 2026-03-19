@@ -243,4 +243,68 @@ func TestExecutionContext(t *testing.T) {
 		_, ok = ctx.GetTable("geo")
 		assert.True(t, ok)
 	})
+
+	t.Run("set and get func", func(t *testing.T) {
+		handler := func(_ []Value) (Value, error) {
+			return BoolValue(true), nil
+		}
+		ctx := NewExecutionContext().SetFunc("is_admin", handler)
+		fn, ok := ctx.GetFunc("is_admin")
+		assert.True(t, ok)
+		assert.NotNil(t, fn)
+
+		result, err := fn(nil)
+		assert.NoError(t, err)
+		assert.Equal(t, BoolValue(true), result)
+	})
+
+	t.Run("set and get map array field with strings", func(t *testing.T) {
+		ctx := NewExecutionContext().
+			SetMapArrayField("headers", map[string][]Value{
+				"Accept":       {StringValue("text/html"), StringValue("application/json")},
+				"Content-Type": {StringValue("application/json")},
+			})
+		val, ok := ctx.GetField("headers")
+		assert.True(t, ok)
+		assert.Equal(t, TypeMap, val.Type())
+
+		m := val.(MapValue)
+		accept, ok := m.Get("Accept")
+		assert.True(t, ok)
+		arr := accept.(ArrayValue)
+		assert.Len(t, arr, 2)
+		assert.Equal(t, StringValue("text/html"), arr[0])
+		assert.Equal(t, StringValue("application/json"), arr[1])
+	})
+
+	t.Run("set and get map array field with mixed types", func(t *testing.T) {
+		_, ipNet, _ := net.ParseCIDR("10.0.0.0/8")
+		ctx := NewExecutionContext().
+			SetMapArrayField("rules", map[string][]Value{
+				"ports":  {IntValue(80), IntValue(443)},
+				"scores": {FloatValue(1.5), FloatValue(2.5)},
+				"flags":  {BoolValue(true), BoolValue(false)},
+				"nets":   {CIDRValue{IPNet: ipNet}},
+			})
+		val, ok := ctx.GetField("rules")
+		assert.True(t, ok)
+
+		m := val.(MapValue)
+		ports, ok := m.Get("ports")
+		assert.True(t, ok)
+		arr := ports.(ArrayValue)
+		assert.Len(t, arr, 2)
+		assert.Equal(t, IntValue(80), arr[0])
+
+		nets, ok := m.Get("nets")
+		assert.True(t, ok)
+		netArr := nets.(ArrayValue)
+		assert.Equal(t, TypeCIDR, netArr[0].Type())
+	})
+
+	t.Run("get missing func", func(t *testing.T) {
+		ctx := NewExecutionContext()
+		_, ok := ctx.GetFunc("missing")
+		assert.False(t, ok)
+	})
 }

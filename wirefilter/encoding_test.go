@@ -1,6 +1,7 @@
 package wirefilter
 
 import (
+	"net"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -64,6 +65,11 @@ func TestMarshalUnmarshal(t *testing.T) {
 		{"table lookup scalar", `$geo[ip] == "US"`},
 		{"table lookup with in", `name in $allowed[dept]`},
 		{"table lookup literal key", `$config["mode"] == "prod"`},
+		{"udf no args", `maintenance() == true`},
+		{"udf with arg", `get_score(name) > 5.0`},
+		{"udf with ip arg", `is_tor(ip) == true`},
+		{"udf in operator", `ip in get_cidrs(name)`},
+		{"udf combined", `is_tor(ip) and get_score(name) > 3.0`},
 	}
 
 	for _, tt := range expressions {
@@ -107,7 +113,20 @@ func TestMarshalUnmarshal(t *testing.T) {
 				SetTable("config", map[string]string{"mode": "prod"}).
 				SetTableList("allowed", map[string][]string{"eng": {"dev", "sre"}}).
 				SetStringField("dept", "eng").
-				SetStringField("name", "dev")
+				SetStringField("name", "dev").
+				SetFunc("maintenance", func(_ []Value) (Value, error) {
+					return BoolValue(true), nil
+				}).
+				SetFunc("get_score", func(_ []Value) (Value, error) {
+					return FloatValue(7.5), nil
+				}).
+				SetFunc("is_tor", func(_ []Value) (Value, error) {
+					return BoolValue(false), nil
+				}).
+				SetFunc("get_cidrs", func(_ []Value) (Value, error) {
+					_, ipNet, _ := net.ParseCIDR("192.168.0.0/16")
+					return ArrayValue{CIDRValue{IPNet: ipNet}}, nil
+				})
 
 			origResult, origErr := original.Execute(ctx)
 			restoredResult, restoredErr := restored.Execute(ctx)
@@ -263,6 +282,9 @@ func FuzzMarshalUnmarshal(f *testing.F) {
 	f.Add(`$geo[ip] == "US"`)
 	f.Add(`role in $allowed[dept]`)
 	f.Add(`$config["mode"] == "prod"`)
+	f.Add(`maintenance() == true`)
+	f.Add(`get_score(name) > 5.0`)
+	f.Add(`is_tor(ip) and name == "test"`)
 
 	f.Fuzz(func(t *testing.T, expr string) {
 		filter, err := Compile(expr, nil)

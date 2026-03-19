@@ -1,6 +1,7 @@
 package wirefilter
 
 import (
+	"fmt"
 	"math"
 	"net"
 	"regexp"
@@ -217,6 +218,10 @@ func FuzzCompile(f *testing.F) {
 	f.Add(`difference(a, b)`)
 	f.Add(`contains_any(a, b)`)
 	f.Add(`contains_all(a, b)`)
+	f.Add(`custom_func() == true`)
+	f.Add(`get_score(name) > 5.0`)
+	f.Add(`is_tor(ip) and name == "test"`)
+	f.Add(`ip in get_cidrs(name)`)
 	f.Add(`x + 1 > 5`)
 	f.Add(`x * 2 == 10`)
 	f.Add(`x / 3 == 1`)
@@ -265,6 +270,8 @@ func FuzzExecuteMultiType(f *testing.F) {
 	f.Add(`len(name) > count`, "hello", "x", int64(3), "10.0.0.1")
 	f.Add(`$geo[ip] == "US"`, "x", "US", int64(0), "10.0.0.1")
 	f.Add(`name in $allowed[value]`, "dev", "eng", int64(0), "10.0.0.1")
+	f.Add(`custom_func() == true`, "x", "x", int64(0), "10.0.0.1")
+	f.Add(`get_score(name) > 5.0`, "test", "x", int64(0), "10.0.0.1")
 
 	f.Fuzz(func(_ *testing.T, expression, strVal1, strVal2 string, intVal int64, ipVal string) {
 		filter, err := Compile(expression, nil)
@@ -285,7 +292,13 @@ func FuzzExecuteMultiType(f *testing.F) {
 			SetIPList("nets", []string{"10.0.0.0/8", "192.168.0.0/16"}).
 			SetTable("geo", map[string]string{ipVal: "US", strVal1: strVal2}).
 			SetTableList("allowed", map[string][]string{strVal1: {strVal2}}).
-			SetTableIPList("blocked", map[string][]string{"office": {"10.0.0.0/8"}})
+			SetTableIPList("blocked", map[string][]string{"office": {"10.0.0.0/8"}}).
+			SetFunc("custom_func", func(_ []Value) (Value, error) {
+				return BoolValue(true), nil
+			}).
+			SetFunc("get_score", func(_ []Value) (Value, error) {
+				return FloatValue(7.5), nil
+			})
 
 		_, _ = filter.Execute(ctx)
 	})
@@ -6335,4 +6348,208 @@ func TestArithmeticOperators(t *testing.T) {
 		_, err = Compile(`name + 1 == 6`, schema)
 		assert.Error(t, err)
 	})
+}
+
+func TestUserDefinedFunctions(t *testing.T) {
+	t.Run("simple bool function", func(t *testing.T) {
+		filter, err := Compile(`maintenance() == true`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetFunc("maintenance", func(_ []Value) (Value, error) {
+				return BoolValue(true), nil
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function with string arg returning float", func(t *testing.T) {
+		filter, err := Compile(`get_score(domain) > 5.0`, nil)
+		require.NoError(t, err)
+
+		scores := map[string]float64{"example.com": 8.5, "spam.com": 2.0}
+		ctx := NewExecutionContext().
+			SetStringField("domain", "example.com").
+			SetFunc("get_score", func(args []Value) (Value, error) {
+				domain := string(args[0].(StringValue))
+				return FloatValue(scores[domain]), nil
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function with IP arg returning bool", func(t *testing.T) {
+		filter, err := Compile(`is_tor(src.ip) == true`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("src.ip", "1.2.3.4").
+			SetFunc("is_tor", func(_ []Value) (Value, error) {
+				return BoolValue(true), nil
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function returning array for in operator", func(t *testing.T) {
+		filter, err := Compile(`ip.src in get_allowed_ips(zone)`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "10.0.0.5").
+			SetStringField("zone", "office").
+			SetFunc("get_allowed_ips", func(_ []Value) (Value, error) {
+				return ArrayValue{
+					CIDRValue{IPNet: mustParseCIDR("10.0.0.0/8")},
+				}, nil
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function returning CIDR for in operator", func(t *testing.T) {
+		filter, err := Compile(`ip.src in get_network(zone)`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip.src", "192.168.1.50").
+			SetStringField("zone", "lan").
+			SetFunc("get_network", func(_ []Value) (Value, error) {
+				return CIDRValue{IPNet: mustParseCIDR("192.168.0.0/16")}, nil
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("function not registered returns nil", func(t *testing.T) {
+		filter, err := Compile(`unknown_func("test") == "x"`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext()
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("function returning error", func(t *testing.T) {
+		filter, err := Compile(`failing() == true`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetFunc("failing", func(_ []Value) (Value, error) {
+				return nil, fmt.Errorf("database unavailable")
+			})
+		_, err = filter.Execute(ctx)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "database unavailable")
+	})
+
+	t.Run("combined with arithmetic", func(t *testing.T) {
+		filter, err := Compile(`get_score(domain) * 2 > 10`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetStringField("domain", "test.com").
+			SetFunc("get_score", func(_ []Value) (Value, error) {
+				return FloatValue(6.0), nil
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("combined with logical operators", func(t *testing.T) {
+		filter, err := Compile(`is_tor(ip) and get_score(domain) < 3.0`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetIPField("ip", "1.2.3.4").
+			SetStringField("domain", "spam.com").
+			SetFunc("is_tor", func(_ []Value) (Value, error) {
+				return BoolValue(true), nil
+			}).
+			SetFunc("get_score", func(_ []Value) (Value, error) {
+				return FloatValue(1.5), nil
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("schema validates registered function", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("domain", TypeString).
+			RegisterFunction("get_score", TypeFloat, []Type{TypeString})
+
+		_, err := Compile(`get_score(domain) > 5.0`, schema)
+		assert.NoError(t, err)
+	})
+
+	t.Run("schema rejects unregistered function in allowlist mode", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("domain", TypeString).
+			SetFunctionMode(FunctionModeAllowlist).
+			RegisterFunction("get_score", TypeFloat, nil)
+
+		_, err := Compile(`get_score(domain) > 5.0`, schema)
+		assert.NoError(t, err)
+
+		_, err = Compile(`unknown(domain) > 5.0`, schema)
+		assert.Error(t, err)
+	})
+
+	t.Run("schema validates argument count", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("domain", TypeString).
+			RegisterFunction("get_score", TypeFloat, []Type{TypeString})
+
+		_, err := Compile(`get_score(domain, domain) > 5.0`, schema)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "expects 1 arguments, got 2")
+	})
+
+	t.Run("schema validates argument type", func(t *testing.T) {
+		schema := NewSchema().
+			AddField("domain", TypeString).
+			AddField("count", TypeInt).
+			RegisterFunction("get_score", TypeFloat, []Type{TypeString})
+
+		_, err := Compile(`get_score(count) > 5.0`, schema)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "expected String, got Int")
+	})
+
+	t.Run("schema allows nil arg types (skip validation)", func(t *testing.T) {
+		schema := NewSchema().
+			RegisterFunction("maintenance", TypeBool, nil)
+
+		_, err := Compile(`maintenance() == true`, schema)
+		assert.NoError(t, err)
+	})
+
+	t.Run("no args function", func(t *testing.T) {
+		filter, err := Compile(`maintenance()`, nil)
+		require.NoError(t, err)
+
+		ctx := NewExecutionContext().
+			SetFunc("maintenance", func(_ []Value) (Value, error) {
+				return BoolValue(false), nil
+			})
+		result, err := filter.Execute(ctx)
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+}
+
+func mustParseCIDR(s string) *net.IPNet {
+	_, ipNet, err := net.ParseCIDR(s)
+	if err != nil {
+		panic(err)
+	}
+	return ipNet
 }

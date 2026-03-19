@@ -857,6 +857,11 @@ func (f *Filter) evaluateFunctionCall(expr *FunctionCallExpr, ctx *ExecutionCont
 		return fn(args)
 	}
 
+	// Check user-defined functions in the execution context
+	if fn, ok := ctx.GetFunc(name); ok {
+		return fn(args)
+	}
+
 	return nil, nil
 }
 
