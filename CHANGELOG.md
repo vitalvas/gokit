@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.0](https://github.com/vitalvas/gokit/compare/v0.31.0...v0.32.0) (2026-03-19)
+
+
+### Features
+
+* move wirefiler ([cd0a9fd](https://github.com/vitalvas/gokit/commit/cd0a9fd611b3a84ff71284d56579bfb310a441eb))
+
 ## [0.31.0](https://github.com/vitalvas/gokit/compare/v0.30.0...v0.31.0) (2026-03-19)
 
 
