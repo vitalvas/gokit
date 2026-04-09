@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.34.0](https://github.com/vitalvas/gokit/compare/v0.33.0...v0.34.0) (2026-04-09)
+
+
+### Features
+
+* add arccache adaptive replacement cache package ([2151909](https://github.com/vitalvas/gokit/commit/2151909298980eff86f36cf76ad7530955489a14))
+
+
+### Bug Fixes
+
+* use struct-based config for findBoundaryInSlice in fastcdc ([516df75](https://github.com/vitalvas/gokit/commit/516df750b939d3a2da54b276e2ec9607d4b7782f))
+
 ## [0.33.0](https://github.com/vitalvas/gokit/compare/v0.32.0...v0.33.0) (2026-04-09)
 
 
