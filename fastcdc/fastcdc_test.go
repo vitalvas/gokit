@@ -980,7 +980,13 @@ func BenchmarkFindBoundary(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = findBoundaryInSlice(data, 32*1024, 256*1024, 64*1024, maskS, maskL)
+		_ = findBoundaryInSlice(data, boundaryParams{
+			minSize: 32 * 1024,
+			maxSize: 256 * 1024,
+			avgSize: 64 * 1024,
+			maskS:   maskS,
+			maskL:   maskL,
+		})
 	}
 }
 
@@ -1061,7 +1067,13 @@ func BenchmarkChunkBytesNoHash_10MB(b *testing.B) {
 		remaining := len(data)
 
 		for remaining > 0 {
-			chunkLen := findBoundaryInSlice(data[offset:], config.MinSize, config.MaxSize, config.AvgSize, maskS, maskL)
+			chunkLen := findBoundaryInSlice(data[offset:], boundaryParams{
+				minSize: config.MinSize,
+				maxSize: config.MaxSize,
+				avgSize: config.AvgSize,
+				maskS:   maskS,
+				maskL:   maskL,
+			})
 			offset += uint64(chunkLen)
 			remaining -= chunkLen
 		}
@@ -1147,7 +1159,13 @@ func BenchmarkChunkSizesNoHash(b *testing.B) {
 				remaining := len(data)
 
 				for remaining > 0 {
-					chunkLen := findBoundaryInSlice(data[offset:], cfg.minSize, cfg.maxSize, cfg.avgSize, maskS, maskL)
+					chunkLen := findBoundaryInSlice(data[offset:], boundaryParams{
+						minSize: cfg.minSize,
+						maxSize: cfg.maxSize,
+						avgSize: cfg.avgSize,
+						maskS:   maskS,
+						maskL:   maskL,
+					})
 					offset += uint64(chunkLen)
 					remaining -= chunkLen
 				}

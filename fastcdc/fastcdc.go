@@ -361,7 +361,13 @@ func ChunkBytes(data []byte, config Config) ([]*Chunk, error) {
 	remaining := len(data)
 
 	for remaining > 0 {
-		chunkLen := findBoundaryInSlice(data[offset:], config.MinSize, config.MaxSize, config.AvgSize, maskS, maskL)
+		chunkLen := findBoundaryInSlice(data[offset:], boundaryParams{
+			minSize: config.MinSize,
+			maxSize: config.MaxSize,
+			avgSize: config.AvgSize,
+			maskS:   maskS,
+			maskL:   maskL,
+		})
 
 		chunk := &Chunk{
 			Offset: offset,
@@ -427,7 +433,13 @@ func (c *Chunker) fillBuffer() error {
 
 // findBoundary finds the next chunk boundary using FastCDC algorithm
 func (c *Chunker) findBoundary() int {
-	return findBoundaryInSlice(c.buf[c.bufStart:c.bufEnd], c.config.MinSize, c.config.MaxSize, c.config.AvgSize, c.maskS, c.maskL)
+	return findBoundaryInSlice(c.buf[c.bufStart:c.bufEnd], boundaryParams{
+		minSize: c.config.MinSize,
+		maxSize: c.config.MaxSize,
+		avgSize: c.config.AvgSize,
+		maskS:   c.maskS,
+		maskL:   c.maskL,
+	})
 }
 
 // bufferLen returns the available data length in the buffer
@@ -435,29 +447,38 @@ func (c *Chunker) bufferLen() int {
 	return c.bufEnd - c.bufStart
 }
 
+// boundaryParams holds the parameters for FastCDC boundary detection.
+type boundaryParams struct {
+	minSize uint64
+	maxSize uint64
+	avgSize uint64
+	maskS   uint64
+	maskL   uint64
+}
+
 // findBoundaryInSlice implements the core FastCDC boundary detection
-func findBoundaryInSlice(data []byte, minSize, maxSize, avgSize uint64, maskS, maskL uint64) int {
+func findBoundaryInSlice(data []byte, p boundaryParams) int {
 	dataLen := uint64(len(data))
 
-	if dataLen <= minSize {
+	if dataLen <= p.minSize {
 		return int(dataLen)
 	}
 
 	// Limit search to maxSize
-	searchLen := min(dataLen, maxSize)
+	searchLen := min(dataLen, p.maxSize)
 
 	var fingerprint uint64
 
 	// Skip minSize bytes (gear hash doesn't affect boundary before minSize)
-	i := minSize
+	i := p.minSize
 
 	// Phase 1: Before average size, use stricter mask (maskS)
 	// This makes it harder to find a boundary, resulting in larger chunks
-	normalPoint := min(avgSize, searchLen)
+	normalPoint := min(p.avgSize, searchLen)
 
 	for ; i < normalPoint; i++ {
 		fingerprint = (fingerprint << 1) + gearTable[data[i]]
-		if (fingerprint & maskS) == 0 {
+		if (fingerprint & p.maskS) == 0 {
 			return int(i + 1)
 		}
 	}
@@ -466,7 +487,7 @@ func findBoundaryInSlice(data []byte, minSize, maxSize, avgSize uint64, maskS, m
 	// This makes it easier to find a boundary
 	for ; i < searchLen; i++ {
 		fingerprint = (fingerprint << 1) + gearTable[data[i]]
-		if (fingerprint & maskL) == 0 {
+		if (fingerprint & p.maskL) == 0 {
 			return int(i + 1)
 		}
 	}
