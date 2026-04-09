@@ -8,6 +8,7 @@ The following libraries will be released in v1.0.0:
 
 - **arccache** - Adaptive Replacement Cache (ARC) with TTL, byte-size tracking, and self-tuning eviction
 - **bloomfilter** - High-performance Bloom filter with optimized bit-level operations
+- **countmin** - Count-min sketch for frequency estimation in data streams
 - **cuckoo** - Cuckoo filter for approximate set membership with deletion support
 - **ewma** - Exponentially weighted moving average for smoothing time series data and rate calculation
 - **fastcdc** - Fast Content-Defined Chunking with gear rolling hash and configurable hash algorithms
@@ -21,5 +22,7 @@ The following libraries will be released in v1.0.0:
 - **xsemver** - Semantic versioning with lenient parsing, comparison, constraints, version increment, and diff
 - **xcmd** - Periodic task execution and signal handling for long-running processes
 - **xconfig** - Flexible configuration library supporting multiple formats and sources
+- **xdigits** - Numeric utilities for float rounding with precision and random integer generation
 - **xentropy** - Shannon and min-entropy calculator for randomness and security assessment
 - **xnet** - Network utilities for IP addresses and CIDR blocks (containment, merging, splitting, fast matching, PROXY protocol v1/v2)
+- **xstrings** - String manipulation and glob pattern matching utilities
