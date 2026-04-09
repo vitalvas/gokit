@@ -6,6 +6,7 @@ Cemetery of libraries
 
 The following libraries will be released in v1.0.0:
 
+- **arccache** - Adaptive Replacement Cache (ARC) with TTL, byte-size tracking, and self-tuning eviction
 - **bloomfilter** - High-performance Bloom filter with optimized bit-level operations
 - **cuckoo** - Cuckoo filter for approximate set membership with deletion support
 - **ewma** - Exponentially weighted moving average for smoothing time series data and rate calculation
