@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.0](https://github.com/vitalvas/gokit/compare/v0.32.0...v0.33.0) (2026-04-09)
+
+
+### Features
+
+* add fixedwindow rate limiter package ([962d8f9](https://github.com/vitalvas/gokit/commit/962d8f92ab386d518b0bffa9093dec058b434fed))
+
 ## [0.32.0](https://github.com/vitalvas/gokit/compare/v0.31.0...v0.32.0) (2026-03-19)
 
 
