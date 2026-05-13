@@ -175,6 +175,25 @@ func (c *Counter) IsLockedOut(key string) bool {
 	return e.lockedOut
 }
 
+// WindowExpiry returns the time when the current window for the given key
+// expires. Returns zero time if the key has no active window.
+func (c *Counter) WindowExpiry(key string) time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	e, ok := c.entries[key]
+	if !ok {
+		return time.Time{}
+	}
+
+	if time.Now().After(e.windowEnd) {
+		delete(c.entries, key)
+		return time.Time{}
+	}
+
+	return e.windowEnd
+}
+
 // Reset clears all tracked keys and their counters.
 func (c *Counter) Reset() {
 	c.mu.Lock()

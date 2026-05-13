@@ -316,6 +316,64 @@ func TestIsLockedOut(t *testing.T) {
 	})
 }
 
+func TestWindowExpiry(t *testing.T) {
+	t.Run("non-existent key", func(t *testing.T) {
+		c := New(time.Minute, 100, 0)
+		defer c.Stop()
+
+		assert.True(t, c.WindowExpiry("unknown").IsZero())
+	})
+
+	t.Run("active key returns future time", func(t *testing.T) {
+		c := New(time.Minute, 100, 0)
+		defer c.Stop()
+
+		before := time.Now()
+		c.Add("key1", 1)
+		expiry := c.WindowExpiry("key1")
+
+		assert.False(t, expiry.IsZero())
+		assert.True(t, expiry.After(before))
+		assert.True(t, expiry.Before(before.Add(2*time.Minute)))
+	})
+
+	t.Run("expired key returns zero time", func(t *testing.T) {
+		c := New(50*time.Millisecond, 100, 0)
+		defer c.Stop()
+
+		c.Add("key1", 1)
+		time.Sleep(80 * time.Millisecond)
+
+		assert.True(t, c.WindowExpiry("key1").IsZero())
+	})
+
+	t.Run("expired key is removed", func(t *testing.T) {
+		c := New(50*time.Millisecond, 100, 0)
+		defer c.Stop()
+
+		c.Add("key1", 1)
+		assert.Equal(t, 1, c.Len())
+
+		time.Sleep(80 * time.Millisecond)
+		c.WindowExpiry("key1")
+
+		assert.Equal(t, 0, c.Len())
+	})
+
+	t.Run("consistent with window duration", func(t *testing.T) {
+		window := 200 * time.Millisecond
+		c := New(window, 100, 0)
+		defer c.Stop()
+
+		before := time.Now()
+		c.Add("key1", 1)
+		expiry := c.WindowExpiry("key1")
+
+		expected := before.Add(window)
+		assert.InDelta(t, expected.UnixMilli(), expiry.UnixMilli(), 50)
+	})
+}
+
 func TestReset(t *testing.T) {
 	t.Run("clears all entries", func(t *testing.T) {
 		c := New(time.Minute, 100, 0)
