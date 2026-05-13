@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.1](https://github.com/vitalvas/gokit/compare/v0.34.0...v0.34.1) (2026-05-13)
+
+
+### Bug Fixes
+
+* **fixedwindow:** add WindowExpiry method to expose window end time ([89b03c5](https://github.com/vitalvas/gokit/commit/89b03c5ffdf8f9bd932d96631e793b68e2522fee))
+
 ## [0.34.0](https://github.com/vitalvas/gokit/compare/v0.33.0...v0.34.0) (2026-04-09)
 
 
