@@ -105,7 +105,7 @@ func processDurationFields(data map[string]interface{}, configValue reflect.Valu
 				// Convert to nanoseconds (int64) for JSON unmarshaling
 				data[jsonFieldName] = int64(duration)
 			}
-		case field.Kind() == reflect.Ptr && field.Type().Elem() == reflect.TypeOf(time.Duration(0)):
+		case field.Kind() == reflect.Pointer && field.Type().Elem() == reflect.TypeOf(time.Duration(0)):
 			// Handle *time.Duration fields
 			if strVal, ok := fieldData.(string); ok {
 				duration, err := time.ParseDuration(strVal)
@@ -122,7 +122,7 @@ func processDurationFields(data map[string]interface{}, configValue reflect.Valu
 					return err
 				}
 			}
-		case field.Kind() == reflect.Ptr && field.Type().Elem().Kind() == reflect.Struct:
+		case field.Kind() == reflect.Pointer && field.Type().Elem().Kind() == reflect.Struct:
 			// Handle pointers to structs
 			if nestedMap, ok := fieldData.(map[string]interface{}); ok {
 				// Create a new struct value to process

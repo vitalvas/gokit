@@ -189,7 +189,7 @@ func expandMacrosInValue(v reflect.Value, re *regexp.Regexp) {
 				v.SetMapIndex(key, newValue)
 			}
 		}
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if !v.IsNil() {
 			expandMacrosInValue(v.Elem(), re)
 		}

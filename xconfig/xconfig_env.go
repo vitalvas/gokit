@@ -114,7 +114,7 @@ func loadFromEnvRecursive(v reflect.Value, prefix string) error {
 				if err := loadFromEnvRecursive(field, envKey); err != nil {
 					return err
 				}
-			} else if field.Kind() == reflect.Ptr && !field.IsNil() {
+			} else if field.Kind() == reflect.Pointer && !field.IsNil() {
 				if err := loadFromEnvRecursive(field.Elem(), envKey); err != nil {
 					return err
 				}
@@ -264,7 +264,7 @@ func setFieldFromEnv(field reflect.Value, fieldType reflect.StructField, envKey 
 	separator := getEnvSeparator(fieldType)
 
 	switch field.Kind() {
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if field.IsNil() {
 			field.Set(reflect.New(field.Type().Elem()))
 		}

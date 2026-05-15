@@ -9,7 +9,7 @@ import (
 
 func validateConfigPointer(config interface{}) (reflect.Value, error) {
 	configValue := reflect.ValueOf(config)
-	if configValue.Kind() != reflect.Ptr || configValue.IsNil() {
+	if configValue.Kind() != reflect.Pointer || configValue.IsNil() {
 		return reflect.Value{}, fmt.Errorf("config must be a non-nil pointer")
 	}
 	configElem := configValue.Elem()
@@ -75,7 +75,7 @@ func copyValues(dst, src reflect.Value) error {
 			}
 			dst.Set(newMap)
 		}
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if !src.IsNil() {
 			if dst.IsNil() {
 				dst.Set(reflect.New(dst.Type().Elem()))
@@ -140,7 +140,7 @@ func applyDefaultTagsRecursive(v reflect.Value) error {
 				}
 			}
 		}
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if v.IsNil() && v.CanSet() {
 			v.Set(reflect.New(v.Type().Elem()))
 		}
@@ -184,7 +184,7 @@ func callDefaultMethodsRecursive(v reflect.Value) error {
 				}
 			}
 		}
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if v.IsNil() && v.CanSet() {
 			v.Set(reflect.New(v.Type().Elem()))
 		}
@@ -253,7 +253,7 @@ func applyDefaultTag(field reflect.Value, fieldType reflect.StructField) error {
 			return fmt.Errorf("float default value %q overflows field %s of type %s", defaultValue, fieldType.Name, field.Type())
 		}
 		field.SetFloat(val)
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if field.IsNil() {
 			field.Set(reflect.New(field.Type().Elem()))
 		}
