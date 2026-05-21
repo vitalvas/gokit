@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.35.0](https://github.com/vitalvas/gokit/compare/v0.34.1...v0.35.0) (2026-05-21)
+
+
+### Features
+
+* **xstrings:** add GlobMatchSegments for segment-aware glob matching ([a13bedc](https://github.com/vitalvas/gokit/commit/a13bedc88f4ebfec61cc5ff5bce883ed6ac264d9))
+
+
+### Bug Fixes
+
+* **xconfig:** replace deprecated reflect.Ptr with reflect.Pointer ([3737deb](https://github.com/vitalvas/gokit/commit/3737deb0fcdc8dad89fa8e9f6c42f01828658a42))
+
 ## [0.34.1](https://github.com/vitalvas/gokit/compare/v0.34.0...v0.34.1) (2026-05-13)
 
 
