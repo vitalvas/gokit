@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.1](https://github.com/vitalvas/gokit/compare/v0.35.0...v0.35.1) (2026-06-08)
+
+
+### Bug Fixes
+
+* **deps:** update module golang.org/x/sys to v0.46.0 ([f1ff764](https://github.com/vitalvas/gokit/commit/f1ff764a0796e616707b9c26c7ce8d25905fab35))
+
 ## [0.35.0](https://github.com/vitalvas/gokit/compare/v0.34.1...v0.35.0) (2026-05-21)
 
 
