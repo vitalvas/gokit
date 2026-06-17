@@ -7,12 +7,10 @@ import (
 
 // prime is a 256-bit prime number used for the finite field.
 // This is the prime from the secp256k1 curve: 2^256 - 2^32 - 977
-var prime *big.Int
-
-func init() {
-	prime = new(big.Int)
-	prime.SetString("115792089237316195423570985008687907853269984665640564039457584007908834671663", 10)
-}
+var prime = func() *big.Int {
+	p, _ := new(big.Int).SetString("115792089237316195423570985008687907853269984665640564039457584007908834671663", 10)
+	return p
+}()
 
 // Prime returns a copy of the prime used for the finite field.
 func Prime() *big.Int {
