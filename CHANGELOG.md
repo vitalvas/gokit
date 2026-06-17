@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.36.0](https://github.com/vitalvas/gokit/compare/v0.35.0...v0.36.0) (2026-06-17)
+
+
+### Features
+
+* **xnet:** add UDP packet conn and PROXY v2 TLV support ([537bb5e](https://github.com/vitalvas/gokit/commit/537bb5e762d87e9dd787d5048cccedaa2fb5a8db))
+
+
+### Bug Fixes
+
+* **deps:** update module golang.org/x/sys to v0.46.0 ([f1ff764](https://github.com/vitalvas/gokit/commit/f1ff764a0796e616707b9c26c7ce8d25905fab35))
+
 ## [0.35.0](https://github.com/vitalvas/gokit/compare/v0.34.1...v0.35.0) (2026-05-21)
 
 
