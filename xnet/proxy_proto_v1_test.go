@@ -3,6 +3,7 @@ package xnet
 import (
 	"bufio"
 	"bytes"
+	"net"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -155,10 +156,17 @@ func TestParseProxyV1(t *testing.T) {
 
 			require.NotNil(t, header.SourceAddr)
 			require.NotNil(t, header.DestAddr)
-			assert.Equal(t, tt.wantSrcIP, header.SourceAddr.IP.String())
-			assert.Equal(t, tt.wantSrcP, header.SourceAddr.Port)
-			assert.Equal(t, tt.wantDstIP, header.DestAddr.IP.String())
-			assert.Equal(t, tt.wantDstP, header.DestAddr.Port)
+			assert.Equal(t, ProxyTransportTCP, header.Transport)
+
+			src, ok := header.SourceAddr.(*net.TCPAddr)
+			require.True(t, ok)
+			dst, ok := header.DestAddr.(*net.TCPAddr)
+			require.True(t, ok)
+
+			assert.Equal(t, tt.wantSrcIP, src.IP.String())
+			assert.Equal(t, tt.wantSrcP, src.Port)
+			assert.Equal(t, tt.wantDstIP, dst.IP.String())
+			assert.Equal(t, tt.wantDstP, dst.Port)
 		})
 	}
 }

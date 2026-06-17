@@ -349,6 +349,9 @@ Listener wrapper for PROXY protocol v1 (text) and v2 (binary) support. Used by l
 
 - PROXY protocol v1 (TCP4, TCP6, UNKNOWN)
 - PROXY protocol v2 (IPv4, IPv6, Unix sockets, LOCAL/PROXY commands)
+- PROXY protocol v2 TLV vectors, including the AWS VPC endpoint ID TLV
+- TCP stream listener and UDP packet connection wrappers
+- TCP and UDP transport preserved on parsed addresses
 - Strict and auto-detect modes
 - Configurable header read timeout
 - Trusted proxy CIDR filtering
@@ -459,6 +462,57 @@ if header != nil {
 }
 ```
 
+`ProxyHeader.SourceAddr` and `DestAddr` are `net.Addr` values. Their concrete
+type follows the declared transport: `*net.TCPAddr` for TCP and `*net.UDPAddr`
+for UDP. The `Transport` field reports the protocol explicitly.
+
+```go
+header := proxyConn.ProxyHeader()
+switch header.Transport {
+case xnet.ProxyTransportTCP:
+    tcp := header.SourceAddr.(*net.TCPAddr)
+    fmt.Println("TCP client:", tcp)
+case xnet.ProxyTransportUDP:
+    udp := header.SourceAddr.(*net.UDPAddr)
+    fmt.Println("UDP client:", udp)
+}
+```
+
+### TLV Vectors
+
+PROXY protocol v2 headers can carry additional Type-Length-Value (TLV) vectors
+after the address block. They are parsed into `ProxyHeader.TLVs` in the order
+they appear, and looked up by type with `ProxyHeader.TLV`.
+
+```go
+header := proxyConn.ProxyHeader()
+
+for _, tlv := range header.TLVs {
+    fmt.Printf("TLV type=0x%02X len=%d\n", tlv.Type, len(tlv.Value))
+}
+
+if value, ok := header.TLV(xnet.PP2TypeAWS); ok {
+    fmt.Printf("AWS TLV: % x\n", value)
+}
+```
+
+#### AWS VPC Endpoint ID
+
+A Network Load Balancer fronting a VPC endpoint service adds a vendor TLV
+(`PP2_TYPE_AWS`, type `0xEA`) with the `PP2_SUBTYPE_AWS_VPCE_ID` subtype
+(`0x01`) carrying the endpoint ID. `VPCEndpointID` decodes it directly.
+
+```go
+header := proxyConn.ProxyHeader()
+
+if id, ok := header.VPCEndpointID(); ok {
+    fmt.Println("VPC endpoint ID:", id) // e.g. vpce-08d2bf15fac5001c9
+}
+```
+
+TLVs are also available on UDP datagrams read through `ReadFromProxy`, so the
+same `VPCEndpointID` accessor works for UDP and `TCP_UDP` target groups.
+
 ### Configuration Options
 
 | Option | Type | Description |
@@ -475,6 +529,73 @@ if header != nil {
 | `ErrProxyProtoInvalid` | Malformed PROXY protocol header |
 | `ErrProxyProtoUntrusted` | Connection from untrusted source (when TrustedProxies configured) |
 | `ErrProxyProtoUnknownProto` | Unknown protocol version (strict mode) |
+
+### UDP Support
+
+UDP is connectionless, so it uses a `net.PacketConn` wrapper instead of a
+listener. Each datagram is expected to be prefixed with a PROXY protocol v2
+header (v1 is text and TCP-only, so it is not defined for datagrams). The
+wrapper strips the header from received datagrams and reports the original
+client address.
+
+**Receiving PROXY datagrams:**
+```go
+pc, err := xnet.ProxyProtoListenPacket("udp", ":5353", xnet.ProxyProtoUDPConfig{
+    Mode: xnet.ProxyProtoModeStrict,
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+buf := make([]byte, 1500)
+
+// ReadFrom returns the original client address from the PROXY header
+n, clientAddr, err := pc.ReadFrom(buf)
+fmt.Printf("%d bytes from %s\n", n, clientAddr)
+
+// Replies addressed to the client are routed back through the proxy
+pc.WriteTo([]byte("response"), clientAddr)
+```
+
+**Inspecting the header and proxy sender:**
+```go
+// ReadFromProxy also returns the parsed header and the real datagram sender
+n, header, sender, err := pc.ReadFromProxy(buf)
+if header != nil {
+    fmt.Println("Client:", header.SourceAddr) // original client (from header)
+    fmt.Println("Proxy:", sender)             // address that delivered the datagram
+}
+```
+
+**Sending PROXY datagrams to a backend:**
+```go
+src := &net.UDPAddr{IP: net.ParseIP("203.0.113.7"), Port: 40000}
+dst := &net.UDPAddr{IP: net.ParseIP("10.0.0.5"), Port: 5353}
+
+// Prepends a PROXY v2 header declaring src as the original source
+pc.WriteToProxy([]byte("payload"), src, dst)
+```
+
+**Wrapping an existing packet connection:**
+```go
+raw, _ := net.ListenPacket("udp", ":5353")
+pc := xnet.NewProxyProtoPacketConn(raw, xnet.ProxyProtoUDPConfig{
+    Mode: xnet.ProxyProtoModeAuto,
+})
+```
+
+#### UDP Configuration Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `Mode` | `ProxyProtoMode` | `ProxyProtoModeStrict` (default) or `ProxyProtoModeAuto` |
+| `TrustedProxies` | `[]net.IPNet` | CIDRs allowed to send PROXY headers |
+| `MaxDatagramSize` | `int` | Read buffer size per datagram (0 = 65535) |
+
+In auto mode, datagrams from untrusted sources (or that lack a valid PROXY v2
+header) are delivered verbatim with a nil header. In strict mode, datagrams
+without a valid header are rejected with `ErrProxyProtoUnknownProto`, and
+datagrams from untrusted sources with `ErrProxyProtoUntrusted`.
 
 ## Use Cases
 

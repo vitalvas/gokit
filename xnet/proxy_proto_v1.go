@@ -95,6 +95,7 @@ func parseProxyV1(reader *bufio.Reader) (*ProxyHeader, error) {
 	return &ProxyHeader{
 		SourceAddr: &net.TCPAddr{IP: srcIP, Port: srcPort},
 		DestAddr:   &net.TCPAddr{IP: dstIP, Port: dstPort},
+		Transport:  ProxyTransportTCP,
 	}, nil
 }
 

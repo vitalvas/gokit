@@ -174,7 +174,51 @@ func TestProxyProtoConn(t *testing.T) {
 
 		header := proxyConn.ProxyHeader()
 		require.NotNil(t, header)
-		assert.Equal(t, "10.0.0.1", header.SourceAddr.IP.String())
+		assert.Equal(t, ProxyTransportTCP, header.Transport)
+		assert.Equal(t, "10.0.0.1:54321", header.SourceAddr.String())
+	})
+
+	t.Run("exposes AWS VPC endpoint ID from v2 TLV", func(t *testing.T) {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		defer listener.Close()
+
+		proxyListener := NewProxyProtoListener(listener, ProxyProtoConfig{
+			HeaderTimeout: 5 * time.Second,
+		})
+
+		go func() {
+			conn, err := net.Dial("tcp", listener.Addr().String())
+			require.NoError(t, err)
+			defer conn.Close()
+
+			header := buildProxyV2HeaderWithTLVs(proxyV2CmdProxy, proxyV2FamilyTCPv4,
+				net.ParseIP("172.16.0.1").To4(),
+				net.ParseIP("172.16.0.2").To4(),
+				11111, 9090,
+				awsVPCEndpointTLV("vpce-08d2bf15fac5001c9"))
+			_, err = conn.Write(header)
+			require.NoError(t, err)
+
+			_, err = conn.Write([]byte("payload"))
+			require.NoError(t, err)
+		}()
+
+		conn, err := proxyListener.Accept()
+		require.NoError(t, err)
+		defer conn.Close()
+
+		assert.Equal(t, "172.16.0.1:11111", conn.RemoteAddr().String())
+
+		proxyConn := conn.(*ProxyProtoConn)
+		id, ok := proxyConn.ProxyHeader().VPCEndpointID()
+		assert.True(t, ok)
+		assert.Equal(t, "vpce-08d2bf15fac5001c9", id)
+
+		buf := make([]byte, 7)
+		_, err = io.ReadFull(conn, buf)
+		require.NoError(t, err)
+		assert.Equal(t, "payload", string(buf))
 	})
 }
 

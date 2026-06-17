@@ -208,10 +208,83 @@ func (l *proxyProtoListener) wrapReaderConn(conn net.Conn, reader *bufio.Reader)
 	}
 }
 
+// ProxyTransport identifies the transport protocol carried by a PROXY header.
+type ProxyTransport int
+
+const (
+	// ProxyTransportUnspec means the transport protocol is unknown or unspecified
+	// (PROXY v1 UNKNOWN, PROXY v2 LOCAL/UNSPEC, or Unix sockets).
+	ProxyTransportUnspec ProxyTransport = iota
+
+	// ProxyTransportTCP means the proxied connection is a TCP stream.
+	ProxyTransportTCP
+
+	// ProxyTransportUDP means the proxied connection is a UDP datagram flow.
+	ProxyTransportUDP
+)
+
+// PROXY protocol v2 TLV types.
+const (
+	// PP2TypeAWS is the AWS vendor-specific TLV type (PP2_TYPE_AWS).
+	PP2TypeAWS byte = 0xEA
+)
+
+// AWS PP2_TYPE_AWS subtypes (the first octet of the TLV value).
+const (
+	// PP2SubtypeAWSVPCEID identifies the VPC endpoint ID subtype
+	// (PP2_SUBTYPE_AWS_VPCE_ID).
+	PP2SubtypeAWSVPCEID byte = 0x01
+)
+
+// ProxyTLV is a single PROXY protocol v2 Type-Length-Value vector. Value holds
+// the raw bytes following the type and length fields.
+type ProxyTLV struct {
+	Type  byte
+	Value []byte
+}
+
 // ProxyHeader contains parsed PROXY protocol header information.
+//
+// SourceAddr and DestAddr hold the original client and destination addresses.
+// Their concrete type matches Transport: *net.TCPAddr for TCP and *net.UDPAddr
+// for UDP. They are nil for headers without address information (PROXY v1
+// UNKNOWN, PROXY v2 LOCAL/UNSPEC, or Unix sockets).
 type ProxyHeader struct {
-	SourceAddr *net.TCPAddr
-	DestAddr   *net.TCPAddr
+	SourceAddr net.Addr
+	DestAddr   net.Addr
+
+	// Transport is the transport protocol declared by the header.
+	Transport ProxyTransport
+
+	// TLVs holds the additional Type-Length-Value vectors carried by a
+	// PROXY protocol v2 header, in the order they appear. It is nil for v1
+	// headers and for v2 headers without TLVs.
+	TLVs []ProxyTLV
+}
+
+// TLV returns the value of the first TLV with the given type and whether such a
+// TLV is present.
+func (h *ProxyHeader) TLV(typ byte) ([]byte, bool) {
+	for _, tlv := range h.TLVs {
+		if tlv.Type == typ {
+			return tlv.Value, true
+		}
+	}
+
+	return nil, false
+}
+
+// VPCEndpointID returns the AWS VPC endpoint ID carried by the PP2_TYPE_AWS TLV
+// with the PP2_SUBTYPE_AWS_VPCE_ID subtype, and whether it is present. Network
+// Load Balancers fronting a VPC endpoint service add this TLV to the PROXY
+// protocol v2 header.
+func (h *ProxyHeader) VPCEndpointID() (string, bool) {
+	value, ok := h.TLV(PP2TypeAWS)
+	if !ok || len(value) < 1 || value[0] != PP2SubtypeAWSVPCEID {
+		return "", false
+	}
+
+	return string(value[1:]), true
 }
 
 // ProxyProtoConn wraps a net.Conn with PROXY protocol information.
