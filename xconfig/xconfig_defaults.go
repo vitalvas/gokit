@@ -140,6 +140,16 @@ func applyDefaultTagsRecursive(v reflect.Value) error {
 				}
 			}
 		}
+	case reflect.Map:
+		// Map values are not addressable, so copy each value out, recurse, and write it back
+		for _, key := range v.MapKeys() {
+			elem := reflect.New(v.Type().Elem()).Elem()
+			elem.Set(v.MapIndex(key))
+			if err := applyDefaultTagsRecursive(elem); err != nil {
+				return err
+			}
+			v.SetMapIndex(key, elem)
+		}
 	case reflect.Pointer:
 		if v.IsNil() && v.CanSet() {
 			v.Set(reflect.New(v.Type().Elem()))
@@ -183,6 +193,16 @@ func callDefaultMethodsRecursive(v reflect.Value) error {
 					return err
 				}
 			}
+		}
+	case reflect.Map:
+		// Map values are not addressable, so copy each value out, recurse, and write it back
+		for _, key := range v.MapKeys() {
+			elem := reflect.New(v.Type().Elem()).Elem()
+			elem.Set(v.MapIndex(key))
+			if err := callDefaultMethodsRecursive(elem); err != nil {
+				return err
+			}
+			v.SetMapIndex(key, elem)
 		}
 	case reflect.Pointer:
 		if v.IsNil() && v.CanSet() {

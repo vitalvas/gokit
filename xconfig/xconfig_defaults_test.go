@@ -495,3 +495,129 @@ func TestDefaultTagWithSlices(t *testing.T) {
 		assert.Equal(t, "LOCAL_QUORUM", cfg.Cassandra.Clusters[1].ConsistencyLevel)
 	})
 }
+
+func TestDefaultTagWithMaps(t *testing.T) {
+	t.Run("default tags in map values", func(t *testing.T) {
+		type ClusterConfig struct {
+			ID               string
+			Hosts            []string
+			Port             int           `default:"9042"`
+			Keyspace         string        `default:"system"`
+			ConnectTimeout   time.Duration `default:"2s"`
+			ConsistencyLevel string        `default:"LOCAL_QUORUM"`
+		}
+
+		type Config struct {
+			Clusters map[string]ClusterConfig
+		}
+
+		cfg := Config{
+			Clusters: map[string]ClusterConfig{
+				"primary": {
+					ID:    "cluster1",
+					Hosts: []string{"host1", "host2"},
+				},
+				"secondary": {
+					ID:    "cluster2",
+					Hosts: []string{"host3", "host4"},
+				},
+			},
+		}
+
+		err := Load(&cfg)
+		require.NoError(t, err)
+
+		for _, name := range []string{"primary", "secondary"} {
+			cluster := cfg.Clusters[name]
+			assert.Equal(t, 9042, cluster.Port, name)
+			assert.Equal(t, "system", cluster.Keyspace, name)
+			assert.Equal(t, 2*time.Second, cluster.ConnectTimeout, name)
+			assert.Equal(t, "LOCAL_QUORUM", cluster.ConsistencyLevel, name)
+		}
+
+		// Existing non-zero values are preserved
+		assert.Equal(t, "cluster1", cfg.Clusters["primary"].ID)
+		assert.Equal(t, []string{"host1", "host2"}, cfg.Clusters["primary"].Hosts)
+		assert.Equal(t, "cluster2", cfg.Clusters["secondary"].ID)
+	})
+
+	t.Run("default tags in pointer map values", func(t *testing.T) {
+		type ClusterConfig struct {
+			ID   string
+			Port int `default:"9042"`
+		}
+
+		type Config struct {
+			Clusters map[string]*ClusterConfig
+		}
+
+		cfg := Config{
+			Clusters: map[string]*ClusterConfig{
+				"primary": {ID: "cluster1"},
+			},
+		}
+
+		err := Load(&cfg)
+		require.NoError(t, err)
+
+		require.NotNil(t, cfg.Clusters["primary"])
+		assert.Equal(t, "cluster1", cfg.Clusters["primary"].ID)
+		assert.Equal(t, 9042, cfg.Clusters["primary"].Port)
+	})
+
+	t.Run("default method in map values", func(t *testing.T) {
+		type CassandraConfig struct {
+			Clusters map[string]ClusterWithDefaultMethod
+		}
+
+		type Config struct {
+			Cassandra CassandraConfig
+		}
+
+		cfg := Config{
+			Cassandra: CassandraConfig{
+				Clusters: map[string]ClusterWithDefaultMethod{
+					"primary": {
+						ID:    "cluster1",
+						Name:  "Cluster 1",
+						Hosts: []string{"host1", "host2"},
+					},
+				},
+			},
+		}
+
+		err := Load(&cfg)
+		require.NoError(t, err)
+
+		cluster := cfg.Cassandra.Clusters["primary"]
+		assert.Equal(t, "cluster1", cluster.ID)
+		assert.Equal(t, "Cluster 1", cluster.Name)
+		assert.Equal(t, []string{"host1", "host2"}, cluster.Hosts)
+		assert.Equal(t, 9042, cluster.Port)
+		assert.Equal(t, "system", cluster.Keyspace)
+		assert.Equal(t, 2*time.Second, cluster.ConnectTimeout)
+		assert.Equal(t, 5*time.Second, cluster.Timeout)
+		assert.Equal(t, 2, cluster.NumConns)
+		assert.Equal(t, "LOCAL_QUORUM", cluster.ConsistencyLevel)
+	})
+
+	t.Run("invalid default tag in map value propagates error", func(t *testing.T) {
+		type BadEntry struct {
+			BadBool bool `default:"not_a_bool"`
+		}
+
+		type Config struct {
+			Entries map[string]BadEntry
+		}
+
+		cfg := Config{
+			Entries: map[string]BadEntry{
+				"key": {},
+			},
+		}
+
+		err := Load(&cfg)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid boolean default value")
+	})
+}
