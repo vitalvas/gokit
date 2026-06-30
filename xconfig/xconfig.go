@@ -140,6 +140,17 @@ func Load(config interface{}, options ...Option) error {
 		}
 	}
 
+	// Apply defaults to map entries and slice elements that were created while
+	// loading sources. The first defaults pass runs before sources are loaded,
+	// so containers populated during loading would otherwise miss their
+	// defaults. This pass only descends into maps and slices, leaving
+	// already-processed top-level struct fields untouched so loaded values are
+	// preserved. Default tags only fill zero values, and Default() methods run
+	// once per newly created element.
+	if err := applyContainerDefaults(configElem, opts.customDefault == nil); err != nil {
+		return fmt.Errorf("failed to apply container defaults: %w", err)
+	}
+
 	return nil
 }
 

@@ -621,3 +621,216 @@ func TestDefaultTagWithMaps(t *testing.T) {
 		assert.Contains(t, err.Error(), "invalid boolean default value")
 	})
 }
+
+func TestDefaultsInContainersFromSources(t *testing.T) {
+	writeFile := func(t *testing.T, content string) string {
+		t.Helper()
+		f, err := os.CreateTemp("", "container-defaults-*.yaml")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.Remove(f.Name()) })
+		_, err = f.WriteString(content)
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+		return f.Name()
+	}
+
+	t.Run("default tags in map value loaded from file", func(t *testing.T) {
+		type Item struct {
+			Type     string `yaml:"type" default:"openai"`
+			Name     string `yaml:"name"`
+			Position string `yaml:"position" default:"append"`
+		}
+
+		type Root struct {
+			Items map[string]Item `yaml:"items"`
+			Top   string          `yaml:"top" default:"deftop"`
+		}
+
+		file := writeFile(t, "items:\n  a:\n    name: foo\n")
+
+		var r Root
+		err := Load(&r, WithFiles(file))
+		require.NoError(t, err)
+
+		assert.Equal(t, "deftop", r.Top)
+		assert.Equal(t, "openai", r.Items["a"].Type)
+		assert.Equal(t, "foo", r.Items["a"].Name)
+		assert.Equal(t, "append", r.Items["a"].Position)
+	})
+
+	t.Run("loaded value in map is not overridden by default", func(t *testing.T) {
+		type Item struct {
+			Type     string `yaml:"type" default:"openai"`
+			Position string `yaml:"position" default:"append"`
+		}
+
+		type Root struct {
+			Items map[string]Item `yaml:"items"`
+		}
+
+		file := writeFile(t, "items:\n  a:\n    type: anthropic\n")
+
+		var r Root
+		err := Load(&r, WithFiles(file))
+		require.NoError(t, err)
+
+		assert.Equal(t, "anthropic", r.Items["a"].Type)
+		assert.Equal(t, "append", r.Items["a"].Position)
+	})
+
+	t.Run("default tags in pointer map value loaded from file", func(t *testing.T) {
+		type Item struct {
+			Type string `yaml:"type" default:"openai"`
+			Name string `yaml:"name"`
+		}
+
+		type Root struct {
+			Items map[string]*Item `yaml:"items"`
+		}
+
+		file := writeFile(t, "items:\n  a:\n    name: foo\n")
+
+		var r Root
+		err := Load(&r, WithFiles(file))
+		require.NoError(t, err)
+
+		require.NotNil(t, r.Items["a"])
+		assert.Equal(t, "openai", r.Items["a"].Type)
+		assert.Equal(t, "foo", r.Items["a"].Name)
+	})
+
+	t.Run("default tags in slice element loaded from file", func(t *testing.T) {
+		type Item struct {
+			Type string `yaml:"type" default:"openai"`
+			Name string `yaml:"name"`
+		}
+
+		type Root struct {
+			Items []Item `yaml:"items"`
+		}
+
+		file := writeFile(t, "items:\n  - name: foo\n  - name: bar\n")
+
+		var r Root
+		err := Load(&r, WithFiles(file))
+		require.NoError(t, err)
+
+		require.Len(t, r.Items, 2)
+		assert.Equal(t, "openai", r.Items[0].Type)
+		assert.Equal(t, "foo", r.Items[0].Name)
+		assert.Equal(t, "openai", r.Items[1].Type)
+		assert.Equal(t, "bar", r.Items[1].Name)
+	})
+
+	t.Run("nested map within map value loaded from file", func(t *testing.T) {
+		type Leaf struct {
+			Value string `yaml:"value" default:"leaf_default"`
+		}
+
+		type Branch struct {
+			Leaves map[string]Leaf `yaml:"leaves"`
+		}
+
+		type Root struct {
+			Branches map[string]Branch `yaml:"branches"`
+		}
+
+		file := writeFile(t, "branches:\n  b1:\n    leaves:\n      l1: {}\n")
+
+		var r Root
+		err := Load(&r, WithFiles(file))
+		require.NoError(t, err)
+
+		assert.Equal(t, "leaf_default", r.Branches["b1"].Leaves["l1"].Value)
+	})
+
+	t.Run("default method in map value loaded from file", func(t *testing.T) {
+		type Config struct {
+			Clusters map[string]ClusterWithDefaultMethod `yaml:"clusters"`
+		}
+
+		file := writeFile(t, "clusters:\n  primary:\n    name: Cluster 1\n")
+
+		var cfg Config
+		err := Load(&cfg, WithFiles(file))
+		require.NoError(t, err)
+
+		cluster := cfg.Clusters["primary"]
+		assert.Equal(t, "Cluster 1", cluster.Name)
+		assert.Equal(t, 9042, cluster.Port)
+		assert.Equal(t, "system", cluster.Keyspace)
+		assert.Equal(t, "LOCAL_QUORUM", cluster.ConsistencyLevel)
+	})
+
+	t.Run("default method does not override existing struct fields from source", func(t *testing.T) {
+		// Regression guard: the second defaults pass must not re-run Default()
+		// on top-level struct fields, which would reset values loaded from
+		// sources that the method does not explicitly preserve.
+		require.NoError(t, os.Setenv("DB_HOST", "envhost"))
+		require.NoError(t, os.Setenv("DB_PORT", "5433"))
+		defer func() {
+			_ = os.Unsetenv("DB_HOST")
+			_ = os.Unsetenv("DB_PORT")
+		}()
+
+		var cfg TestConfig
+		err := Load(&cfg, WithEnv("-"))
+		require.NoError(t, err)
+
+		assert.Equal(t, "envhost", cfg.DB.Host)
+		assert.Equal(t, 5433, cfg.DB.Port)
+	})
+
+	t.Run("invalid default tag in map value loaded from file propagates error", func(t *testing.T) {
+		type Item struct {
+			BadBool bool `yaml:"bad_bool" default:"not_a_bool"`
+		}
+
+		type Root struct {
+			Items map[string]Item `yaml:"items"`
+		}
+
+		file := writeFile(t, "items:\n  a: {}\n")
+
+		var r Root
+		err := Load(&r, WithFiles(file))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid boolean default value")
+	})
+
+	t.Run("invalid default tag in slice element loaded from file propagates error", func(t *testing.T) {
+		type Item struct {
+			BadBool bool `yaml:"bad_bool" default:"not_a_bool"`
+		}
+
+		type Root struct {
+			Items []Item `yaml:"items"`
+		}
+
+		file := writeFile(t, "items:\n  - {}\n")
+
+		var r Root
+		err := Load(&r, WithFiles(file))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid boolean default value")
+	})
+
+	t.Run("unexported fields in map value are skipped", func(t *testing.T) {
+		type Item struct {
+			Type string `yaml:"type" default:"openai"`
+			//nolint:unused // present to exercise the unexported field skip path
+			hidden string
+		}
+
+		type Root struct {
+			Items map[string]Item `yaml:"items"`
+		}
+
+		file := writeFile(t, "items:\n  a: {}\n")
+
+		var r Root
+		err := Load(&r, WithFiles(file))
+		require.NoError(t, err)
+		assert.Equal(t, "openai", r.Items["a"].Type)
+	})
+}

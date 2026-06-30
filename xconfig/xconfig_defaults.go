@@ -216,6 +216,67 @@ func callDefaultMethodsRecursive(v reflect.Value) error {
 	return nil
 }
 
+// applyContainerDefaults applies defaults to elements held inside maps and
+// slices, without re-processing the struct fields that directly hold them. It
+// is used after sources are loaded so that map entries and slice elements
+// created during loading receive their defaults, while values already set on
+// existing struct fields are left untouched. When callMethods is true, each
+// freshly handled element also has its Default() methods invoked.
+func applyContainerDefaults(v reflect.Value, callMethods bool) error {
+	switch v.Kind() {
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			field := v.Field(i)
+			if !field.CanSet() {
+				continue
+			}
+			if err := applyContainerDefaults(field, callMethods); err != nil {
+				return err
+			}
+		}
+	case reflect.Slice:
+		for i := 0; i < v.Len(); i++ {
+			elem := v.Index(i)
+			if !elem.CanSet() {
+				continue
+			}
+			if err := applyDefaultsToElement(elem, callMethods); err != nil {
+				return err
+			}
+		}
+	case reflect.Map:
+		for _, key := range v.MapKeys() {
+			elem := reflect.New(v.Type().Elem()).Elem()
+			elem.Set(v.MapIndex(key))
+			if err := applyDefaultsToElement(elem, callMethods); err != nil {
+				return err
+			}
+			v.SetMapIndex(key, elem)
+		}
+	case reflect.Pointer:
+		if !v.IsNil() {
+			return applyContainerDefaults(v.Elem(), callMethods)
+		}
+	}
+
+	return nil
+}
+
+// applyDefaultsToElement applies default tags and, optionally, Default()
+// methods to a single map or slice element, then keeps descending into any
+// containers nested within it.
+func applyDefaultsToElement(elem reflect.Value, callMethods bool) error {
+	if err := applyDefaultTagsRecursive(elem); err != nil {
+		return err
+	}
+	if callMethods {
+		if err := callDefaultMethodsRecursive(elem); err != nil {
+			return err
+		}
+	}
+	return applyContainerDefaults(elem, callMethods)
+}
+
 func applyDefaultTag(field reflect.Value, fieldType reflect.StructField) error {
 	defaultValue := fieldType.Tag.Get("default")
 	if defaultValue == "" {
