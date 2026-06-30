@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.1](https://github.com/vitalvas/gokit/compare/v0.36.0...v0.36.1) (2026-06-30)
+
+
+### Bug Fixes
+
+* **xconfig:** apply default tags and Default() to struct map values ([8a06887](https://github.com/vitalvas/gokit/commit/8a0688734c45951319effb3c6d33c05c0f628ccf))
+
 ## [0.36.0](https://github.com/vitalvas/gokit/compare/v0.35.0...v0.36.0) (2026-06-17)
 
 
