@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.2](https://github.com/vitalvas/gokit/compare/v0.36.1...v0.36.2) (2026-06-30)
+
+
+### Bug Fixes
+
+* **xconfig:** apply defaults to map and slice entries from sources ([eadffda](https://github.com/vitalvas/gokit/commit/eadffda4af8cb85c0f9f91513b168af05b0c789e))
+
 ## [0.36.1](https://github.com/vitalvas/gokit/compare/v0.36.0...v0.36.1) (2026-06-30)
 
 
