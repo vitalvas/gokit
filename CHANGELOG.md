@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.3](https://github.com/vitalvas/gokit/compare/v0.36.2...v0.36.3) (2026-08-26)
+
+
+### Bug Fixes
+
+* **xconfig:** keep nil scalar pointers without defaults nil ([d65fd2b](https://github.com/vitalvas/gokit/commit/d65fd2bd706091011b39a70af03c7660f9e14217))
+
 ## [0.36.2](https://github.com/vitalvas/gokit/compare/v0.36.1...v0.36.2) (2026-06-30)
 
 
