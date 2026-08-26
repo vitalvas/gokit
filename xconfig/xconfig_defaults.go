@@ -151,11 +151,22 @@ func applyDefaultTagsRecursive(v reflect.Value) error {
 			v.SetMapIndex(key, elem)
 		}
 	case reflect.Pointer:
-		if v.IsNil() && v.CanSet() {
-			v.Set(reflect.New(v.Type().Elem()))
-		}
 		if !v.IsNil() {
 			return applyDefaultTagsRecursive(v.Elem())
+		}
+		// For a nil pointer, allocate a temporary, apply any nested defaults,
+		// and only commit the allocation if something was actually set. This
+		// keeps pointers with no reachable default (e.g. *bool) nil, preserving
+		// the unset-vs-zero distinction, while still materializing pointers to
+		// structs whose fields carry default: tags.
+		if v.CanSet() {
+			tmp := reflect.New(v.Type().Elem())
+			if err := applyDefaultTagsRecursive(tmp.Elem()); err != nil {
+				return err
+			}
+			if !tmp.Elem().IsZero() {
+				v.Set(tmp)
+			}
 		}
 	}
 
@@ -205,11 +216,21 @@ func callDefaultMethodsRecursive(v reflect.Value) error {
 			v.SetMapIndex(key, elem)
 		}
 	case reflect.Pointer:
-		if v.IsNil() && v.CanSet() {
-			v.Set(reflect.New(v.Type().Elem()))
-		}
 		if !v.IsNil() {
 			return callDefaultMethodsRecursive(v.Elem())
+		}
+		// Mirror applyDefaultTagsRecursive: allocate a temporary, run any
+		// Default() methods, and only commit if something was set. Nil scalar
+		// pointers with no Default() stay nil; nil struct pointers whose
+		// Default() populates fields get materialized.
+		if v.CanSet() {
+			tmp := reflect.New(v.Type().Elem())
+			if err := callDefaultMethodsRecursive(tmp.Elem()); err != nil {
+				return err
+			}
+			if !tmp.Elem().IsZero() {
+				v.Set(tmp)
+			}
 		}
 	}
 

@@ -235,6 +235,62 @@ func TestDefaultTag(t *testing.T) {
 		})
 	})
 
+	t.Run("nil scalar pointers without defaults stay nil", func(t *testing.T) {
+		type OptionalScalars struct {
+			Flag        *bool   `yaml:"flag"`
+			Count       *int    `yaml:"count"`
+			Name        *string `yaml:"name"`
+			Ratio       *float64
+			WithDefault *string `yaml:"with_default" default:"set"`
+		}
+
+		var cfg OptionalScalars
+		err := Load(&cfg)
+		require.NoError(t, err)
+
+		// Scalar pointers with no default: tag must remain nil so callers can
+		// distinguish "unset" from "explicitly false/zero".
+		assert.Nil(t, cfg.Flag)
+		assert.Nil(t, cfg.Count)
+		assert.Nil(t, cfg.Name)
+		assert.Nil(t, cfg.Ratio)
+
+		// A pointer that does carry a default: tag is still materialized.
+		require.NotNil(t, cfg.WithDefault)
+		assert.Equal(t, "set", *cfg.WithDefault)
+	})
+
+	t.Run("nil struct pointer with nested defaults is materialized", func(t *testing.T) {
+		type Inner struct {
+			Value string `default:"inner_default"`
+		}
+		type Outer struct {
+			Child *Inner
+		}
+
+		var cfg Outer
+		err := Load(&cfg)
+		require.NoError(t, err)
+
+		require.NotNil(t, cfg.Child)
+		assert.Equal(t, "inner_default", cfg.Child.Value)
+	})
+
+	t.Run("nil struct pointer with no reachable defaults stays nil", func(t *testing.T) {
+		type Inner struct {
+			Value string
+		}
+		type Outer struct {
+			Child *Inner
+		}
+
+		var cfg Outer
+		err := Load(&cfg)
+		require.NoError(t, err)
+
+		assert.Nil(t, cfg.Child)
+	})
+
 	t.Run("duration types", func(t *testing.T) {
 		t.Run("all duration fields use default tags", func(t *testing.T) {
 			var cfg DurationDefaultTagConfig
