@@ -49,6 +49,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	if p.Handled() {
+		return
+	}
 
 	fmt.Printf("name=%s verbose=%d\n", opts.Name, opts.Verbose)
 }
@@ -203,10 +206,7 @@ command-line argument > environment variable > default
 
 ## Validation and Callbacks
 
-Each option may carry a single `func(value) error`. The parser calls it once with the resolved value (after precedence is applied). If it returns an error, parsing fails with that error. This one function covers both use cases:
-
-- **Reaction** -- run code when the option is seen.
-- **Validation** -- reject an unacceptable value.
+Standalone func fields and builder `Func` callbacks run for each occurrence (or the environment/default fallback when absent). A callback paired with a value field, and callbacks registered through `Validate`, run once with the resolved value after precedence is applied. Paired callbacks receive the stored counter, slice, or map, including its accumulated values. The argument type must accept the value field's type. A returned error fails parsing.
 
 ### Via a struct func-field
 
@@ -241,7 +241,7 @@ p.Validate("port", func(v any) error {
 
 ## Required Options
 
-`required:"true"` makes parsing fail if the option is never set by any source (command line, environment, or default). It is independent of the value callback.
+`required:"true"` makes parsing fail unless the option is set by the command line or environment. A default does not satisfy this requirement. It is independent of the value callback.
 
 ```go
 type Options struct {
@@ -252,6 +252,8 @@ type Options struct {
 ## Optional Values
 
 An option marked `optional` may appear on the command line without a value. When it does, its `optional-value` is used (or the zero value if none is given). Setting `optional-value` implies `optional`.
+
+For slices, omission appends a zero element. Optional maps need an explicit `optional-value` containing a `key=value` pair.
 
 ```go
 type Options struct {
@@ -334,7 +336,10 @@ type ServerOptions struct {
 }
 
 p := xflags.New("app")
-server := p.AddCommand("server", &serverOpts)
+server, err := p.AddCommand("server", &serverOpts)
+if err != nil {
+	return err
+}
 server.SetDescription("run the server")
 ```
 
@@ -356,9 +361,11 @@ app server --port 9090
 app client connect --addr 127.0.0.1
 ```
 
+After parsing successfully, `p.SelectedCommand()` returns the deepest selected `*Command` (the root when no subcommand was selected). Compare it with the command returned by `AddCommand`, or use its `Name()` method, to dispatch application logic.
+
 ## Help
 
-`--help` and `-h` are added automatically to the root command and every subcommand. When present, the parser prints a formatted help message and stops. Help is handled internally; the caller does not need to check for it.
+`--help` and `-h` are added automatically to the root command and every subcommand unless overridden by user options. When present, the parser prints a formatted help message and stops parsing. `Parse` returns nil and `p.Handled()` returns true; the caller should then return without running application logic. Help and version skip required checks and final validation, including those on parent commands. Standalone callbacks that appeared earlier have already run.
 
 ```
 Usage:
@@ -395,9 +402,14 @@ p.SetVersion("1.2.3")
 
 `Parse` returns errors; it never calls `os.Exit`. The caller decides how to react. Built-in `--help` and `--version` are handled internally and do not surface as errors.
 
+Each `Parse` starts from destination values captured at the first parse, then resolves the current command line, environment, and defaults again. Failed parses may leave partial destination values and callback side effects; the next parse resets destinations and occurrence state. Parsers are not safe for concurrent use. `Handled()` resets on every parse. After an error, `SelectedCommand()` may describe a partially parsed path.
+
 ```go
 if err := p.Parse(os.Args[1:]); err != nil {
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)
+}
+if p.Handled() {
+	return
 }
 ```

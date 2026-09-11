@@ -106,3 +106,20 @@ func TestMergePreservesMetadata(t *testing.T) {
 		require.Error(t, p.AddGroup("", &o))
 	})
 }
+
+func TestMergedValueMetadata(t *testing.T) {
+	var seen int
+	o := struct {
+		Fn func(int) error `long:"n"`
+		N  int             `long:"n" short:"n" base:"16" optional-value:"ff" hidden:"true" value-name:"HEX" default:"a"`
+	}{Fn: func(n int) error { seen = n; return nil }}
+	p := New("app")
+	require.NoError(t, p.AddGroup("", &o))
+	require.NoError(t, p.Parse([]string{"-n"}))
+	assert.Equal(t, 255, o.N)
+	assert.Equal(t, 255, seen)
+	assert.NotContains(t, p.help(), "--n")
+	assert.Equal(t, "HEX", p.byLong["n"].ValueName)
+	require.NoError(t, p.Parse(nil))
+	assert.Equal(t, 10, o.N)
+}

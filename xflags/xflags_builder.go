@@ -3,6 +3,7 @@ package xflags
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 )
 
 // builderGroup returns the command's default builder group, creating it on
@@ -20,12 +21,13 @@ func (c *Command) builderGroup() *group {
 
 // optionSpec describes a builder-registered value option.
 type optionSpec struct {
-	ptr         any
-	short       string
-	long        string
-	def         string
-	description string
-	choice      choicePolicy
+	ptr          any
+	short        string
+	long         string
+	def          string
+	description  string
+	choice       choicePolicy
+	typedDefault any
 }
 
 // register wires a destination pointer into a new option and adds it.
@@ -46,7 +48,20 @@ func (c *Command) register(spec optionSpec) error {
 		choice:      spec.choice,
 		choiceSet:   true,
 	}
-	return c.addOption(opt, c.builderGroup())
+	if spec.typedDefault != nil {
+		opt.typedDefault = reflect.ValueOf(spec.typedDefault)
+		opt.defaultSet = true
+	}
+	return c.addBuilderOption(opt)
+}
+
+func (c *Command) addBuilderOption(opt *Option) error {
+	if err := c.addOption(opt, nil); err != nil {
+		return err
+	}
+	g := c.builderGroup()
+	g.options = append(g.options, opt)
+	return nil
 }
 
 // BoolVar registers a boolean switch bound to ptr.
@@ -56,36 +71,39 @@ func (c *Command) BoolVar(ptr *bool, long, short string, def bool, description s
 		defStr = "true"
 	}
 	return c.register(optionSpec{
-		ptr:         ptr,
-		short:       short,
-		long:        long,
-		def:         defStr,
-		description: description,
-		choice:      choiceLast,
+		ptr:          ptr,
+		short:        short,
+		long:         long,
+		def:          defStr,
+		description:  description,
+		choice:       choiceLast,
+		typedDefault: def,
 	})
 }
 
 // StringVar registers a string option bound to ptr.
 func (c *Command) StringVar(ptr *string, long, short, def, description string) error {
 	return c.register(optionSpec{
-		ptr:         ptr,
-		short:       short,
-		long:        long,
-		def:         def,
-		description: description,
-		choice:      choiceLast,
+		ptr:          ptr,
+		short:        short,
+		long:         long,
+		def:          def,
+		description:  description,
+		choice:       choiceLast,
+		typedDefault: def,
 	})
 }
 
 // IntVar registers an integer option bound to ptr.
 func (c *Command) IntVar(ptr *int, long, short string, def int, description string) error {
 	return c.register(optionSpec{
-		ptr:         ptr,
-		short:       short,
-		long:        long,
-		def:         itoa(def),
-		description: description,
-		choice:      choiceLast,
+		ptr:          ptr,
+		short:        short,
+		long:         long,
+		def:          strconv.Itoa(def),
+		description:  description,
+		choice:       choiceLast,
+		typedDefault: def,
 	})
 }
 
@@ -114,7 +132,7 @@ func (c *Command) Func(long, short, description string, fn func(string) error) e
 		choice:      choiceLast,
 		choiceSet:   true,
 	}
-	return c.addOption(opt, c.builderGroup())
+	return c.addBuilderOption(opt)
 }
 
 // SetHidden hides the named option from the help message.
@@ -142,6 +160,9 @@ func (c *Command) SetBase(long string, base int) error {
 	opt, ok := c.byLong[long]
 	if !ok {
 		return fmt.Errorf("xflags: no option named %q", long)
+	}
+	if base != 0 && (base < 2 || base > 36) {
+		return fmt.Errorf("xflags: invalid base %d", base)
 	}
 	opt.base = base
 	opt.baseSet = true

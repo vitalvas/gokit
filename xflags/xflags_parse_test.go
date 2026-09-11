@@ -678,3 +678,106 @@ func TestLooksLikeFlag(t *testing.T) {
 		})
 	}
 }
+
+func TestResolvedPairedCallbacks(t *testing.T) {
+	calls := 0
+	o := struct {
+		N     int             `long:"n"`
+		Check func(int) error `long:"n"`
+	}{Check: func(n int) error {
+		calls++
+		if n > 10 {
+			return errors.New("too large")
+		}
+		return nil
+	}}
+	p := New("app")
+	require.NoError(t, p.AddGroup("", &o))
+	require.NoError(t, p.Parse([]string{"--n=20", "--n=5"}))
+	assert.Equal(t, 5, o.N)
+	assert.Equal(t, 1, calls)
+	require.NoError(t, p.Parse(nil))
+	assert.Equal(t, 2, calls, "zero values must also be validated")
+	require.Error(t, p.Parse([]string{"--n=20"}))
+
+	var seenCount int
+	var seenTags []string
+	var seenMap map[string]int
+	containers := struct {
+		N      int                        `long:"n" choice:"count"`
+		NFn    func(int) error            `long:"n"`
+		Tags   []string                   `long:"tag"`
+		TagsFn func([]string) error       `long:"tag"`
+		Map    map[string]int             `long:"map"`
+		MapFn  func(map[string]int) error `long:"map"`
+	}{NFn: func(n int) error { seenCount = n; return nil }, TagsFn: func(v []string) error { seenTags = v; return nil }, MapFn: func(v map[string]int) error { seenMap = v; return nil }}
+	p = New("app")
+	require.NoError(t, p.AddGroup("", &containers))
+	require.NoError(t, p.Parse([]string{"--n", "--n", "--tag=a", "--tag=b", "--map=x=1", "--map=y=2"}))
+	assert.Equal(t, 2, seenCount)
+	assert.Equal(t, []string{"a", "b"}, seenTags)
+	assert.Equal(t, map[string]int{"x": 1, "y": 2}, seenMap)
+
+	var invalid struct {
+		N  int                `long:"n"`
+		Fn func(string) error `long:"n"`
+	}
+	require.Error(t, New("app").AddGroup("", &invalid))
+}
+
+func TestStandaloneCallbackOccurrences(t *testing.T) {
+	var seen []string
+	p := New("app")
+	require.NoError(t, p.Func("f", "", "", func(s string) error { seen = append(seen, s); return nil }))
+	require.NoError(t, p.Parse([]string{"--f=a", "--f=b"}))
+	assert.Equal(t, []string{"a", "b"}, seen)
+}
+
+func TestParseResetsSourcesAndDestinations(t *testing.T) {
+	t.Setenv("XF_REUSE", "first")
+	o := struct {
+		N      int               `long:"n" required:"true"`
+		Name   string            `long:"name" env:"XF_REUSE" default:"fallback"`
+		Tags   []string          `long:"tag"`
+		Labels map[string]string `long:"label"`
+		Ptr    *int              `long:"ptr"`
+	}{Tags: []string{"initial"}, Labels: map[string]string{"initial": "yes"}}
+	p := New("app")
+	require.NoError(t, p.AddGroup("", &o))
+	require.Error(t, p.Parse([]string{"--n=bad"}))
+	require.Error(t, p.Parse(nil))
+	require.NoError(t, p.Parse([]string{"--n=1", "--tag=a", "--label=x=y", "--ptr=9"}))
+	assert.Equal(t, "first", o.Name)
+	t.Setenv("XF_REUSE", "second")
+	require.NoError(t, p.Parse([]string{"--n=2"}))
+	assert.Equal(t, "second", o.Name)
+	assert.Equal(t, []string{"initial"}, o.Tags)
+	assert.Equal(t, map[string]string{"initial": "yes"}, o.Labels)
+	assert.Nil(t, o.Ptr)
+	t.Setenv("XF_REUSE", "")
+	require.NoError(t, p.Parse([]string{"--n=3"}))
+	assert.Equal(t, "fallback", o.Name)
+	require.Error(t, p.Parse(nil))
+}
+
+func TestOptionalZeroValues(t *testing.T) {
+	var o struct {
+		N     int             `long:"n" optional:"true"`
+		F     float64         `long:"f" optional:"true"`
+		D     time.Duration   `long:"d" optional:"true"`
+		Slice []int           `long:"slice" optional:"true"`
+		Fn    func(int) error `long:"fn" optional:"true"`
+	}
+	seen := -1
+	o.N, o.F, o.D = 9, 9, time.Second
+	o.Fn = func(n int) error { seen = n; return nil }
+	p := New("app")
+	require.NoError(t, p.AddGroup("", &o))
+	require.NoError(t, p.Parse([]string{"--n", "--f", "--d", "--slice", "--fn"}))
+	assert.Zero(t, o.N)
+	assert.Zero(t, o.F)
+	assert.Zero(t, o.D)
+	assert.Equal(t, []int{0}, o.Slice)
+	assert.Zero(t, seen)
+	require.Error(t, p.Parse([]string{"--n="}), "explicit empty numeric values are invalid")
+}

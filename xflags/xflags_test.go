@@ -74,3 +74,49 @@ func TestValidate(t *testing.T) {
 		assert.NotNil(t, p.byLong["port"].validate)
 	})
 }
+
+func TestRegistrationRollback(t *testing.T) {
+	p := New("app")
+	var a, b string
+	require.NoError(t, p.StringVar(&a, "a", "x", "", ""))
+	require.Error(t, p.StringVar(&b, "b", "x", "", ""))
+	require.Error(t, p.Parse([]string{"--b=leaked"}))
+	assert.Empty(t, b)
+
+	var bad struct {
+		Fn       func(string) error `long:"a" short:"x" hidden:"true"`
+		Sub      struct{}           `command:"sub"`
+		New      string             `long:"new"`
+		Conflict string             `short:"x"`
+	}
+	require.Error(t, p.AddGroup("bad", &bad))
+	assert.False(t, p.byLong["a"].callback.IsValid())
+	assert.False(t, p.byLong["a"].Hidden)
+	assert.NotContains(t, p.byCommand, "sub")
+	assert.NotContains(t, p.byLong, "new")
+	require.NoError(t, p.StringVar(&b, "b", "b", "", ""))
+	require.NoError(t, p.Parse([]string{"-b", "ok"}))
+	assert.Equal(t, "ok", b)
+}
+
+func TestInvalidRegistrationNames(t *testing.T) {
+	for _, name := range []string{"ab", "-", "=", " ", "\n"} {
+		p := New("app")
+		var b bool
+		require.Error(t, p.BoolVar(&b, "flag", name, false, ""))
+		assert.Empty(t, p.options)
+	}
+	for _, name := range []string{"-flag", "flag=value", "two words", "\n"} {
+		p := New("app")
+		var b bool
+		require.Error(t, p.BoolVar(&b, name, "", false, ""))
+		_, err := p.AddCommand(name, nil)
+		require.Error(t, err)
+	}
+	var n int
+	p := New("app")
+	require.NoError(t, p.IntVar(&n, "n", "", 0, ""))
+	for _, base := range []int{-1, 1, 37} {
+		require.Error(t, p.SetBase("n", base))
+	}
+}

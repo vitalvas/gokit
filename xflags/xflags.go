@@ -7,17 +7,12 @@ package xflags
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
-	"strconv"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 )
-
-// itoa formats an int for use as a default-value string.
-func itoa(n int) string {
-	if n == 0 {
-		return ""
-	}
-	return strconv.Itoa(n)
-}
 
 // ErrHelp is returned internally when the built-in help flag is triggered. It
 // is handled inside Parse and never surfaces to the caller.
@@ -55,6 +50,9 @@ type Option struct {
 	optional       bool   // the option's value may be omitted on the command line
 	optionalValue  string // value used when an optional option is given without one
 	optionalValSet bool   // whether optionalValue was set explicitly
+	defaultSet     bool
+	typedDefault   reflect.Value
+	initial        reflect.Value
 
 	value    reflect.Value // destination value (settable)
 	callback reflect.Value // optional func(T) error, invalid if none
@@ -78,7 +76,8 @@ type Command struct {
 	commands  []*Command         // subcommands, in declaration order
 	byCommand map[string]*Command
 
-	parent *Command
+	parent   *Command
+	selected *Command
 }
 
 // group is a named set of options for help organization.
@@ -90,7 +89,18 @@ type group struct {
 // Parser is the root of a command tree.
 type Parser struct {
 	*Command
+	handled bool
 }
+
+// SelectedCommand returns the deepest command reached by the last Parse.
+// It returns nil before parsing. After a parse error it may be a partial path.
+func (p *Parser) SelectedCommand() *Command { return p.selected }
+
+// Handled reports whether the last Parse printed built-in help or version.
+func (p *Parser) Handled() bool { return p.handled }
+
+// Name returns the command's name.
+func (c *Command) Name() string { return c.name }
 
 // New creates a new parser with the given program name.
 func New(name string) *Parser {
@@ -131,7 +141,9 @@ func (c *Command) AddGroup(title string, config any) error {
 	}
 
 	g := &group{title: title}
+	rollback := c.registrationRollback()
 	if err := c.collectStruct(elem, "", g); err != nil {
+		rollback()
 		return err
 	}
 	c.groups = append(c.groups, g)
@@ -141,6 +153,9 @@ func (c *Command) AddGroup(title string, config any) error {
 // AddCommand registers a subcommand whose options come from config. config may
 // be nil for a command that only groups further subcommands.
 func (c *Command) AddCommand(name string, config any) (*Command, error) {
+	if !validName(name) {
+		return nil, fmt.Errorf("xflags: invalid command name %q", name)
+	}
 	if _, exists := c.byCommand[name]; exists {
 		return nil, fmt.Errorf("xflags: duplicate command %q", name)
 	}
@@ -174,16 +189,26 @@ func (c *Command) addOption(opt *Option, g *group) error {
 	if opt.Long == "" && opt.Short == "" {
 		return fmt.Errorf("xflags: option must have a short or long name")
 	}
+	if (opt.Long != "" && !validName(opt.Long)) || (opt.Short != "" && (!validName(opt.Short) || utf8.RuneCountInString(opt.Short) != 1)) {
+		return fmt.Errorf("xflags: invalid option name %q/%q", opt.Long, opt.Short)
+	}
+	if err := opt.checkBinding(); err != nil {
+		return err
+	}
 	if opt.Long != "" {
 		if _, exists := c.byLong[opt.Long]; exists {
 			return fmt.Errorf("xflags: duplicate long option %q", opt.Long)
 		}
-		c.byLong[opt.Long] = opt
 	}
 	if opt.Short != "" {
 		if _, exists := c.byShort[opt.Short]; exists {
 			return fmt.Errorf("xflags: duplicate short option %q", opt.Short)
 		}
+	}
+	if opt.Long != "" {
+		c.byLong[opt.Long] = opt
+	}
+	if opt.Short != "" {
 		c.byShort[opt.Short] = opt
 	}
 	c.options = append(c.options, opt)
@@ -191,4 +216,28 @@ func (c *Command) addOption(opt *Option, g *group) error {
 		g.options = append(g.options, opt)
 	}
 	return nil
+}
+
+func validName(name string) bool {
+	return name != "" && utf8.ValidString(name) && !strings.HasPrefix(name, "-") &&
+		!strings.Contains(name, "=") && !strings.ContainsFunc(name, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) })
+}
+
+// registrationRollback restores the registry, including metadata merged into
+// existing options, if a group declaration fails partway through.
+func (c *Command) registrationRollback() func() {
+	before := *c
+	before.byLong = maps.Clone(c.byLong)
+	before.byShort = maps.Clone(c.byShort)
+	before.byCommand = maps.Clone(c.byCommand)
+	options := make(map[*Option]Option, len(c.options))
+	for _, opt := range c.options {
+		options[opt] = *opt
+	}
+	return func() {
+		*c = before
+		for opt, value := range options {
+			*opt = value
+		}
+	}
 }

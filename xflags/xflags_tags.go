@@ -112,6 +112,7 @@ func (c *Command) collectOption(field reflect.StructField, fieldValue reflect.Va
 		optional:    strings.EqualFold(field.Tag.Get("optional"), "true"),
 	}
 
+	_, opt.defaultSet = field.Tag.Lookup("default")
 	if opt.Long != "" && prefix != "" {
 		opt.Long = fmt.Sprintf("%s.%s", prefix, opt.Long)
 	}
@@ -124,7 +125,7 @@ func (c *Command) collectOption(field reflect.StructField, fieldValue reflect.Va
 
 	if baseTag, ok := field.Tag.Lookup("base"); ok {
 		base, err := strconv.Atoi(baseTag)
-		if err != nil {
+		if err != nil || (base != 0 && (base < 2 || base > 36)) {
 			return fmt.Errorf("xflags: option %q: invalid base %q", optionName(opt), baseTag)
 		}
 		opt.base = base
@@ -174,6 +175,23 @@ func (c *Command) registerOrMerge(opt *Option, g *group) error {
 // existing option that shares the same long name, combining the value
 // destination, callback, and metadata from both declarations.
 func (c *Command) mergeOption(existing, incoming *Option) error {
+	before := *existing
+	shorts := make(map[string]*Option, len(c.byShort))
+	for k, v := range c.byShort {
+		shorts[k] = v
+	}
+	err := c.mergeOptionUnchecked(existing, incoming)
+	if err == nil {
+		err = existing.checkBinding()
+	}
+	if err != nil {
+		*existing = before
+		c.byShort = shorts
+	}
+	return err
+}
+
+func (c *Command) mergeOptionUnchecked(existing, incoming *Option) error {
 	switch {
 	case incoming.callback.IsValid():
 		if existing.callback.IsValid() {
@@ -189,7 +207,7 @@ func (c *Command) mergeOption(existing, incoming *Option) error {
 		if incoming.choiceSet {
 			existing.choice = incoming.choice
 			existing.choiceSet = true
-		} else {
+		} else if !existing.choiceSet {
 			existing.choice = defaultChoice(incoming.value)
 		}
 	default:
@@ -203,6 +221,9 @@ func (c *Command) mergeOption(existing, incoming *Option) error {
 // existing option, preserving values the existing declaration already set.
 func (c *Command) mergeMetadata(existing, incoming *Option) error {
 	if incoming.Short != "" {
+		if !validName(incoming.Short) || len([]rune(incoming.Short)) != 1 {
+			return fmt.Errorf("xflags: invalid short option %q", incoming.Short)
+		}
 		if existing.Short == "" {
 			if _, dup := c.byShort[incoming.Short]; dup {
 				return fmt.Errorf("xflags: duplicate short option %q", incoming.Short)
@@ -217,14 +238,29 @@ func (c *Command) mergeMetadata(existing, incoming *Option) error {
 	if existing.Description == "" {
 		existing.Description = incoming.Description
 	}
-	if existing.Default == "" {
+	if !existing.defaultSet {
 		existing.Default = incoming.Default
+		existing.defaultSet = incoming.defaultSet
 	}
 	if existing.Env == "" {
 		existing.Env = incoming.Env
 	}
 	if incoming.Required {
 		existing.Required = true
+	}
+	if !existing.baseSet && incoming.baseSet {
+		existing.base, existing.baseSet = incoming.base, true
+	}
+	if !existing.choiceSet && incoming.choiceSet {
+		existing.choice, existing.choiceSet = incoming.choice, true
+	}
+	if !existing.optionalValSet && incoming.optionalValSet {
+		existing.optionalValue, existing.optionalValSet = incoming.optionalValue, true
+	}
+	existing.optional = existing.optional || incoming.optional
+	existing.Hidden = existing.Hidden || incoming.Hidden
+	if existing.ValueName == "" {
+		existing.ValueName = incoming.ValueName
 	}
 	return nil
 }
@@ -236,7 +272,7 @@ func bindCallback(opt *Option, field reflect.StructField, fieldValue reflect.Val
 	if ft.NumOut() != 1 || ft.Out(0) != reflect.TypeFor[error]() {
 		return fmt.Errorf("xflags: callback option %q must return error", optionName(opt))
 	}
-	if ft.NumIn() > 1 {
+	if ft.NumIn() > 1 || ft.IsVariadic() {
 		return fmt.Errorf("xflags: callback option %q must take zero or one argument", optionName(opt))
 	}
 	opt.callback = fieldValue

@@ -3,6 +3,7 @@ package xflags
 import (
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 )
 
@@ -11,39 +12,59 @@ import (
 // checks required options. Built-in --help and --version are handled
 // internally and do not surface as errors.
 func (p *Parser) Parse(args []string) error {
+	p.handled = false
+	p.reset()
 	err := p.parse(args)
 	switch err {
 	case errHelp:
-		fmt.Fprint(os.Stdout, p.helpTarget(args).help())
+		p.handled = true
+		fmt.Fprint(os.Stdout, p.selected.help())
 		return nil
 	case errVersion:
+		p.handled = true
 		fmt.Fprintf(os.Stdout, "%s version %s\n", p.name, p.version)
 		return nil
 	default:
-		return err
+		if err != nil {
+			return err
+		}
+		var path []*Command
+		for cur := p.selected; cur != nil; cur = cur.parent {
+			path = append(path, cur)
+		}
+		for i := len(path) - 1; i >= 0; i-- {
+			if err := path[i].finalize(); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 }
 
-// helpTarget resolves which command a help request referred to by re-walking
-// the leading subcommand path in args.
-func (c *Command) helpTarget(args []string) *Command {
-	cur := c
-	for _, arg := range args {
-		if strings.HasPrefix(arg, "-") {
-			continue
+func (c *Command) reset() {
+	c.selected = nil
+	for _, opt := range c.options {
+		opt.set, opt.count = false, 0
+		if opt.value.IsValid() {
+			if !opt.initial.IsValid() {
+				opt.initial = cloneValue(opt.value)
+			}
+			opt.value.Set(cloneValue(opt.initial))
 		}
-		next, ok := cur.byCommand[arg]
-		if !ok {
-			break
-		}
-		cur = next
 	}
-	return cur
+	for _, sub := range c.commands {
+		sub.reset()
+	}
 }
 
 // parse consumes args for this command, delegating to a subcommand when the
 // first non-flag token names one.
 func (c *Command) parse(args []string) error {
+	root := c
+	for root.parent != nil {
+		root = root.parent
+	}
+	root.selected = c
 	i := 0
 	for i < len(args) {
 		arg := args[i]
@@ -56,14 +77,11 @@ func (c *Command) parse(args []string) error {
 			// (consistent with the pre-terminator path).
 			if i < len(args) {
 				if sub, ok := c.byCommand[args[i]]; ok {
-					if err := c.finalize(); err != nil {
-						return err
-					}
 					return sub.parse(args[i+1:])
 				}
 				return fmt.Errorf("xflags: unexpected argument %q", args[i])
 			}
-			return c.finalize()
+			return nil
 
 		case strings.HasPrefix(arg, "--"):
 			consumed, err := c.parseLong(arg[2:], args[i+1:])
@@ -81,16 +99,13 @@ func (c *Command) parse(args []string) error {
 
 		default:
 			if sub, ok := c.byCommand[arg]; ok {
-				if err := c.finalize(); err != nil {
-					return err
-				}
 				return sub.parse(args[i+1:])
 			}
 			return fmt.Errorf("xflags: unexpected argument %q", arg)
 		}
 	}
 
-	return c.finalize()
+	return nil
 }
 
 // parseLong handles a --name or --name=value token. It returns how many of the
@@ -184,6 +199,9 @@ func (c *Command) applyToken(opt *Option, inlineVal string, hasInline bool, rest
 	// next token when that token is not itself a flag.
 	if opt.optional {
 		if len(rest) == 0 || looksLikeFlag(rest[0]) {
+			if !opt.optionalValSet {
+				return 0, opt.applyOptionalZero()
+			}
 			return 0, opt.applyString(opt.optionalValue)
 		}
 		return 1, opt.applyString(rest[0])
@@ -193,6 +211,31 @@ func (c *Command) applyToken(opt *Option, inlineVal string, hasInline bool, rest
 		return 0, fmt.Errorf("xflags: option %s expects a value", optionName(opt))
 	}
 	return 1, opt.applyString(rest[0])
+}
+
+func (opt *Option) applyOptionalZero() error {
+	if opt.value.IsValid() {
+		switch opt.choice {
+		case choiceAppend:
+			opt.value.Set(reflect.Append(opt.value, reflect.Zero(opt.value.Type().Elem())))
+		case choiceMerge:
+			return fmt.Errorf("option %s: optional map requires an explicit key=value", optionName(opt))
+		default:
+			opt.value.SetZero()
+		}
+	} else if opt.callback.IsValid() && !opt.callback.IsNil() {
+		ft := opt.callback.Type()
+		var args []reflect.Value
+		if ft.NumIn() == 1 {
+			args = []reflect.Value{reflect.Zero(ft.In(0))}
+		}
+		if err := callError(opt.callback.Call(args)); err != nil {
+			return err
+		}
+	}
+	opt.set = true
+	opt.count++
+	return nil
 }
 
 // looksLikeFlag reports whether a token is a flag rather than a value. A lone
@@ -253,7 +296,9 @@ func (opt *Option) resolve() error {
 			if err := opt.applyEnvMulti(val); err != nil {
 				return err
 			}
-		} else if opt.Default != "" {
+		} else if opt.typedDefault.IsValid() {
+			opt.value.Set(opt.typedDefault)
+		} else if opt.defaultSet || opt.Default != "" {
 			if err := opt.applyString(opt.Default); err != nil {
 				return err
 			}
@@ -264,6 +309,15 @@ func (opt *Option) resolve() error {
 
 	if opt.Required && !opt.set {
 		return fmt.Errorf("xflags: required option %s is not set", optionName(opt))
+	}
+	if opt.value.IsValid() && opt.callback.IsValid() && !opt.callback.IsNil() {
+		var args []reflect.Value
+		if opt.callback.Type().NumIn() == 1 {
+			args = []reflect.Value{opt.value}
+		}
+		if err := callError(opt.callback.Call(args)); err != nil {
+			return fmt.Errorf("xflags: option %s: %w", optionName(opt), err)
+		}
 	}
 
 	return opt.runValidate()

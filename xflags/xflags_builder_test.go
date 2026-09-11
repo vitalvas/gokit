@@ -134,3 +134,26 @@ func TestBuilderFeatureSetters(t *testing.T) {
 		require.Error(t, p.SetOptionalValue("nope", "x"))
 	})
 }
+
+func TestTypedBuilderDefaults(t *testing.T) {
+	p := New("app")
+	b, s, n := true, "old", 99
+	require.NoError(t, p.BoolVar(&b, "b", "", false, ""))
+	require.NoError(t, p.StringVar(&s, "s", "", "", ""))
+	require.NoError(t, p.IntVar(&n, "n", "", 10, ""))
+	require.NoError(t, p.SetBase("n", 16))
+	require.NoError(t, p.Parse(nil))
+	assert.False(t, b)
+	assert.Empty(t, s)
+	assert.Equal(t, 10, n)
+	require.NoError(t, p.Parse([]string{"--n=ff"}))
+	assert.Equal(t, 255, n)
+
+	o := struct {
+		S string `long:"s" default:""`
+	}{S: "old"}
+	p = New("app")
+	require.NoError(t, p.AddGroup("", &o))
+	require.NoError(t, p.Parse(nil))
+	assert.Empty(t, o.S)
+}

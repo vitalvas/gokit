@@ -11,6 +11,9 @@ func (c *Command) help() string {
 
 	b.WriteString("Usage:\n")
 	fmt.Fprintf(&b, "  %s\n", c.usageLine())
+	if c.description != "" {
+		fmt.Fprintf(&b, "\n%s\n", c.description)
+	}
 
 	for _, g := range c.groups {
 		visible := visibleOptions(g.options)
@@ -39,8 +42,7 @@ func (c *Command) help() string {
 	}
 
 	b.WriteString("\n")
-	hasVersion := c.rootVersion() != ""
-	writeBuiltins(&b, hasVersion, hasVersion && !c.shortTaken("v"))
+	c.writeBuiltins(&b)
 
 	return b.String()
 }
@@ -136,14 +138,21 @@ func (opt *Option) valuePlaceholder() string {
 }
 
 // writeBuiltins renders the built-in help and version entries.
-func writeBuiltins(b *strings.Builder, hasVersion, versionHasShort bool) {
-	b.WriteString("  -h, --help            show this help message\n")
-	if !hasVersion {
-		return
+func (c *Command) writeBuiltins(b *strings.Builder) {
+	write := func(short, long, description string) {
+		opt := &Option{Description: description, isBool: true}
+		if !c.shortTaken(short) {
+			opt.Short = short
+		}
+		if _, taken := c.byLong[long]; !taken {
+			opt.Long = long
+		}
+		if opt.Short != "" || opt.Long != "" {
+			writeOptions(b, []*Option{opt})
+		}
 	}
-	if versionHasShort {
-		b.WriteString("  -v, --version         show version information\n")
-	} else {
-		b.WriteString("      --version         show version information\n")
+	write("h", "help", "show this help message")
+	if c.rootVersion() != "" {
+		write("v", "version", "show version information")
 	}
 }

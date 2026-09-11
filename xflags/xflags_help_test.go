@@ -1,6 +1,8 @@
 package xflags
 
 import (
+	"io"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -135,4 +137,72 @@ func TestHiddenAndValueName(t *testing.T) {
 		require.NoError(t, p.AddGroup("Hidden Group", &o))
 		assert.NotContains(t, p.help(), "Hidden Group")
 	})
+}
+
+func captureParseOutput(t *testing.T, p *Parser, args ...string) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	old := os.Stdout
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = old; _ = r.Close(); _ = w.Close() })
+	parseErr := p.Parse(args)
+	os.Stdout = old
+	require.NoError(t, w.Close())
+	out, err := io.ReadAll(r)
+	require.NoError(t, err)
+	require.NoError(t, parseErr)
+	return string(out)
+}
+
+func TestHelpCommandAndParseOutcome(t *testing.T) {
+	p := New("app")
+	p.SetVersion("1.0")
+	var o struct {
+		Config string `long:"config"`
+		Token  string `long:"token" required:"true"`
+	}
+	require.NoError(t, p.AddGroup("", &o))
+	validations := 0
+	require.NoError(t, p.Validate("config", func(any) error { validations++; return nil }))
+	sub, err := p.AddCommand("server", nil)
+	require.NoError(t, err)
+	sub.SetDescription("run the server")
+	assert.Nil(t, p.SelectedCommand())
+	for _, args := range [][]string{
+		{"--config", "file", "server", "--help"},
+		{"--config=server", "server", "-h"},
+		{"--", "server", "--help"},
+	} {
+		out := captureParseOutput(t, p, args...)
+		assert.Contains(t, out, "Usage:\n  app server\n")
+		assert.Contains(t, out, "run the server")
+		assert.Same(t, sub, p.SelectedCommand())
+		assert.True(t, p.Handled())
+	}
+	out := captureParseOutput(t, p, "--help", "server")
+	assert.Contains(t, out, "app [options] <command>")
+	assert.Same(t, p.Command, p.SelectedCommand())
+	assert.Contains(t, captureParseOutput(t, p, "server", "--version"), "app version 1.0")
+	assert.Zero(t, validations)
+	require.NoError(t, p.Parse([]string{"--token=x", "server"}))
+	assert.False(t, p.Handled())
+	assert.Same(t, sub, p.SelectedCommand())
+	assert.Equal(t, "server", sub.Name())
+	assert.Equal(t, 1, validations)
+	require.Error(t, p.Parse([]string{"--unknown"}))
+	assert.False(t, p.Handled())
+}
+
+func TestHelpBuiltinOverrides(t *testing.T) {
+	p := New("app")
+	p.SetVersion("1")
+	var host, version string
+	require.NoError(t, p.StringVar(&host, "host", "h", "", "hostname"))
+	require.NoError(t, p.StringVar(&version, "version", "", "", "custom version"))
+	out := p.help()
+	assert.NotContains(t, out, "-h, --help")
+	assert.NotContains(t, out, "-v, --version")
+	assert.Contains(t, out, "--help  show this help message")
+	assert.Contains(t, out, "-v  show version information")
 }

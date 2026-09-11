@@ -22,9 +22,6 @@ func (opt *Option) intBase() int {
 // applyString sets an option's value from a single raw string token, honoring
 // the repeated-option policy. It records that the option was set.
 func (opt *Option) applyString(raw string) error {
-	opt.set = true
-	opt.count++
-
 	// A bool switch with no inline value means true.
 	if opt.isBool && raw == "" {
 		raw = "true"
@@ -37,10 +34,15 @@ func (opt *Option) applyString(raw string) error {
 		}
 	}
 
-	// Invoke the callback, if any, so store-and-validate fields both fire.
-	if opt.callback.IsValid() {
-		return opt.applyCallback(raw)
+	// Standalone callbacks react to each occurrence. Paired callbacks validate
+	// the resolved destination during finalization.
+	if opt.callback.IsValid() && !opt.value.IsValid() {
+		if err := opt.applyCallback(raw); err != nil {
+			return err
+		}
 	}
+	opt.set = true
+	opt.count++
 	return nil
 }
 
@@ -87,15 +89,29 @@ func callError(out []reflect.Value) error {
 // applyCount increments an integer value. A bare boolean-style occurrence
 // increments by one; an explicit numeric value sets the count.
 func (opt *Option) applyCount(raw string) error {
-	if raw == "" {
-		opt.value.SetInt(opt.value.Int() + 1)
-		return nil
+	v := opt.value
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if raw != "" {
+			return opt.setScalar(v, raw)
+		}
+		n := v.Int() + 1
+		if n < v.Int() || v.OverflowInt(n) {
+			return fmt.Errorf("option %s: count overflows %s", optionName(opt), v.Type())
+		}
+		v.SetInt(n)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if raw != "" {
+			return opt.setScalar(v, raw)
+		}
+		n := v.Uint() + 1
+		if n == 0 || v.OverflowUint(n) {
+			return fmt.Errorf("option %s: count overflows %s", optionName(opt), v.Type())
+		}
+		v.SetUint(n)
+	default:
+		return fmt.Errorf("option %s: choice count requires an integer", optionName(opt))
 	}
-	n, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil {
-		return fmt.Errorf("option %s: invalid count %q", optionName(opt), raw)
-	}
-	opt.value.SetInt(n)
 	return nil
 }
 
@@ -136,8 +152,98 @@ func (opt *Option) mergeValue(raw string) error {
 	if err := opt.setScalar(elem, val); err != nil {
 		return err
 	}
-	opt.value.SetMapIndex(reflect.ValueOf(key), elem)
+	mapKey := reflect.New(opt.value.Type().Key()).Elem()
+	mapKey.SetString(key)
+	opt.value.SetMapIndex(mapKey, elem)
 	return nil
+}
+
+// checkBinding rejects incompatible policies and paired callback signatures
+// while registration can still return an error without parsing any arguments.
+func (opt *Option) checkBinding() error {
+	if !opt.value.IsValid() {
+		return nil
+	}
+	kind := opt.value.Kind()
+	switch opt.choice {
+	case choiceCount:
+		if kind < reflect.Int || kind > reflect.Uint64 || opt.value.Type() == durationType {
+			return fmt.Errorf("option %s: choice count requires an integer", optionName(opt))
+		}
+	case choiceAppend:
+		if kind != reflect.Slice {
+			return fmt.Errorf("option %s: choice append requires a slice", optionName(opt))
+		}
+	case choiceMerge:
+		if kind != reflect.Map || opt.value.Type().Key().Kind() != reflect.String {
+			return fmt.Errorf("option %s: choice merge requires a map with string keys", optionName(opt))
+		}
+	}
+	scalar := opt.value.Type()
+	if opt.choice == choiceAppend || opt.choice == choiceMerge {
+		scalar = scalar.Elem()
+	}
+	if !supportedScalar(scalar) {
+		return fmt.Errorf("option %s: unsupported value type %s", optionName(opt), scalar)
+	}
+	if opt.callback.IsValid() {
+		ft := opt.callback.Type()
+		if ft.NumIn() == 1 && !opt.value.Type().AssignableTo(ft.In(0)) {
+			return fmt.Errorf("option %s: callback argument must accept %s", optionName(opt), opt.value.Type())
+		}
+	}
+	return nil
+}
+
+func supportedScalar(t reflect.Type) bool {
+	seen := make(map[reflect.Type]bool)
+	for t.Kind() == reflect.Pointer {
+		if seen[t] {
+			return false
+		}
+		seen[t] = true
+		t = t.Elem()
+	}
+	switch t.Kind() {
+	case reflect.Bool, reflect.String,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return true
+	default:
+		return false
+	}
+}
+
+// cloneValue snapshots supported destinations so repeated Parse calls start
+// from the same initial configuration, including pointer/container values.
+func cloneValue(v reflect.Value) reflect.Value {
+	out := reflect.New(v.Type()).Elem()
+	switch v.Kind() {
+	case reflect.Pointer:
+		if !v.IsNil() {
+			out.Set(reflect.New(v.Type().Elem()))
+			out.Elem().Set(cloneValue(v.Elem()))
+		}
+	case reflect.Slice:
+		if !v.IsNil() {
+			out.Set(reflect.MakeSlice(v.Type(), v.Len(), v.Len()))
+			for i := 0; i < v.Len(); i++ {
+				out.Index(i).Set(cloneValue(v.Index(i)))
+			}
+		}
+	case reflect.Map:
+		if !v.IsNil() {
+			out.Set(reflect.MakeMap(v.Type()))
+			iter := v.MapRange()
+			for iter.Next() {
+				out.SetMapIndex(iter.Key(), cloneValue(iter.Value()))
+			}
+		}
+	default:
+		out.Set(v)
+	}
+	return out
 }
 
 // setScalar converts a raw string into a single non-container value.
