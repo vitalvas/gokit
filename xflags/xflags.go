@@ -1,7 +1,3 @@
-// Package xflags is a command-line flag parser that fills a struct from tags
-// or is built programmatically. It supports nested subcommands, option groups,
-// namespaces, environment-variable fallback, default values, and per-option
-// validation callbacks.
 package xflags
 
 import (
