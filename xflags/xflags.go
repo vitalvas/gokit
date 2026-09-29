@@ -3,7 +3,9 @@ package xflags
 import (
 	"errors"
 	"fmt"
+	"io"
 	"maps"
+	"os"
 	"reflect"
 	"strings"
 	"unicode"
@@ -86,6 +88,8 @@ type group struct {
 type Parser struct {
 	*Command
 	handled bool
+	args    []string  // arguments configured via SetArgs, used by Execute
+	out     io.Writer // destination for built-in help/version output
 }
 
 // SelectedCommand returns the deepest command reached by the last Parse.
@@ -97,6 +101,52 @@ func (p *Parser) Handled() bool { return p.handled }
 
 // Name returns the command's name.
 func (c *Command) Name() string { return c.name }
+
+// IsSet reports whether the option with the given long name was provided by the
+// command line or an environment variable. A value coming only from a default
+// does not count. An unknown long name returns false. Intended for tests that
+// assert which options a set of arguments actually set.
+func (c *Command) IsSet(long string) bool {
+	opt, ok := c.byLong[long]
+	return ok && opt.set
+}
+
+// Count returns the number of command-line occurrences of the option with the
+// given long name, for counting options such as -vvv. An unknown long name
+// returns 0.
+func (c *Command) Count(long string) int {
+	opt, ok := c.byLong[long]
+	if !ok {
+		return 0
+	}
+	return opt.count
+}
+
+// Find walks the command tree from this command, consuming leading arguments
+// that name subcommands, and returns the deepest command reached along with the
+// arguments that remain for it. Flags and unrecognized tokens stop the descent.
+// It returns an error when a leading argument names no subcommand of a command
+// that has subcommands.
+func (c *Command) Find(args []string) (*Command, []string, error) {
+	cur := c
+	i := 0
+	for i < len(args) {
+		arg := args[i]
+		if strings.HasPrefix(arg, "-") {
+			break
+		}
+		sub, ok := cur.byCommand[arg]
+		if !ok {
+			if len(cur.commands) > 0 {
+				return cur, args[i:], fmt.Errorf("xflags: unknown command %q for %q", arg, cur.name)
+			}
+			break
+		}
+		cur = sub
+		i++
+	}
+	return cur, args[i:], nil
+}
 
 // New creates a new parser with the given program name.
 func New(name string) *Parser {
@@ -117,6 +167,36 @@ func newCommand(name string, parent *Command) *Command {
 // added. When empty, no version option exists.
 func (p *Parser) SetVersion(version string) {
 	p.version = version
+}
+
+// SetArgs sets the arguments Execute parses. Intended for tests, which configure
+// arguments and then call Execute with no parameters.
+func (p *Parser) SetArgs(args []string) {
+	p.args = args
+}
+
+// SetOutput sets the writer for built-in help and version output. When nil,
+// output goes to os.Stdout. Tests set a bytes.Buffer to capture the text.
+func (p *Parser) SetOutput(w io.Writer) {
+	p.out = w
+}
+
+// Execute parses the arguments set by SetArgs, falling back to os.Args[1:] when
+// none were set, and returns any parse error.
+func (p *Parser) Execute() error {
+	args := p.args
+	if args == nil {
+		args = os.Args[1:]
+	}
+	return p.Parse(args)
+}
+
+// output returns the writer for built-in help and version text.
+func (p *Parser) output() io.Writer {
+	if p.out != nil {
+		return p.out
+	}
+	return os.Stdout
 }
 
 // SetDescription sets the command's help description.

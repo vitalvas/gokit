@@ -2,7 +2,6 @@ package xflags
 
 import (
 	"fmt"
-	"os"
 	"reflect"
 	"strings"
 )
@@ -18,11 +17,11 @@ func (p *Parser) Parse(args []string) error {
 	switch err {
 	case errHelp:
 		p.handled = true
-		fmt.Fprint(os.Stdout, p.selected.help())
+		fmt.Fprint(p.output(), p.selected.Help())
 		return nil
 	case errVersion:
 		p.handled = true
-		fmt.Fprintf(os.Stdout, "%s version %s\n", p.name, p.version)
+		fmt.Fprintf(p.output(), "%s version %s\n", p.name, p.version)
 		return nil
 	default:
 		if err != nil {

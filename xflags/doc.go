@@ -108,4 +108,18 @@
 // Parse returns errors and never calls os.Exit; the caller decides how to react.
 // Parse resets option state first, so a parser may be reused across several
 // argument slices.
+//
+// # Testing a parser
+//
+// Several methods support writing tests for a parser without inspecting the
+// destination struct. SetArgs configures the arguments Execute parses, so a
+// test can set arguments and call Execute with no parameters; Execute falls back
+// to os.Args[1:] when SetArgs was not called. IsSet reports whether an option
+// was provided by the command line or environment (a default alone does not
+// count), and Count reports how many times a counting option occurred. Find
+// walks the command tree to locate a subcommand by name without parsing,
+// returning the command and its remaining arguments. Help returns the rendered
+// help message so a test can assert on it directly, and SetOutput redirects the
+// built-in help and version text to a writer, so a test can capture it in a
+// bytes.Buffer instead of standard output.
 package xflags

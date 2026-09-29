@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"testing"
@@ -18,7 +19,7 @@ func TestHelp(t *testing.T) {
 		p := New("app")
 		require.NoError(t, p.AddGroup("Application Options", &opts))
 
-		out := p.help()
+		out := p.Help()
 		assert.Contains(t, out, "Usage:")
 		assert.Contains(t, out, "Application Options:")
 		assert.Contains(t, out, "-v, --verbose")
@@ -29,10 +30,10 @@ func TestHelp(t *testing.T) {
 
 	t.Run("version line only when version set", func(t *testing.T) {
 		p := New("app")
-		assert.NotContains(t, p.help(), "--version")
+		assert.NotContains(t, p.Help(), "--version")
 
 		p.SetVersion("1.0.0")
-		assert.Contains(t, p.help(), "--version")
+		assert.Contains(t, p.Help(), "--version")
 	})
 
 	t.Run("version short only when v free", func(t *testing.T) {
@@ -42,7 +43,7 @@ func TestHelp(t *testing.T) {
 		p := New("app")
 		p.SetVersion("1.0.0")
 		require.NoError(t, p.AddGroup("", &opts))
-		out := p.help()
+		out := p.Help()
 		assert.Contains(t, out, "    --version")
 		assert.NotContains(t, out, "-v, --version")
 	})
@@ -52,8 +53,8 @@ func TestHelp(t *testing.T) {
 		sub, err := p.AddCommand("server", nil)
 		require.NoError(t, err)
 		sub.SetDescription("run the server")
-		assert.Contains(t, p.help(), "server")
-		assert.Contains(t, p.help(), "run the server")
+		assert.Contains(t, p.Help(), "server")
+		assert.Contains(t, p.Help(), "run the server")
 	})
 }
 
@@ -105,7 +106,7 @@ func TestHiddenAndValueName(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		out := p.help()
+		out := p.Help()
 		assert.NotContains(t, out, "--secret")
 		assert.Contains(t, out, "--public")
 	})
@@ -126,7 +127,7 @@ func TestHiddenAndValueName(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		assert.Contains(t, p.help(), "--file PATH")
+		assert.Contains(t, p.Help(), "--file PATH")
 	})
 
 	t.Run("empty group after hiding is skipped", func(t *testing.T) {
@@ -135,7 +136,7 @@ func TestHiddenAndValueName(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("Hidden Group", &o))
-		assert.NotContains(t, p.help(), "Hidden Group")
+		assert.NotContains(t, p.Help(), "Hidden Group")
 	})
 }
 
@@ -200,9 +201,30 @@ func TestHelpBuiltinOverrides(t *testing.T) {
 	var host, version string
 	require.NoError(t, p.StringVar(&host, "host", "h", "", "hostname"))
 	require.NoError(t, p.StringVar(&version, "version", "", "", "custom version"))
-	out := p.help()
+	out := p.Help()
 	assert.NotContains(t, out, "-h, --help")
 	assert.NotContains(t, out, "-v, --version")
 	assert.Contains(t, out, "--help  show this help message")
 	assert.Contains(t, out, "-v  show version information")
+}
+
+func TestSetOutput(t *testing.T) {
+	t.Run("captures help", func(t *testing.T) {
+		var buf bytes.Buffer
+		p := New("app")
+		p.SetOutput(&buf)
+		require.NoError(t, p.Parse([]string{"--help"}))
+		assert.True(t, p.Handled())
+		assert.Contains(t, buf.String(), "Usage:")
+		assert.Contains(t, buf.String(), "app")
+	})
+
+	t.Run("captures version", func(t *testing.T) {
+		var buf bytes.Buffer
+		p := New("app")
+		p.SetVersion("1.2.3")
+		p.SetOutput(&buf)
+		require.NoError(t, p.Parse([]string{"--version"}))
+		assert.Equal(t, "app version 1.2.3\n", buf.String())
+	})
 }

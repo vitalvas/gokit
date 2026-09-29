@@ -5,8 +5,9 @@ import (
 	"strings"
 )
 
-// help renders the formatted help message for the command.
-func (c *Command) help() string {
+// Help renders the formatted help message for the command. Parse writes it for
+// the built-in help flag; tests can call it directly to assert help content.
+func (c *Command) Help() string {
 	var b strings.Builder
 
 	b.WriteString("Usage:\n")

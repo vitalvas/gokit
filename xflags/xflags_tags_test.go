@@ -118,7 +118,7 @@ func TestMergedValueMetadata(t *testing.T) {
 	require.NoError(t, p.Parse([]string{"-n"}))
 	assert.Equal(t, 255, o.N)
 	assert.Equal(t, 255, seen)
-	assert.NotContains(t, p.help(), "--n")
+	assert.NotContains(t, p.Help(), "--n")
 	assert.Equal(t, "HEX", p.byLong["n"].ValueName)
 	require.NoError(t, p.Parse(nil))
 	assert.Equal(t, 10, o.N)

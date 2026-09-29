@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -119,4 +120,161 @@ func TestInvalidRegistrationNames(t *testing.T) {
 	for _, base := range []int{-1, 1, 37} {
 		require.Error(t, p.SetBase("n", base))
 	}
+}
+
+func TestIsSet(t *testing.T) {
+	newParser := func(t *testing.T) (*Parser, *string) {
+		t.Helper()
+		var name string
+		p := New("app")
+		require.NoError(t, p.StringVar(&name, "name", "", "", ""))
+		return p, &name
+	}
+
+	t.Run("set on command line", func(t *testing.T) {
+		p, _ := newParser(t)
+		require.NoError(t, p.Parse([]string{"--name=x"}))
+		assert.True(t, p.IsSet("name"))
+	})
+
+	t.Run("set from environment", func(t *testing.T) {
+		var name string
+		p := New("app")
+		require.NoError(t, p.StringVar(&name, "name", "", "", ""))
+		p.byLong["name"].Env = "XF_ISSET"
+		t.Setenv("XF_ISSET", "y")
+		require.NoError(t, p.Parse(nil))
+		assert.True(t, p.IsSet("name"))
+	})
+
+	t.Run("default only does not count", func(t *testing.T) {
+		var name string
+		p := New("app")
+		require.NoError(t, p.StringVar(&name, "name", "", "fallback", ""))
+		require.NoError(t, p.Parse(nil))
+		assert.Equal(t, "fallback", name)
+		assert.False(t, p.IsSet("name"))
+	})
+
+	t.Run("unknown name", func(t *testing.T) {
+		p, _ := newParser(t)
+		require.NoError(t, p.Parse(nil))
+		assert.False(t, p.IsSet("nope"))
+	})
+}
+
+func TestCount(t *testing.T) {
+	newParser := func(t *testing.T) *Parser {
+		t.Helper()
+		var v int
+		p := New("app")
+		require.NoError(t, p.CountVar(&v, "verbose", "v", ""))
+		return p
+	}
+
+	t.Run("counts occurrences", func(t *testing.T) {
+		p := newParser(t)
+		require.NoError(t, p.Parse([]string{"-vvv"}))
+		assert.Equal(t, 3, p.Count("verbose"))
+	})
+
+	t.Run("unset is zero", func(t *testing.T) {
+		p := newParser(t)
+		require.NoError(t, p.Parse(nil))
+		assert.Equal(t, 0, p.Count("verbose"))
+	})
+
+	t.Run("unknown name is zero", func(t *testing.T) {
+		p := newParser(t)
+		require.NoError(t, p.Parse(nil))
+		assert.Equal(t, 0, p.Count("nope"))
+	})
+}
+
+func TestSetArgsExecute(t *testing.T) {
+	t.Run("execute uses configured args", func(t *testing.T) {
+		var name string
+		p := New("app")
+		require.NoError(t, p.StringVar(&name, "name", "", "", ""))
+		p.SetArgs([]string{"--name=configured"})
+		require.NoError(t, p.Execute())
+		assert.Equal(t, "configured", name)
+		assert.True(t, p.IsSet("name"))
+	})
+
+	t.Run("execute surfaces parse error", func(t *testing.T) {
+		p := New("app")
+		p.SetArgs([]string{"does-not-exist"})
+		require.Error(t, p.Execute())
+	})
+
+	t.Run("execute falls back to os.Args", func(t *testing.T) {
+		saved := os.Args
+		t.Cleanup(func() { os.Args = saved })
+		var name string
+		p := New("app")
+		require.NoError(t, p.StringVar(&name, "name", "", "", ""))
+		os.Args = []string{"app", "--name=fromargs"}
+		require.NoError(t, p.Execute())
+		assert.Equal(t, "fromargs", name)
+	})
+}
+
+func TestFind(t *testing.T) {
+	buildRoot := func(t *testing.T) *Parser {
+		t.Helper()
+		p := New("app")
+		_, err := p.AddCommand("serve", nil)
+		require.NoError(t, err)
+		return p
+	}
+
+	t.Run("finds subcommand", func(t *testing.T) {
+		root := buildRoot(t)
+		cmd, rest, err := root.Find([]string{"serve"})
+		require.NoError(t, err)
+		assert.Equal(t, "serve", cmd.Name())
+		assert.Empty(t, rest)
+	})
+
+	t.Run("returns remaining args", func(t *testing.T) {
+		root := buildRoot(t)
+		cmd, rest, err := root.Find([]string{"serve", "--addr", ":8080"})
+		require.NoError(t, err)
+		assert.Equal(t, "serve", cmd.Name())
+		assert.Equal(t, []string{"--addr", ":8080"}, rest)
+	})
+
+	t.Run("nested subcommands", func(t *testing.T) {
+		root := New("app")
+		parent, err := root.AddCommand("remote", nil)
+		require.NoError(t, err)
+		_, err = parent.AddCommand("add", nil)
+		require.NoError(t, err)
+		cmd, _, err := root.Find([]string{"remote", "add"})
+		require.NoError(t, err)
+		assert.Equal(t, "add", cmd.Name())
+	})
+
+	t.Run("unknown command fails", func(t *testing.T) {
+		root := buildRoot(t)
+		_, _, err := root.Find([]string{"does-not-exist"})
+		require.Error(t, err)
+	})
+
+	t.Run("leading flag stops descent", func(t *testing.T) {
+		root := buildRoot(t)
+		cmd, rest, err := root.Find([]string{"--help"})
+		require.NoError(t, err)
+		assert.Same(t, root.Command, cmd)
+		assert.Equal(t, []string{"--help"}, rest)
+	})
+
+	t.Run("no subcommands returns self", func(t *testing.T) {
+		root := New("app")
+		cmd, rest, err := root.Find([]string{"positional"})
+		require.NoError(t, err)
+		assert.Same(t, root.Command, cmd)
+		assert.Equal(t, []string{"positional"}, rest)
+	})
 }

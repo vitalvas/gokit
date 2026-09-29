@@ -97,7 +97,7 @@ func TestBuilderFeatureSetters(t *testing.T) {
 		p := New("app")
 		require.NoError(t, p.StringVar(&s, "secret", "", "", ""))
 		require.NoError(t, p.SetHidden("secret"))
-		assert.NotContains(t, p.help(), "--secret")
+		assert.NotContains(t, p.Help(), "--secret")
 	})
 
 	t.Run("set value name", func(t *testing.T) {
@@ -105,7 +105,7 @@ func TestBuilderFeatureSetters(t *testing.T) {
 		p := New("app")
 		require.NoError(t, p.StringVar(&s, "file", "", "", ""))
 		require.NoError(t, p.SetValueName("file", "PATH"))
-		assert.Contains(t, p.help(), "--file PATH")
+		assert.Contains(t, p.Help(), "--file PATH")
 	})
 
 	t.Run("set base", func(t *testing.T) {
