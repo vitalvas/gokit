@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.37.0](https://github.com/vitalvas/gokit/compare/v0.36.3...v0.37.0) (2026-10-01)
+
+
+### Features
+
+* add xflags ([eddf212](https://github.com/vitalvas/gokit/commit/eddf2127bf201a034c352eaa68d78bde1809efd0))
+* **xflags:** add testing helpers Find, Execute, IsSet, output capture ([090b9c2](https://github.com/vitalvas/gokit/commit/090b9c23b9f110d95f11f6713eda15cfe6619460))
+
+
+### Bug Fixes
+
+* **xflags:** correct parsing, validation, and registration edge cases ([12d7821](https://github.com/vitalvas/gokit/commit/12d78214b346997e3a48176eb8306ef7497972a4))
+
 ## [0.36.3](https://github.com/vitalvas/gokit/compare/v0.36.2...v0.36.3) (2026-08-26)
 
 
