@@ -610,7 +610,7 @@ func (t *Tree[V]) deletePrefix(prefix string) int {
 		n = child
 	}
 
-	// prefix was empty — delete everything under n (which is root)
+	// prefix was empty - delete everything under n (which is root)
 	count := countEntries(n)
 
 	var zero V

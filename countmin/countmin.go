@@ -13,10 +13,10 @@ import (
 // It provides approximate frequency counts with bounded error guarantees.
 //
 // Error bounds:
-//   - Overestimation: count(x) ≤ true_count(x) + ε * N (with probability 1-δ)
-//   - where ε = e/width, δ = (1/e)^depth, N = total count
+//   - Overestimation: count(x) <= true_count(x) + eps * N (with probability 1-delta)
+//   - where eps = e/width, delta = (1/e)^depth, N = total count
 //
-// Memory usage: depth × width × 8 bytes (uint64)
+// Memory usage: depth x width x 8 bytes (uint64)
 type Sketch struct {
 	mu      sync.RWMutex
 	matrix  [][]uint64
@@ -33,7 +33,7 @@ type Sketch struct {
 //   - epsilon: error factor (typical: 0.001 to 0.01)
 //   - delta: probability of exceeding error bound (typical: 0.01 to 0.1)
 //
-// Memory usage: O(e/ε * ln(1/δ)) where e ≈ 2.718
+// Memory usage: O(e/eps * ln(1/delta)) where e ~= 2.718
 //
 // Examples:
 //   - New(0.001, 0.01): width=2719, depth=5, ~106KB memory
@@ -124,7 +124,7 @@ func (s *Sketch) UpdateString(str string) {
 }
 
 // Count returns the estimated frequency of an item.
-// The estimate is guaranteed to be ≥ true count.
+// The estimate is guaranteed to be >= true count.
 func (s *Sketch) Count(data []byte) uint64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -235,7 +235,7 @@ func (s *Sketch) Delta() float64 {
 }
 
 // EstimatedError returns the estimated error bound for current load.
-// Error ≈ ε × N, where N is total count.
+// Error ~= eps x N, where N is total count.
 func (s *Sketch) EstimatedError() uint64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -238,7 +238,7 @@ func (bf *BloomFilter) EstimatedCount() uint64 {
 		return 0
 	}
 
-	// Using the formula: n ≈ -(m/k) * ln(1 - X/m) where X is number of set bits
+	// Using the formula: n ~= -(m/k) * ln(1 - X/m) where X is number of set bits
 	ratio := float64(setBits) / float64(bf.m)
 	if ratio >= 1.0 {
 		return math.MaxUint64 // Filter is full

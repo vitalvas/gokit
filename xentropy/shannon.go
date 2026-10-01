@@ -6,7 +6,7 @@ import "math"
 // Shannon entropy measures the average amount of information (in bits)
 // produced by a stochastic source of data.
 //
-// Formula: H(X) = -Σ P(x) * log2(P(x))
+// Formula: H(X) = -sum(P(x) * log2(P(x)))
 //
 // Returns a value between 0 (no entropy) and log2(n) where n is the
 // number of unique symbols. For byte data, maximum entropy is 8 bits.

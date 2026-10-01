@@ -3,11 +3,11 @@ package xentropy
 import "math"
 
 // MinEntropy calculates the min-entropy of the input data in bits.
-// Min-entropy (Rényi entropy with α=∞) measures the worst-case predictability
-// by focusing on the most likely outcome. It's the most conservative entropy measure
-// and is critical for cryptographic applications.
+// Min-entropy (Renyi entropy with alpha=infinity) measures the worst-case
+// predictability by focusing on the most likely outcome. It's the most
+// conservative entropy measure and is critical for cryptographic applications.
 //
-// Formula: H_∞(X) = -log2(max(P(x)))
+// Formula: H_inf(X) = -log2(max(P(x)))
 //
 // Unlike Shannon entropy which measures average unpredictability, min-entropy
 // measures worst-case unpredictability - what an attacker exploiting the most
