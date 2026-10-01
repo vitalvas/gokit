@@ -52,6 +52,7 @@ func Split(secret []byte, threshold, total int) ([]*Share, error) {
 			Y:         y,
 			Threshold: threshold,
 			Total:     total,
+			SecretLen: len(secret),
 		}
 	}
 
@@ -114,6 +115,7 @@ func SplitWithCustomX(secret []byte, threshold int, xCoords []*big.Int) ([]*Shar
 			Y:         y,
 			Threshold: threshold,
 			Total:     len(xCoords),
+			SecretLen: len(secret),
 		}
 	}
 
@@ -171,8 +173,13 @@ func Combine(shares []*Share, secretLen int) ([]byte, error) {
 	return fieldElementToBytes(secretInt, secretLen), nil
 }
 
-// CombineAuto reconstructs the secret from shares, automatically determining the secret length.
-// This uses the minimum bytes needed to represent the secret value.
+// CombineAuto reconstructs the secret from shares, determining the secret length
+// automatically. When the shares carry the original length (SecretLen, set by
+// Split), the exact secret is restored, including any leading zero bytes.
+//
+// Shares created before SecretLen existed (SecretLen == 0) fall back to the
+// minimal field-element encoding, which drops leading zero bytes; for those,
+// prefer Combine with an explicit length.
 func CombineAuto(shares []*Share) ([]byte, error) {
 	if len(shares) == 0 {
 		return nil, ErrInsufficientShares
@@ -211,6 +218,12 @@ func CombineAuto(shares []*Share) ([]byte, error) {
 	secretInt := lagrangeInterpolate(xs, ys)
 	if secretInt == nil {
 		return nil, ErrVerificationFailed
+	}
+
+	// When the original length is known, pad to it so leading zero bytes -- which
+	// the field-element representation drops -- are restored exactly.
+	if secretLen := shares[0].SecretLen; secretLen > 0 {
+		return fieldElementToBytes(secretInt, secretLen), nil
 	}
 
 	return secretInt.Bytes(), nil

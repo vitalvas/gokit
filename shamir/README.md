@@ -48,8 +48,12 @@ if err != nil {
     log.Fatal(err)
 }
 
-// Shares are self-describing
-recovered, err := shamir.Combine(shares[:3], len(secret))
+// Shares are self-describing and carry the original secret length, so
+// CombineAuto restores the exact secret, including any leading zero bytes.
+recovered, err := shamir.CombineAuto(shares[:3])
+
+// Combine with an explicit length is also available.
+recovered, err = shamir.Combine(shares[:3], len(secret))
 ```
 
 ### Prime Field for Large Secrets
@@ -110,7 +114,7 @@ valid := shamir.VerifyAllShares(shares)
 
 | Feature | GF(2^8) | Prime Field |
 |---------|---------|-------------|
-| Share size | `len(secret) + 1` | ~42+ bytes |
+| Share size | `len(secret) + 1` | ~44 bytes |
 | Max shares | 255 | Unlimited |
 | Secret size | Any | 31 bytes (or chunked) |
 | Metadata in share | No | Yes (threshold, total) |
@@ -155,7 +159,7 @@ valid := shamir.VerifyAllShares(shares)
 | `SplitWithCustomX(secret, threshold, xCoords)` | Split with custom x-coordinates |
 | `SplitBytes(secret, threshold, total)` | Split large secret (chunked) |
 | `Combine(shares, secretLen)` | Reconstruct with specified length |
-| `CombineAuto(shares)` | Reconstruct with auto-detected length |
+| `CombineAuto(shares)` | Reconstruct using the length stored in the share (preserves leading zero bytes) |
 | `CombineBytes(shares)` | Reconstruct large secret |
 | `VerifyShare(share, otherShares)` | Verify single share |
 | `VerifyAllShares(shares)` | Verify all shares |
@@ -193,9 +197,10 @@ valid := shamir.VerifyAllShares(shares)
 
 | Secret Size | GF(2^8) | Prime Field | Chunked |
 |-------------|---------|-------------|---------|
-| 16 bytes | 17 B | ~42 B | N/A |
-| 32 bytes | 33 B | ~42 B | ~46 B |
-| 1 KB | 1025 B | N/A | ~1.5 KB |
+| 16 bytes | 17 B | ~44 B | N/A |
+| 31 bytes | 32 B | ~44 B | N/A |
+| 32 bytes | 33 B | N/A | ~82 B |
+| 1 KB | 1025 B | N/A | ~1.2 KB |
 
 ## Security Notes
 
@@ -203,3 +208,13 @@ valid := shamir.VerifyAllShares(shares)
 - GF(2^8) uses the AES reduction polynomial (x^8 + x^4 + x^3 + x + 1)
 - Prime field uses secp256k1 prime (256-bit)
 - GF256Share.Equal uses constant-time comparison
+
+## Share Format Compatibility
+
+Prime-field shares serialize in a versioned binary format. The current version
+stores the original secret length so `CombineAuto` can restore leading zero
+bytes. `ParseShare` still accepts the legacy version-1 format; those older shares
+parse with an unknown length (`SecretLen == 0`), and `CombineAuto` falls back to
+the minimal encoding for them, so use `Combine` with an explicit length when
+reconstructing legacy shares whose secret may begin with zero bytes. Shares
+produced by the current version are not readable by older releases.

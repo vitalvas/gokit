@@ -77,10 +77,11 @@ func TestParseShareErrors(t *testing.T) {
 	t.Run("truncated data", func(t *testing.T) {
 		buf := make([]byte, shareHeaderSize+5)
 		buf[0] = shareVersion
-		binary.BigEndian.PutUint16(buf[1:3], 2)  // threshold
-		binary.BigEndian.PutUint16(buf[3:5], 3)  // total
-		binary.BigEndian.PutUint16(buf[5:7], 10) // xLen = 10 but not enough data
-		binary.BigEndian.PutUint16(buf[7:9], 10) // yLen = 10
+		binary.BigEndian.PutUint16(buf[1:3], 2)   // threshold
+		binary.BigEndian.PutUint16(buf[3:5], 3)   // total
+		binary.BigEndian.PutUint16(buf[5:7], 0)   // secretLen
+		binary.BigEndian.PutUint16(buf[7:9], 10)  // xLen = 10 but not enough data
+		binary.BigEndian.PutUint16(buf[9:11], 10) // yLen = 10
 		_, err := ParseShare(buf)
 		assert.ErrorIs(t, err, ErrInvalidShareFormat)
 	})
@@ -88,11 +89,12 @@ func TestParseShareErrors(t *testing.T) {
 	t.Run("zero X coordinate", func(t *testing.T) {
 		buf := make([]byte, shareHeaderSize+1)
 		buf[0] = shareVersion
-		binary.BigEndian.PutUint16(buf[1:3], 2) // threshold
-		binary.BigEndian.PutUint16(buf[3:5], 3) // total
-		binary.BigEndian.PutUint16(buf[5:7], 0) // xLen = 0
-		binary.BigEndian.PutUint16(buf[7:9], 1) // yLen = 1
-		buf[shareHeaderSize] = 0x42             // y = 0x42
+		binary.BigEndian.PutUint16(buf[1:3], 2)  // threshold
+		binary.BigEndian.PutUint16(buf[3:5], 3)  // total
+		binary.BigEndian.PutUint16(buf[5:7], 0)  // secretLen
+		binary.BigEndian.PutUint16(buf[7:9], 0)  // xLen = 0
+		binary.BigEndian.PutUint16(buf[9:11], 1) // yLen = 1
+		buf[shareHeaderSize] = 0x42              // y = 0x42
 		_, err := ParseShare(buf)
 		assert.ErrorIs(t, err, ErrInvalidShareX)
 	})

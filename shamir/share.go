@@ -17,16 +17,24 @@ type Share struct {
 	Threshold int
 	// Total is the total number of shares created.
 	Total int
+	// SecretLen is the original secret length in bytes. It lets CombineAuto
+	// reconstruct the exact secret, including any leading zero bytes that the
+	// field-element representation would otherwise drop. Zero means unknown
+	// (shares created before this field existed, or internal chunk shares).
+	SecretLen int
 }
 
-// shareHeader is the binary format header.
+// Binary format versions and header sizes.
 const (
-	shareVersion    = 1
-	shareHeaderSize = 1 + 2 + 2 + 2 + 2 // version + threshold + total + xLen + yLen
+	// shareVersion1 lacked the secretLen field.
+	shareVersion1    = 1
+	shareHeaderSize1 = 1 + 2 + 2 + 2 + 2 // version + threshold + total + xLen + yLen
+	shareVersion     = 2
+	shareHeaderSize  = 1 + 2 + 2 + 2 + 2 + 2 // + secretLen
 )
 
 // Bytes serializes the share to a binary format.
-// Format: version(1) | threshold(2) | total(2) | xLen(2) | yLen(2) | x | y
+// Format: version(1) | threshold(2) | total(2) | secretLen(2) | xLen(2) | yLen(2) | x | y
 func (s *Share) Bytes() []byte {
 	xBytes := s.X.Bytes()
 	yBytes := s.Y.Bytes()
@@ -36,8 +44,9 @@ func (s *Share) Bytes() []byte {
 	buf[0] = shareVersion
 	binary.BigEndian.PutUint16(buf[1:3], uint16(s.Threshold))
 	binary.BigEndian.PutUint16(buf[3:5], uint16(s.Total))
-	binary.BigEndian.PutUint16(buf[5:7], uint16(len(xBytes)))
-	binary.BigEndian.PutUint16(buf[7:9], uint16(len(yBytes)))
+	binary.BigEndian.PutUint16(buf[5:7], uint16(s.SecretLen))
+	binary.BigEndian.PutUint16(buf[7:9], uint16(len(xBytes)))
+	binary.BigEndian.PutUint16(buf[9:11], uint16(len(yBytes)))
 
 	copy(buf[shareHeaderSize:], xBytes)
 	copy(buf[shareHeaderSize+len(xBytes):], yBytes)
@@ -50,15 +59,27 @@ func (s *Share) String() string {
 	return base64.StdEncoding.EncodeToString(s.Bytes())
 }
 
-// ParseShare deserializes a share from binary format.
+// ParseShare deserializes a share from binary format. Both the current format
+// and the legacy version-1 format (without secretLen) are accepted; legacy
+// shares parse with SecretLen == 0.
 func ParseShare(data []byte) (*Share, error) {
-	if len(data) < shareHeaderSize {
+	if len(data) < 1 {
 		return nil, ErrInvalidShareFormat
 	}
 
-	version := data[0]
-	if version != shareVersion {
+	switch data[0] {
+	case shareVersion1:
+		return parseShareV1(data)
+	case shareVersion:
+		return parseShareV2(data)
+	default:
 		return nil, ErrUnsupportedVersion
+	}
+}
+
+func parseShareV1(data []byte) (*Share, error) {
+	if len(data) < shareHeaderSize1 {
+		return nil, ErrInvalidShareFormat
 	}
 
 	threshold := int(binary.BigEndian.Uint16(data[1:3]))
@@ -66,12 +87,34 @@ func ParseShare(data []byte) (*Share, error) {
 	xLen := int(binary.BigEndian.Uint16(data[5:7]))
 	yLen := int(binary.BigEndian.Uint16(data[7:9]))
 
+	if len(data) != shareHeaderSize1+xLen+yLen {
+		return nil, ErrInvalidShareFormat
+	}
+
+	return buildShare(data[shareHeaderSize1:shareHeaderSize1+xLen], data[shareHeaderSize1+xLen:], threshold, total, 0)
+}
+
+func parseShareV2(data []byte) (*Share, error) {
+	if len(data) < shareHeaderSize {
+		return nil, ErrInvalidShareFormat
+	}
+
+	threshold := int(binary.BigEndian.Uint16(data[1:3]))
+	total := int(binary.BigEndian.Uint16(data[3:5]))
+	secretLen := int(binary.BigEndian.Uint16(data[5:7]))
+	xLen := int(binary.BigEndian.Uint16(data[7:9]))
+	yLen := int(binary.BigEndian.Uint16(data[9:11]))
+
 	if len(data) != shareHeaderSize+xLen+yLen {
 		return nil, ErrInvalidShareFormat
 	}
 
-	x := new(big.Int).SetBytes(data[shareHeaderSize : shareHeaderSize+xLen])
-	y := new(big.Int).SetBytes(data[shareHeaderSize+xLen:])
+	return buildShare(data[shareHeaderSize:shareHeaderSize+xLen], data[shareHeaderSize+xLen:], threshold, total, secretLen)
+}
+
+func buildShare(xBytes, yBytes []byte, threshold, total, secretLen int) (*Share, error) {
+	x := new(big.Int).SetBytes(xBytes)
+	y := new(big.Int).SetBytes(yBytes)
 
 	if x.Sign() == 0 {
 		return nil, ErrInvalidShareX
@@ -82,6 +125,7 @@ func ParseShare(data []byte) (*Share, error) {
 		Y:         y,
 		Threshold: threshold,
 		Total:     total,
+		SecretLen: secretLen,
 	}, nil
 }
 
@@ -101,6 +145,7 @@ func (s *Share) Clone() *Share {
 		Y:         new(big.Int).Set(s.Y),
 		Threshold: s.Threshold,
 		Total:     s.Total,
+		SecretLen: s.SecretLen,
 	}
 }
 
@@ -112,5 +157,6 @@ func (s *Share) Equal(other *Share) bool {
 	return s.X.Cmp(other.X) == 0 &&
 		s.Y.Cmp(other.Y) == 0 &&
 		s.Threshold == other.Threshold &&
-		s.Total == other.Total
+		s.Total == other.Total &&
+		s.SecretLen == other.SecretLen
 }

@@ -3,6 +3,7 @@ package shamir
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"math/big"
 	"testing"
@@ -164,6 +165,48 @@ func TestCombineAuto(t *testing.T) {
 	recovered, err := CombineAuto(shares)
 	require.NoError(t, err)
 	assert.Equal(t, secret, recovered)
+}
+
+func TestCombineAutoPreservesLeadingZeros(t *testing.T) {
+	// Regression: CombineAuto used to return secretInt.Bytes(), dropping leading
+	// zero bytes. With SecretLen carried in the share the exact secret round-trips.
+	cases := [][]byte{
+		{0x00, 0x01, 0x02, 0x03},
+		{0x00, 0x00, 0xff},
+		{0x00},
+		append([]byte{0x00, 0x00}, []byte("payload")...),
+	}
+
+	for _, secret := range cases {
+		shares, err := Split(secret, 2, 3)
+		require.NoError(t, err)
+
+		got, err := CombineAuto(shares[:2])
+		require.NoError(t, err)
+		assert.Equal(t, secret, got, "CombineAuto must preserve leading zeros")
+
+		// Round-trip through serialization carries SecretLen too.
+		reparsed, err := ParseShareString(shares[0].String())
+		require.NoError(t, err)
+		assert.Equal(t, len(secret), reparsed.SecretLen)
+	}
+}
+
+func TestParseShareV1BackwardCompat(t *testing.T) {
+	// A hand-built legacy (version 1) share must still parse, with SecretLen 0.
+	buf := make([]byte, shareHeaderSize1+1+1)
+	buf[0] = shareVersion1
+	binary.BigEndian.PutUint16(buf[1:3], 2) // threshold
+	binary.BigEndian.PutUint16(buf[3:5], 3) // total
+	binary.BigEndian.PutUint16(buf[5:7], 1) // xLen
+	binary.BigEndian.PutUint16(buf[7:9], 1) // yLen
+	buf[shareHeaderSize1] = 0x05            // x
+	buf[shareHeaderSize1+1] = 0x42          // y
+
+	share, err := ParseShare(buf)
+	require.NoError(t, err)
+	assert.Equal(t, 0, share.SecretLen)
+	assert.Equal(t, int64(5), share.X.Int64())
 }
 
 func TestCombineWithDifferentShareSubsets(t *testing.T) {
