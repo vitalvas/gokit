@@ -16,6 +16,7 @@ The following libraries will be released in v1.0.0:
 - **hyperloglog** - Cardinality estimation for counting distinct elements with minimal memory
 - **markov** - Markov chain text generator with thread-safe operations
 - **radixtree** - Generic concurrent-safe radix tree with zero-allocation lookups, prefix search, and longest prefix matching
+- **secp256k1** - secp256k1 curve with ECDSA (raw/DER/ES256K), Schnorr (BIP-340), public-key recovery, ECDH, and PEM/DER keys, stdlib-only
 - **shamir** - Shamir's Secret Sharing with GF(2^8) and prime field options, share verification, and chunked large secret support
 - **spacesaving** - Space-Saving algorithm for finding top-k most frequent items (heavy hitters) in streams
 - **tdigest** - T-Digest for accurate quantile estimation from streaming or distributed data
