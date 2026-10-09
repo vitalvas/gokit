@@ -16,6 +16,7 @@ The following libraries will be released in v1.0.0:
 - **gcra** - GCRA (leaky bucket) rate limiter with per-key state, burst capacity, batch requests, and retry-after
 - **hyperloglog** - Cardinality estimation for counting distinct elements with minimal memory
 - **markov** - Markov chain text generator with thread-safe operations
+- **otp** - HOTP/TOTP/OCRA one-time passwords (RFC 4226/6238/6287) with secret generation, skew-tolerant verification, and otpauth URIs
 - **radixtree** - Generic concurrent-safe radix tree with zero-allocation lookups, prefix search, and longest prefix matching
 - **secp256k1** - secp256k1 curve with ECDSA (raw/DER/ES256K), Schnorr (BIP-340), public-key recovery, ECDH, and PEM/DER keys, stdlib-only
 - **shamir** - Shamir's Secret Sharing with GF(2^8) and prime field options, share verification, and chunked large secret support
