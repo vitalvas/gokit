@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.38.0](https://github.com/vitalvas/gokit/compare/v0.37.0...v0.38.0) (2026-10-09)
+
+
+### Features
+
+* **gcra:** add GCRA rate limiter with burst, batch and export/import ([8c59df1](https://github.com/vitalvas/gokit/commit/8c59df14354fa208af65eea599b33aa46da12c93))
+* **otp:** add HOTP, TOTP and OCRA one-time passwords ([8f936c7](https://github.com/vitalvas/gokit/commit/8f936c71706190bfa4e3162744b865429a6fb23d))
+* **secp256k1:** add constant-time fixed-width secret arithmetic ([663c8da](https://github.com/vitalvas/gokit/commit/663c8dababe3f4654ad1f38693c64110e9c49e11))
+* **secp256k1:** add secp256k1 curve, ECDSA, Schnorr, recovery, ECDH ([963c733](https://github.com/vitalvas/gokit/commit/963c7333e3eda007e3f892ac42c615ecece09119))
+* **sievecache:** add SIEVE cache with lazy TTL ([b3be11d](https://github.com/vitalvas/gokit/commit/b3be11da29200039797868196508849df09df96a))
+* **xjwt:** add stdlib-only JOSE library for JWS/JWK/JWT/JWE ([7506791](https://github.com/vitalvas/gokit/commit/7506791a55407522621f49790ade176daac8455d))
+
+
+### Bug Fixes
+
+* **ci:** move to yake template ([3ecef5f](https://github.com/vitalvas/gokit/commit/3ecef5f0388ac9fdf6e809fba242865709ee8eb1))
+* **gcra:** deny new keys at capacity instead of evicting state ([3fddbe3](https://github.com/vitalvas/gokit/commit/3fddbe370b24970da257229101331785e238783c))
+* replace non-ASCII characters in doc comments with ASCII ([62ab708](https://github.com/vitalvas/gokit/commit/62ab7088388a2782581c2ac1ba6604aa48acec28))
+* **shamir:** preserve leading zero bytes in CombineAuto ([c898e1f](https://github.com/vitalvas/gokit/commit/c898e1fa459282af999b1d787c8d8de8d73e5719))
+* **shamir:** tighten share validation and bounds ([f80c94e](https://github.com/vitalvas/gokit/commit/f80c94e8fd8f9ee8c54ba3a4141d9a117487cea1))
+* **xjwt:** harden JWE validation and rework JWKS cache ([e9273da](https://github.com/vitalvas/gokit/commit/e9273da18168740ab78c09bb480150153900c3e7))
+
 ## [0.37.0](https://github.com/vitalvas/gokit/compare/v0.36.3...v0.37.0) (2026-10-01)
 
 
