@@ -25,5 +25,6 @@ The following libraries will be released in v1.0.0:
 - **xconfig** - Flexible configuration library supporting multiple formats and sources
 - **xdigits** - Numeric utilities for float rounding with precision and random integer generation
 - **xentropy** - Shannon and min-entropy calculator for randomness and security assessment
+- **xjwt** - JOSE (JWS/JWK/JWT/JWE) with RS/PS/ES/EdDSA/HS/ES256K and ML-DSA (post-quantum) signing, crypto.Signer/HSM keys, full JWE encryption (RSA-OAEP, AES-KW/GCMKW, ECDH-ES incl. X25519, PBES2, dir), JWK generation, remote JWKS cache, and OIDC IdP/RP helpers (at_hash/c_hash, azp/nonce/typ verification), stdlib-only
 - **xnet** - Network utilities for IP addresses and CIDR blocks (containment, merging, splitting, fast matching, PROXY protocol v1/v2)
 - **xstrings** - String manipulation and glob pattern matching utilities
