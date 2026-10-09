@@ -13,6 +13,7 @@ The following libraries will be released in v1.0.0:
 - **ewma** - Exponentially weighted moving average for smoothing time series data and rate calculation
 - **fastcdc** - Fast Content-Defined Chunking with gear rolling hash and configurable hash algorithms
 - **fixedwindow** - Fixed window counter rate limiter with per-key lockout, configurable cleanup, and oldest-window eviction
+- **gcra** - GCRA (leaky bucket) rate limiter with per-key state, burst capacity, batch requests, and retry-after
 - **hyperloglog** - Cardinality estimation for counting distinct elements with minimal memory
 - **markov** - Markov chain text generator with thread-safe operations
 - **radixtree** - Generic concurrent-safe radix tree with zero-allocation lookups, prefix search, and longest prefix matching
