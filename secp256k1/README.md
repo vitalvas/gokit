@@ -1,6 +1,6 @@
 # secp256k1
 
-secp256k1 elliptic curve cryptography using only the Go standard library.
+secp256k1 elliptic curve cryptography with a fixed-width backend for secret operations.
 
 ## Overview
 
@@ -147,13 +147,20 @@ pub2, err := secp256k1.ParsePublicKeyPEM(pubPEM)
 
 ## Security Notes
 
-- Arithmetic is built on `math/big` and is **not constant-time**. Verification
-  and recovery operate only on public values, so this is not a concern for them.
-- Signing (ECDSA and Schnorr) is deterministic, eliminating nonce-reuse and
-  RNG-quality risks. However, because scalar multiplication is not constant-time,
-  signing and ECDH are not hardened against timing side-channels. Callers
-  handling long-lived signing keys in adversarial timing environments should
-  prefer a constant-time implementation.
+- Key derivation, ECDSA and Schnorr signing, and ECDH use this package's
+  fixed-width Montgomery arithmetic and a 256-round ladder with complete point
+  addition formulas. The implementation uses the standard library and lives
+  directly in this package, with no additional dependencies.
+  Private scalars are stored as fixed-width bytes. Verification and recovery
+  retain `math/big` arithmetic on public values.
+- Construct private keys with `PrivKeyFromBytes` or `GeneratePrivateKey`.
+  `PrivateKey.D` is a read-only compatibility view; editing it does not change
+  the key. Private-key struct literals do not initialize the internal scalar.
+  Importing a key constructs the `big.Int` view, an encoding step that is not
+  claimed to be constant-time. Functional tests do not establish an end-to-end
+  timing guarantee or protection against memory disclosure or physical faults.
+- Signing uses deterministic RFC 6979 nonces for ECDSA and the BIP-340 nonce
+  scheme with auxiliary randomness for Schnorr.
 - ECDH returns the raw shared X coordinate; run it through a KDF before use.
 - `Sign` always produces canonical low-S signatures, but `Verify`/`VerifyDER`
   also accept the malleated `(r, N-s)` variant (per RFC 8812). Where a signature

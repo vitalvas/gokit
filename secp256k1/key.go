@@ -3,6 +3,7 @@ package secp256k1
 import (
 	"crypto"
 	"crypto/rand"
+	"crypto/subtle"
 	"io"
 	"math/big"
 )
@@ -25,10 +26,13 @@ type PublicKey struct {
 	Y *big.Int
 }
 
-// PrivateKey is an secp256k1 private key with its derived public key.
+// PrivateKey is a secp256k1 private key with its derived public key.
+// Use PrivKeyFromBytes or GeneratePrivateKey to initialize the private scalar.
 type PrivateKey struct {
-	D   *big.Int
-	Pub PublicKey
+	// D is a read-only scalar view; mutations do not change this key.
+	D      *big.Int
+	scalar [32]byte
+	Pub    PublicKey
 }
 
 // ParsePubKey decodes a SEC1 public key in either uncompressed form
@@ -108,7 +112,7 @@ func (p *PublicKey) IsValid() bool {
 // key types), accepting the concrete *PublicKey type.
 func (p *PublicKey) Equal(other crypto.PublicKey) bool {
 	o, ok := other.(*PublicKey)
-	if !ok || p == nil || o == nil || p.X == nil || o.X == nil {
+	if !ok || p == nil || o == nil || p.X == nil || o.X == nil || p.Y == nil || o.Y == nil {
 		return false
 	}
 
@@ -118,11 +122,11 @@ func (p *PublicKey) Equal(other crypto.PublicKey) bool {
 // Equal reports whether p and other are the same private key.
 func (p *PrivateKey) Equal(other crypto.PrivateKey) bool {
 	o, ok := other.(*PrivateKey)
-	if !ok || p == nil || o == nil || p.D == nil || o.D == nil {
+	if !ok || p == nil || o == nil || subtle.ConstantTimeCompare(p.scalar[:], make([]byte, 32)) == 1 || subtle.ConstantTimeCompare(o.scalar[:], make([]byte, 32)) == 1 {
 		return false
 	}
 
-	return p.D.Cmp(o.D) == 0
+	return subtle.ConstantTimeCompare(p.scalar[:], o.scalar[:]) == 1
 }
 
 // SerializeUncompressed returns the uncompressed SEC1 encoding 0x04 || X || Y.
@@ -153,19 +157,22 @@ func (p *PublicKey) SerializeCompressed() []byte {
 // PrivKeyFromBytes builds a private key from a big-endian scalar and derives the
 // public key. The scalar must be in [1, N-1].
 func PrivKeyFromBytes(d []byte) (*PrivateKey, error) {
-	k := new(big.Int).SetBytes(d)
-	if k.Sign() == 0 || k.Cmp(orderN) >= 0 {
+	if len(d) > coordinateLen {
+		return nil, errBadKey("private key scalar too long")
+	}
+	var raw [32]byte
+	copy(raw[32-len(d):], d)
+	scalar := newScalarValue()
+	if err := scalar.decode(raw[:]); err != nil || scalar.isZero() {
 		return nil, errBadKey("private key scalar out of range [1, N-1]")
 	}
-
-	x, y := scalarBaseMult(k)
-
-	return &PrivateKey{D: k, Pub: PublicKey{X: x, Y: y}}, nil
+	pub := newSecretPoint().base().multiply(scalar).encodeUncompressed()
+	return &PrivateKey{D: new(big.Int).SetBytes(raw[:]), scalar: raw, Pub: PublicKey{X: new(big.Int).SetBytes(pub[1:33]), Y: new(big.Int).SetBytes(pub[33:])}}, nil
 }
 
 // Serialize returns the private key as a fixed 32-byte big-endian scalar.
 func (p *PrivateKey) Serialize() []byte {
-	return fixedBytes(p.D)
+	return append([]byte(nil), p.scalar[:]...)
 }
 
 // PubKey returns the public key derived from the private key.
@@ -188,11 +195,19 @@ func GeneratePrivateKeyFromRand(r io.Reader) (*PrivateKey, error) {
 			return nil, err
 		}
 
-		k := new(big.Int).SetBytes(buf)
-		if k.Sign() != 0 && k.Cmp(orderN) < 0 {
-			x, y := scalarBaseMult(k)
-
-			return &PrivateKey{D: k, Pub: PublicKey{X: x, Y: y}}, nil
+		if key, err := PrivKeyFromBytes(buf); err == nil {
+			return key, nil
 		}
 	}
+}
+
+func (p *PrivateKey) secretScalar() (*scalarValue, error) {
+	if p == nil {
+		return nil, errBadKey("nil private key")
+	}
+	scalar := newScalarValue()
+	if err := scalar.decode(p.scalar[:]); err != nil || scalar.isZero() {
+		return nil, errBadKey("invalid private key")
+	}
+	return scalar, nil
 }

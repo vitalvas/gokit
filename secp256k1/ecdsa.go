@@ -22,7 +22,7 @@ func Verify(pub *PublicKey, hash []byte, r, s *big.Int) bool {
 		return false
 	}
 
-	if !isOnCurve(pub.X, pub.Y) {
+	if !pub.IsValid() {
 		return false
 	}
 
@@ -70,16 +70,14 @@ func VerifyStrict(pub *PublicKey, hash []byte, r, s *big.Int) bool {
 	return Verify(pub, hash, r, s)
 }
 
-// Sign produces a deterministic ECDSA signature (RFC 6979) of hash under priv
-// and returns the canonical low-S form. hash is the message digest.
-//
-// Sign is RFC 6979 deterministic (no nonce reuse / RNG risk) but, like the
-// rest of this package, is not constant-time; see the package documentation.
 // nonceFunc supplies the per-signature nonce. It defaults to RFC 6979 and is a
 // package variable only so tests can inject degenerate nonces to exercise the
 // (otherwise unreachable) retry branches below.
 var nonceFunc = rfc6979Nonce
 
+// Sign produces a deterministic ECDSA signature (RFC 6979) of hash under priv
+// and returns the canonical low-S form. hash is the message digest.
+// Invalid private keys return nil signature values.
 func Sign(priv *PrivateKey, hash []byte) (r, s *big.Int) {
 	r, s, _ = signWithRecovery(priv, hash)
 
@@ -92,50 +90,53 @@ func Sign(priv *PrivateKey, hash []byte) (r, s *big.Int) {
 // coordinate, bit 1 is set when that point's X exceeded the group order (and so
 // was reduced). Low-S normalization flips the Y parity, so recID tracks that.
 func signWithRecovery(priv *PrivateKey, hash []byte) (r, s *big.Int, recID int) {
-	e := hashToInt(hash)
-
+	d, err := priv.secretScalar()
+	if err != nil {
+		return nil, nil, 0
+	}
+	e := reducedScalar(digestBytes(hash))
+	half := reducedScalar(fixedBytes(halfOrder))
 	for i := 0; ; i++ {
-		k := nonceFunc(priv.D, hash, i)
-		if k.Sign() == 0 || k.Cmp(orderN) >= 0 {
+		raw := nonceFunc(priv.scalar[:], hash, i)
+		k := newScalarValue()
+		if err := k.decode(raw); err != nil || k.isZero() {
 			continue
 		}
-
-		x, y := scalarBaseMult(k)
-		r = new(big.Int).Mod(x, orderN)
-		// Effectively unreachable: requires a nonce whose point x-coordinate is
-		// a multiple of n. Standard ECDSA retry guard.
-		if r.Sign() == 0 {
+		point := newSecretPoint().base().multiply(k).encodeUncompressed()
+		rScalar := reducedScalar(point[1:33])
+		if rScalar.isZero() {
 			continue
 		}
-
-		kInv := new(big.Int).ModInverse(k, orderN)
-		if kInv == nil {
+		sScalar := rScalar.copy().multiply(d).add(e).multiply(k.copy().invert())
+		if sScalar.isZero() {
 			continue
 		}
-
-		// s = k^-1 * (e + r*d) mod n
-		s = new(big.Int).Mul(r, priv.D)
-		s.Add(s, e)
-		s.Mul(s, kInv)
-		s.Mod(s, orderN)
-		if s.Sign() == 0 {
-			continue
-		}
-
-		recID = int(y.Bit(0))
-		if x.Cmp(orderN) >= 0 {
+		high := 1 - sScalar.lessOrEqual(half)
+		neg := newScalarValue().subtract(sScalar)
+		_ = sScalar.selectValue(high, sScalar, neg)
+		recID = int(point[64]&1) ^ int(high)
+		if new(big.Int).SetBytes(point[1:33]).Cmp(orderN) >= 0 {
 			recID |= 2
 		}
-
-		// Canonical low-S: if s > n/2, use n - s. Negating s is equivalent to
-		// negating the nonce point, which flips its Y parity.
-		if s.Cmp(halfOrder) > 0 {
-			s.Sub(orderN, s)
-			recID ^= 1
-		}
-
-		return r, s, recID
+		return new(big.Int).SetBytes(rScalar.encode()), new(big.Int).SetBytes(sScalar.encode()), recID
 	}
+}
+
+func digestBytes(hash []byte) []byte {
+	var out [32]byte
+	if len(hash) > 32 {
+		hash = hash[:32]
+	}
+	copy(out[32-len(hash):], hash)
+	return out[:]
+}
+
+func reducedScalar(raw []byte) *scalarValue {
+	s := newScalarValue()
+	if err := s.decodeReduced(raw); err != nil {
+		panic(err)
+	}
+	return s
 }
 
 // hashToInt converts a digest to an integer per FIPS 186-4 / SEC1: take the
@@ -164,11 +165,11 @@ func hashToInt(hash []byte) *big.Int {
 // rfc6979Nonce derives the deterministic nonce k for the given private key and
 // message hash, per RFC 6979 Section 3.2 using HMAC-SHA256. attempt selects successive
 // candidates when an earlier k was rejected (the spec's K/V update loop).
-func rfc6979Nonce(priv *big.Int, hash []byte, attempt int) *big.Int {
+func rfc6979Nonce(priv []byte, hash []byte, attempt int) []byte {
 	holen := sha256.Size
 	rolen := (orderN.BitLen() + 7) / 8
 
-	bx := append(int2octets(priv, rolen), bits2octets(hash, rolen)...)
+	bx := append(append([]byte(nil), priv...), reducedScalar(digestBytes(hash)).encode()...)
 
 	// Step b/c: V = 0x01..., K = 0x00...
 	v := make([]byte, holen)
@@ -198,10 +199,10 @@ func rfc6979Nonce(priv *big.Int, hash []byte, attempt int) *big.Int {
 			t = append(t, v...)
 		}
 
-		candidate := bits2int(t, orderN.BitLen())
-		if candidate.Sign() > 0 && candidate.Cmp(orderN) < 0 {
+		candidate := newScalarValue()
+		if err := candidate.decode(t); err == nil && !candidate.isZero() {
 			if skip == 0 {
-				return candidate
+				return candidate.encode()
 			}
 
 			skip--

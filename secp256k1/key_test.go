@@ -1,6 +1,8 @@
 package secp256k1
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"errors"
 	"math/big"
 	"testing"
@@ -272,4 +274,51 @@ func TestKeyParsing(t *testing.T) {
 		assert.False(t, a.Equal(b))
 		assert.False(t, a.Equal("not a key"))
 	})
+}
+
+func TestSecretArithmeticAgainstPublicReference(t *testing.T) {
+	peer, err := PrivKeyFromBytes([]byte{7})
+	require.NoError(t, err)
+	digest := sha256.Sum256([]byte("constant-width arithmetic regression"))
+	for _, scalar := range []*big.Int{big.NewInt(1), big.NewInt(2), new(big.Int).Lsh(big.NewInt(1), 128), new(big.Int).Sub(orderN, big.NewInt(1))} {
+		priv, err := PrivKeyFromBytes(fixedBytes(scalar))
+		require.NoError(t, err)
+		x, y := scalarBaseMult(scalar)
+		assert.Equal(t, x, priv.Pub.X)
+		assert.Equal(t, y, priv.Pub.Y)
+		shared, err := priv.ECDH(peer.PubKey())
+		require.NoError(t, err)
+		refX, _ := scalarMult(affineToJacobian(peer.Pub.X, peer.Pub.Y), scalar).toAffine()
+		assert.Equal(t, fixedBytes(refX), shared)
+		r, s, recID := SignRecoverable(priv, digest[:])
+		require.True(t, VerifyStrict(priv.PubKey(), digest[:], r, s))
+		recovered, err := RecoverPubKey(digest[:], r, s, recID)
+		require.NoError(t, err)
+		assert.True(t, recovered.Equal(priv.PubKey()))
+		sig, err := signSchnorr(priv, digest[:], bytes.NewReader(make([]byte, 32)))
+		require.NoError(t, err)
+		assert.True(t, VerifySchnorr(priv.PubKey(), digest[:], sig))
+	}
+}
+
+func TestPrivateScalarCompatibilityViewIsReadOnly(t *testing.T) {
+	priv, err := PrivKeyFromBytes([]byte{1})
+	require.NoError(t, err)
+	other, err := PrivKeyFromBytes([]byte{2})
+	require.NoError(t, err)
+	digest := sha256.Sum256([]byte("immutable key"))
+	r, s := Sign(priv, digest[:])
+	serialized := priv.Serialize()
+	priv.D.SetInt64(123)
+	r2, s2 := Sign(priv, digest[:])
+	assert.Equal(t, r, r2)
+	assert.Equal(t, s, s2)
+	assert.Equal(t, serialized, priv.Serialize())
+	shared, err := priv.ECDH(other.PubKey())
+	require.NoError(t, err)
+	reverse, err := other.ECDH(priv.PubKey())
+	require.NoError(t, err)
+	assert.Equal(t, shared, reverse)
+	serialized[31] = 99
+	assert.Equal(t, byte(1), priv.Serialize()[31], "serialization cannot mutate the private scalar")
 }

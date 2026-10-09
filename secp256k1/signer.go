@@ -18,6 +18,9 @@ type ecdsaSignature struct {
 // low-S, matching Sign. hash is the message digest.
 func SignDER(priv *PrivateKey, hash []byte) ([]byte, error) {
 	r, s := Sign(priv, hash)
+	if r == nil || s == nil {
+		return nil, errBadKey("invalid private key")
+	}
 
 	return asn1.Marshal(ecdsaSignature{R: r, S: s})
 }

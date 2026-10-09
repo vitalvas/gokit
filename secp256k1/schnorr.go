@@ -69,54 +69,38 @@ func signSchnorr(priv *PrivateKey, msg []byte, auxRand io.Reader) ([]byte, error
 		return nil, errBadKey("schnorr message must be 32 bytes, got %d", len(msg))
 	}
 
-	// d' = priv scalar; if the pubkey has odd Y, negate d so P has even Y.
-	d := new(big.Int).Set(priv.D)
-	px, py := scalarBaseMult(d)
-	if py.Bit(0) == 1 {
-		d.Sub(orderN, d)
+	d, err := priv.secretScalar()
+	if err != nil {
+		return nil, err
 	}
+	pub := newSecretPoint().base().multiply(d).encodeUncompressed()
+	negD := newScalarValue().subtract(d)
+	_ = d.selectValue(uint64(pub[64]&1), d, negD)
+	pBytes := pub[1:33]
 
-	pBytes := fixedBytes(px)
-
-	// aux = 32 random bytes; t = d XOR tagged_hash("BIP0340/aux", aux)
 	aux := make([]byte, 32)
 	if _, err := io.ReadFull(auxRand, aux); err != nil {
 		return nil, err
 	}
-
-	t := new(big.Int).Xor(d, new(big.Int).SetBytes(taggedHash("BIP0340/aux", aux)))
-
-	// nonce k0 = tagged_hash("BIP0340/nonce", t || P.x || msg) mod n
-	k0 := new(big.Int).SetBytes(taggedHash("BIP0340/nonce", fixedBytes(t), pBytes, msg))
-	k0.Mod(k0, orderN)
-	if k0.Sign() == 0 {
+	t := d.encode()
+	auxHash := taggedHash("BIP0340/aux", aux)
+	for i := range t {
+		t[i] ^= auxHash[i]
+	}
+	k := reducedScalar(taggedHash("BIP0340/nonce", t, pBytes, msg))
+	if k.isZero() {
 		return nil, errBadKey("schnorr nonce is zero")
 	}
-
-	// R = k0*G; if R has odd Y, negate k so R has even Y.
-	rx, ry := scalarBaseMult(k0)
-	k := k0
-	if ry.Bit(0) == 1 {
-		k = new(big.Int).Sub(orderN, k0)
-	}
-
-	rBytes := fixedBytes(rx)
-
-	// e = tagged_hash("BIP0340/challenge", R.x || P.x || msg) mod n
-	e := new(big.Int).SetBytes(taggedHash("BIP0340/challenge", rBytes, pBytes, msg))
-	e.Mod(e, orderN)
-
-	// s = (k + e*d) mod n
-	s := new(big.Int).Mul(e, d)
-	s.Add(s, k)
-	s.Mod(s, orderN)
-
-	sig := make([]byte, SchnorrSignatureLen)
-	copy(sig[:32], rBytes)
-	copy(sig[32:], fixedBytes(s))
+	point := newSecretPoint().base().multiply(k).encodeUncompressed()
+	negK := newScalarValue().subtract(k)
+	_ = k.selectValue(uint64(point[64]&1), k, negK)
+	rBytes := point[1:33]
+	e := reducedScalar(taggedHash("BIP0340/challenge", rBytes, pBytes, msg))
+	s := e.multiply(d).add(k)
+	sig := append(append([]byte(nil), rBytes...), s.encode()...)
 
 	// Self-verify, as recommended by BIP-340, to catch faults.
-	if !VerifySchnorr(&PublicKey{X: px, Y: py}, msg, sig) {
+	if !VerifySchnorr(priv.PubKey(), msg, sig) {
 		return nil, errBadKey("schnorr self-verification failed")
 	}
 

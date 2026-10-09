@@ -46,15 +46,9 @@
 // in PEM. crypto/x509 does not know the secp256k1 curve, so these are encoded
 // directly against the standard ASN.1 structures.
 //
-// # Security posture and limitations
+// # Security posture
 //
-//   - Arithmetic is built on math/big and is therefore NOT constant-time.
-//     Verification and recovery operate only on public values, so this is not a
-//     concern for them.
-//   - Signing (ECDSA and Schnorr) uses a deterministic nonce -- RFC 6979 for
-//     ECDSA and the BIP-340 scheme for Schnorr -- eliminating nonce reuse and
-//     RNG-quality risks. However, because the underlying scalar multiplication
-//     is not constant-time, signing and ECDH are not hardened against timing
-//     side-channels. Callers handling long-lived signing keys in adversarial
-//     timing environments should prefer a constant-time implementation.
+// Secret operations use fixed-width arithmetic. Verification and recovery use
+// math/big on public values. Key import also constructs a big.Int scalar view;
+// there is no verified end-to-end timing guarantee.
 package secp256k1

@@ -8,19 +8,20 @@ package secp256k1
 // callers must run it through a KDF (e.g. HKDF or a plain hash) before using it
 // as key material. The peer key is validated to be on the curve.
 func (p *PrivateKey) ECDH(pub *PublicKey) ([]byte, error) {
-	if p == nil || p.D == nil {
-		return nil, errBadKey("nil private key")
+	scalar, err := p.secretScalar()
+	if err != nil {
+		return nil, err
 	}
-
 	if !pub.IsValid() {
 		return nil, errBadKey("peer public key is not on the curve")
 	}
-
-	shared := scalarMult(affineToJacobian(pub.X, pub.Y), p.D)
-	x, _ := shared.toAffine()
-	if shared.isIdentity() {
+	point := newSecretPoint()
+	if err := point.decodeUncompressed(pub.SerializeUncompressed()); err != nil {
+		return nil, err
+	}
+	point.multiply(scalar)
+	if point.isIdentity() {
 		return nil, errBadKey("shared secret is the point at infinity")
 	}
-
-	return fixedBytes(x), nil
+	return point.xCoordinate(), nil
 }

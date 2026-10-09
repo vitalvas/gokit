@@ -135,12 +135,12 @@ func TestSignRetriesOnBadNonce(t *testing.T) {
 	orig := nonceFunc
 	t.Cleanup(func() { nonceFunc = orig })
 
-	nonceFunc = func(d *big.Int, hash []byte, attempt int) *big.Int {
+	nonceFunc = func(d []byte, hash []byte, attempt int) []byte {
 		switch attempt {
 		case 0:
-			return big.NewInt(0) // triggers k.Sign()==0 retry
+			return make([]byte, 32)
 		case 1:
-			return new(big.Int).Set(orderN) // triggers k >= n retry
+			return fixedBytes(orderN)
 		default:
 			return orig(d, hash, attempt)
 		}
@@ -169,9 +169,9 @@ func TestSignRetriesOnZeroS(t *testing.T) {
 
 	orig := nonceFunc
 	t.Cleanup(func() { nonceFunc = orig })
-	nonceFunc = func(d *big.Int, h []byte, attempt int) *big.Int {
+	nonceFunc = func(d []byte, h []byte, attempt int) []byte {
 		if attempt == 0 {
-			return new(big.Int).Set(k0)
+			return fixedBytes(k0)
 		}
 
 		return orig(d, h, attempt)
