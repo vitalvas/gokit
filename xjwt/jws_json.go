@@ -23,15 +23,15 @@ type jwsSignature struct {
 
 // jwsGeneral is the general JSON serialization (RFC 7515 Section 7.2.1).
 type jwsGeneral struct {
-	Payload    string         `json:"payload,omitempty"`
+	Payload    *string        `json:"payload,omitempty"`
 	Signatures []jwsSignature `json:"signatures"`
 }
 
 // jwsFlattened is the flattened JSON serialization (RFC 7515 Section 7.2.2).
 type jwsFlattened struct {
-	Payload   string `json:"payload,omitempty"`
-	Protected string `json:"protected"`
-	Signature string `json:"signature"`
+	Payload   *string `json:"payload,omitempty"`
+	Protected string  `json:"protected"`
+	Signature string  `json:"signature"`
 }
 
 // SignJSON signs payload with one or more keys and returns the general JSON
@@ -54,7 +54,7 @@ func SignJSON(payload []byte, inputs ...SignInput) ([]byte, error) {
 		sigs = append(sigs, sig)
 	}
 
-	return json.Marshal(jwsGeneral{Payload: encodedPayload, Signatures: sigs})
+	return json.Marshal(jwsGeneral{Payload: &encodedPayload, Signatures: sigs})
 }
 
 // SignFlattenedJSON signs payload with a single key and returns the flattened
@@ -69,7 +69,7 @@ func SignFlattenedJSON(payload []byte, in SignInput) ([]byte, error) {
 	}
 
 	return json.Marshal(jwsFlattened{
-		Payload:   encodedPayload,
+		Payload:   &encodedPayload,
 		Protected: sig.Protected,
 		Signature: sig.Signature,
 	})
@@ -117,16 +117,16 @@ func signOne(in SignInput, encodedPayload string) (jwsSignature, error) {
 // allowlist; each candidate algorithm is still subject to the allowlist and the
 // "none" prohibition.
 func VerifyJSON(data []byte, resolve KeyResolver, allowedAlgs []string) ([]byte, error) {
-	return verifyJSON(data, nil, resolve, allowedAlgs)
+	return verifyJSON(data, nil, false, resolve, allowedAlgs)
 }
 
 // VerifyDetachedJSON verifies a detached JSON JWS against an externally supplied
 // payload.
 func VerifyDetachedJSON(data, payload []byte, resolve KeyResolver, allowedAlgs []string) ([]byte, error) {
-	return verifyJSON(data, payload, resolve, allowedAlgs)
+	return verifyJSON(data, payload, true, resolve, allowedAlgs)
 }
 
-func verifyJSON(data, detachedPayload []byte, resolve KeyResolver, allowedAlgs []string) ([]byte, error) {
+func verifyJSON(data, detachedPayload []byte, detached bool, resolve KeyResolver, allowedAlgs []string) ([]byte, error) {
 	payloadSeg, sigs, err := parseJSONJWS(data)
 	if err != nil {
 		return nil, err
@@ -138,13 +138,13 @@ func verifyJSON(data, detachedPayload []byte, resolve KeyResolver, allowedAlgs [
 	// payload supplied by the caller.
 	var encodedPayload string
 	switch {
-	case detachedPayload != nil:
-		if payloadSeg != "" {
+	case detached:
+		if payloadSeg != nil {
 			return nil, fmt.Errorf("xjwt: detached verify given a document that embeds a payload")
 		}
 		encodedPayload = enc.EncodeToString(detachedPayload)
-	case payloadSeg != "":
-		encodedPayload = payloadSeg
+	case payloadSeg != nil:
+		encodedPayload = *payloadSeg
 	default:
 		return nil, fmt.Errorf("xjwt: JWS has no payload and none supplied")
 	}
@@ -199,7 +199,22 @@ func verifyJSONSignature(s jwsSignature, encodedPayload string, resolve KeyResol
 
 // parseJSONJWS accepts both the general and flattened serializations and returns
 // the (possibly empty) encoded payload and the list of signatures.
-func parseJSONJWS(data []byte) (payload string, sigs []jwsSignature, err error) {
+func parseJSONJWS(data []byte) (payload *string, sigs []jwsSignature, err error) {
+	var fields struct {
+		Payload json.RawMessage `json:"payload"`
+	}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, nil, fmt.Errorf("xjwt: parsing JSON JWS: %w", err)
+	}
+	if fields.Payload != nil {
+		var value string
+		if string(fields.Payload) == "null" {
+			return nil, nil, fmt.Errorf("xjwt: payload must be a string")
+		}
+		if err := json.Unmarshal(fields.Payload, &value); err != nil {
+			return nil, nil, fmt.Errorf("xjwt: payload must be a string: %w", err)
+		}
+	}
 	var general jwsGeneral
 	if err := json.Unmarshal(data, &general); err == nil && len(general.Signatures) > 0 {
 		return general.Payload, general.Signatures, nil
@@ -207,11 +222,11 @@ func parseJSONJWS(data []byte) (payload string, sigs []jwsSignature, err error) 
 
 	var flat jwsFlattened
 	if err := json.Unmarshal(data, &flat); err != nil {
-		return "", nil, fmt.Errorf("xjwt: parsing JSON JWS: %w", err)
+		return nil, nil, fmt.Errorf("xjwt: parsing JSON JWS: %w", err)
 	}
 
 	if flat.Signature == "" || flat.Protected == "" {
-		return "", nil, fmt.Errorf("xjwt: JSON JWS has no signatures")
+		return nil, nil, fmt.Errorf("xjwt: JSON JWS has no signatures")
 	}
 
 	return flat.Payload, []jwsSignature{{Protected: flat.Protected, Signature: flat.Signature}}, nil

@@ -1,12 +1,16 @@
 package xjwt
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -182,4 +186,157 @@ func TestJWKSCacheTTLZeroAlwaysStale(t *testing.T) {
 	// which also exercises the fetch error path.
 	_, err := jc.Get(context.Background())
 	require.Error(t, err)
+}
+
+type cacheTransport func(*http.Request) (*http.Response, error)
+
+func (f cacheTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func cacheResponse(body string) *http.Response {
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString(body))}
+}
+
+func TestJWKSCacheRejectsHeadersBeforeFetch(t *testing.T) {
+	var hits atomic.Int64
+	client := &http.Client{Transport: cacheTransport(func(*http.Request) (*http.Response, error) {
+		hits.Add(1)
+		return nil, errors.New("unexpected network call")
+	})}
+	cache := NewJWKSCache("https://issuer.invalid/jwks", time.Hour, WithHTTPClient(client))
+	for _, token := range []string{
+		"not-a-token",
+		fmt.Sprintf("%s.e30.", protectedJSON(t, Header{Alg: "none", Kid: "unknown"})),
+		fmt.Sprintf("%s.e30.AQ", protectedJSON(t, Header{Alg: RS256, Kid: "unknown"})),
+		fmt.Sprintf("%s.e30.AQ", protectedJSON(t, Header{Alg: ES256, Kid: "unknown", Crit: []string{"unknown"}})),
+		fmt.Sprintf("%s.!.AQ", protectedJSON(t, Header{Alg: ES256, Kid: "unknown"})),
+	} {
+		_, err := cache.VerifyToken(context.Background(), token, []string{ES256})
+		require.Error(t, err)
+	}
+	assert.Zero(t, hits.Load())
+}
+
+func TestJWKSCacheRefreshDoesNotBlockFreshReaders(t *testing.T) {
+	priv, jwk, err := GenerateKey(ES256, "known")
+	require.NoError(t, err)
+	body := mustJSON(t, JWKS{Keys: []JSONWebKey{jwk.PublicJWK()}})
+	started, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	finish := func() { releaseOnce.Do(func() { close(release) }) }
+	defer finish()
+	var hits atomic.Int64
+	client := &http.Client{Transport: cacheTransport(func(req *http.Request) (*http.Response, error) {
+		if hits.Add(1) == 1 {
+			return cacheResponse(body), nil
+		}
+		close(started)
+		select {
+		case <-release:
+		case <-req.Context().Done():
+		}
+		return nil, errors.New("outage")
+	})}
+	clock := &fakeClock{t: time.Unix(1000, 0)}
+	cache := NewJWKSCache("https://issuer.invalid/jwks", time.Hour, WithHTTPClient(client))
+	cache.now = clock.now
+	_, err = cache.Get(context.Background())
+	require.NoError(t, err)
+	clock.advance(2 * time.Minute)
+	unknown, err := Sign(ES256, "unknown", MapClaims{}, priv)
+	require.NoError(t, err)
+	known, err := Sign(ES256, "known", MapClaims{}, priv)
+	require.NoError(t, err)
+	unknownDone := make(chan error, 1)
+	go func() {
+		_, err := cache.VerifyToken(context.Background(), unknown, []string{ES256})
+		unknownDone <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("refresh never started")
+	}
+
+	knownDone := make(chan error, 1)
+	go func() { _, err := cache.VerifyToken(context.Background(), known, []string{ES256}); knownDone <- err }()
+	select {
+	case err := <-knownDone:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("fresh reader blocked on endpoint")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = cache.forceRefresh(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, int64(2), hits.Load(), "concurrent refresh must coalesce")
+	finish()
+	select {
+	case err := <-unknownDone:
+		require.Error(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("refresh did not finish")
+	}
+	for range 10 {
+		_, err := cache.VerifyToken(context.Background(), unknown, []string{ES256})
+		require.Error(t, err)
+	}
+	assert.Equal(t, int64(2), hits.Load(), "failed forced refresh must be throttled")
+}
+
+func TestJWKSCacheOutageGraceAndBackoff(t *testing.T) {
+	priv, jwk, err := GenerateKey(ES256, "known")
+	require.NoError(t, err)
+	body := mustJSON(t, JWKS{Keys: []JSONWebKey{jwk.PublicJWK()}})
+	token, err := Sign(ES256, "known", MapClaims{}, priv)
+	require.NoError(t, err)
+	for _, grace := range []time.Duration{0, 3 * time.Minute} {
+		t.Run(grace.String(), func(t *testing.T) {
+			var hits atomic.Int64
+			client := &http.Client{Transport: cacheTransport(func(*http.Request) (*http.Response, error) {
+				if hits.Add(1) == 1 {
+					return cacheResponse(body), nil
+				}
+				return nil, errors.New("outage")
+			})}
+			clock := &fakeClock{t: time.Unix(1000, 0)}
+			cache := NewJWKSCache("https://issuer.invalid/jwks", time.Minute, WithHTTPClient(client), WithMaxStale(grace))
+			cache.now = clock.now
+			_, err := cache.Get(context.Background())
+			require.NoError(t, err)
+			clock.advance(2 * time.Minute)
+			for range 10 {
+				_, err := cache.VerifyToken(context.Background(), token, []string{ES256})
+				if grace > 0 {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+				}
+			}
+			assert.Equal(t, int64(2), hits.Load(), "failed refreshes must receive backoff")
+			for range 10 {
+				_, _ = cache.forceRefresh(context.Background())
+			}
+			assert.Equal(t, int64(2), hits.Load())
+			clock.advance(3 * time.Minute)
+			_, err = cache.VerifyToken(context.Background(), token, []string{ES256})
+			require.Error(t, err, "failures must never extend the grace deadline")
+		})
+	}
+}
+
+func TestJWKSCacheInitialFailureBackoff(t *testing.T) {
+	var hits atomic.Int64
+	client := &http.Client{Transport: cacheTransport(func(*http.Request) (*http.Response, error) {
+		hits.Add(1)
+		return nil, errors.New("outage")
+	})}
+	cache := NewJWKSCache("https://issuer.invalid/jwks", time.Minute, WithHTTPClient(client))
+	for range 10 {
+		set, err := cache.Get(context.Background())
+		require.Error(t, err)
+		assert.Nil(t, set)
+	}
+	assert.Equal(t, int64(1), hits.Load())
 }

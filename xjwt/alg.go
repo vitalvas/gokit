@@ -148,11 +148,14 @@ func signPayload(alg, signingInput string, key any) ([]byte, error) {
 
 		digest := sha256.Sum256([]byte(signingInput))
 		r, s := secp256k1.Sign(priv, digest[:])
+		if r == nil || s == nil {
+			return nil, ErrKeyTypeMismatch
+		}
 
 		return append(leftPad(r.Bytes(), 32), leftPad(s.Bytes(), 32)...), nil
 	case keyMLDSA:
 		priv, ok := key.(*mldsa.PrivateKey)
-		if !ok {
+		if !ok || priv == nil || priv.PublicKey().Parameters() != info.mldsaParams {
 			return nil, ErrKeyTypeMismatch
 		}
 
@@ -166,6 +169,14 @@ func signPayload(alg, signingInput string, key any) ([]byte, error) {
 // verifyPayload checks sig over signingInput with key under alg. key must be
 // the public key matching alg's key type.
 func verifyPayload(alg, signingInput string, sig []byte, key any) error {
+	if keys, ok := key.(verificationKeys); ok {
+		for _, candidate := range keys {
+			if verifyPayload(alg, signingInput, sig, candidate) == nil {
+				return nil
+			}
+		}
+		return ErrTokenSignatureInvalid
+	}
 	info, ok := algRegistry[alg]
 	if !ok {
 		return fmt.Errorf("xjwt: unsupported signing algorithm %q", alg)
@@ -250,7 +261,7 @@ func verifyPayload(alg, signingInput string, sig []byte, key any) error {
 		return nil
 	case keyMLDSA:
 		pub, ok := key.(*mldsa.PublicKey)
-		if !ok {
+		if !ok || pub == nil || pub.Parameters() != info.mldsaParams {
 			return ErrKeyTypeMismatch
 		}
 

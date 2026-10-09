@@ -1,11 +1,14 @@
 package xjwt
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/mldsa"
 	"crypto/rand"
 	"crypto/rsa"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -229,4 +232,30 @@ func TestSignPayloadKeyTypeMismatch(t *testing.T) {
 
 	_, err = signPayload("BADALG", "a.b", nil)
 	require.Error(t, err)
+}
+
+func TestMLDSAAlgorithmParameterBinding(t *testing.T) {
+	for _, keyAlg := range []string{MLDSA44, MLDSA65, MLDSA87} {
+		priv, err := mldsa.GenerateKey(algRegistry[keyAlg].mldsaParams)
+		require.NoError(t, err)
+		for _, tokenAlg := range []string{MLDSA44, MLDSA65, MLDSA87} {
+			t.Run(fmt.Sprintf("%s/%s", keyAlg, tokenAlg), func(t *testing.T) {
+				_, err := Sign(tokenAlg, "", MapClaims{"sub": "u"}, priv)
+				if keyAlg == tokenAlg {
+					require.NoError(t, err)
+				} else {
+					require.ErrorIs(t, err, ErrKeyTypeMismatch)
+				}
+				input := fmt.Sprintf("%s.%s", protectedJSON(t, Header{Alg: tokenAlg}), b64([]byte(`{"sub":"u"}`)))
+				sig, err := priv.Sign(rand.Reader, []byte(input), crypto.Hash(0))
+				require.NoError(t, err)
+				_, err = Verify(fmt.Sprintf("%s.%s", input, b64(sig)), func(Header) (any, error) { return priv.PublicKey(), nil }, []string{tokenAlg})
+				if keyAlg == tokenAlg {
+					require.NoError(t, err)
+				} else {
+					require.ErrorIs(t, err, ErrKeyTypeMismatch)
+				}
+			})
+		}
+	}
 }

@@ -1,7 +1,7 @@
 # xjwt
 
-JOSE (JWS/JWK/JWT/JWE) for Go using only the standard library and
-[`gokit/secp256k1`](../secp256k1).
+JOSE (JWS/JWK/JWT/JWE) for Go using the standard library and
+[`gokit/secp256k1`](../secp256k1), which uses a fixed-width backend for secret operations.
 
 ## Overview
 
@@ -15,7 +15,7 @@ Supported algorithms: RS256/384/512, PS256/384/512 (RSA-PSS), ES256/384/512,
 EdDSA, HS256/384/512, ES256K (RFC 8812, over secp256k1), and ML-DSA-44/65/87
 (FIPS-204 post-quantum). The `none` algorithm is never supported. Asymmetric
 signing also accepts any `crypto.Signer`, so the private key can live in an HSM
-or KMS. Requires Go 1.27+ (for `crypto/mldsa`).
+or KMS. Requires Go 1.27.2+ (for `crypto/mldsa`).
 
 The package processes attacker-controlled tokens and is built defensively: it
 rejects `none`, enforces a per-call algorithm allowlist before any key lookup
@@ -159,7 +159,8 @@ payload, err := xjwt.VerifyWithJWKS(token, set, []string{"RS256", "ES256"})
 cache := xjwt.NewJWKSCache("https://issuer.example.com/jwks.json", 15*time.Minute)
 
 // Fetches on first use, then serves from cache until the TTL elapses; a failed
-// refresh keeps the last good key set.
+// refresh permits verification with cached keys for at most five extra minutes.
+// Use xjwt.WithMaxStale(0) to disable this grace period.
 vt, err := cache.VerifyToken(ctx, token, []string{"RS256", "ES256"})
 ```
 
@@ -191,6 +192,8 @@ plaintext, err := xjwt.Decrypt(token, rsaPriv)
 // supported, as are ECDH-ES with EC keys.
 pwToken, err := xjwt.Encrypt(xjwt.PBES2HS256A128KW, xjwt.A128CBCHS256,
     []byte("passphrase"), []byte("secret"), xjwt.EncryptOptions{})
+pwPlaintext, err := xjwt.DecryptWithOptions(pwToken, []byte("passphrase"),
+    xjwt.DecryptOptions{AllowedAlgs: []string{xjwt.PBES2HS256A128KW}})
 ```
 
 ### JSON serialization, multi-signature, detached
@@ -344,8 +347,17 @@ Optional DEFLATE compression via `EncryptOptions{Compress: true}` (`zip:"DEF"`).
 - Each algorithm is bound to its key type, and EC algorithms to their exact
   curve, preventing algorithm-substitution and RS/HS confusion attacks.
 - HMAC comparison and JWE authentication tags are checked in constant time.
-- The PBES2 iteration count is bounded on decryption to prevent denial-of-service
-  via an abusive `p2c`.
+- PBES2 decryption requires an explicit `AllowedAlgs` entry. `MaxPBES2Count`
+  defaults to 600000 and can be lowered for the application or raised up to
+  10000000. Public framing and salt lengths are validated before derivation.
+  Applications accepting password-encrypted input should also rate-limit requests.
+- JWE content and wrapping keys are bound to the declared algorithm sizes;
+  unsupported critical headers are rejected.
+- JWKS selection enforces `kid`, `alg`, `use`, and `key_ops`. Tokens without
+  `kid` try all eligible keys. Concurrent refreshes coalesce without blocking
+  fresh readers; unknown-key requests and failed fetches have a one-minute backoff.
+  Cached verification during outages is bounded by TTL plus `WithMaxStale`
+  (five minutes by default). Set `WithMaxStale(0)` to fail on expired keys.
 - The signing and verification paths perform no I/O and keep no state; replay
   protection and key rotation are the caller's responsibility. `NewJWKSCache` is
   the one component that performs network I/O, and only when you use it.

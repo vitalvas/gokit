@@ -16,6 +16,9 @@ import (
 // contentEncrypt encrypts plaintext under cek for the given enc algorithm,
 // authenticating aad. It returns the iv, ciphertext, and authentication tag.
 func contentEncrypt(enc string, cek, plaintext, aad []byte) (iv, ciphertext, tag []byte, err error) {
+	if err := validateCEK(enc, cek); err != nil {
+		return nil, nil, nil, err
+	}
 	switch enc {
 	case A128CBCHS256, A192CBCHS384, A256CBCHS512:
 		return cbcHMACEncrypt(enc, cek, plaintext, aad)
@@ -39,6 +42,12 @@ type contentCiphertext struct {
 
 // contentDecrypt reverses contentEncrypt.
 func contentDecrypt(c contentCiphertext) ([]byte, error) {
+	if err := validateCEK(c.enc, c.cek); err != nil {
+		return nil, err
+	}
+	if err := validateContentCiphertext(c); err != nil {
+		return nil, err
+	}
 	switch c.enc {
 	case A128CBCHS256, A192CBCHS384, A256CBCHS512:
 		return cbcHMACDecrypt(c)
@@ -47,6 +56,35 @@ func contentDecrypt(c contentCiphertext) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("xjwt: unsupported content encryption algorithm %q", c.enc)
 	}
+}
+
+func validateCEK(enc string, cek []byte) error {
+	size, err := cekLength(enc)
+	if err != nil {
+		return err
+	}
+	if len(cek) != size {
+		return fmt.Errorf("xjwt: CEK must be %d bytes for %s", size, enc)
+	}
+	return nil
+}
+
+func validateContentCiphertext(c contentCiphertext) error {
+	if _, err := cekLength(c.enc); err != nil {
+		return err
+	}
+	switch c.enc {
+	case A128GCM, A192GCM, A256GCM:
+		if len(c.iv) != 12 || len(c.tag) != 16 {
+			return fmt.Errorf("xjwt: invalid GCM nonce or tag length")
+		}
+	default:
+		_, _, _, tagLen := cbcHMACParams(c.enc)
+		if len(c.iv) != aes.BlockSize || len(c.tag) != tagLen || len(c.ciphertext) == 0 || len(c.ciphertext)%aes.BlockSize != 0 {
+			return fmt.Errorf("xjwt: invalid CBC ciphertext, IV or tag length")
+		}
+	}
+	return nil
 }
 
 // cbcHMACParams returns the MAC key length, the AES key length, and the hash

@@ -397,3 +397,34 @@ func TestSecp256k1PrivateKeyFromJWK(t *testing.T) {
 	require.NoError(t, err)
 	assert.IsType(t, priv, back)
 }
+
+func TestJWKSVerificationKeySelection(t *testing.T) {
+	_, first, err := GenerateKey(ES256, "first")
+	require.NoError(t, err)
+	priv, second, err := GenerateKey(ES256, "second")
+	require.NoError(t, err)
+	set := &JWKS{Keys: []JSONWebKey{first.PublicJWK(), second.PublicJWK()}}
+	for _, kid := range []string{"", "first", "second", "missing"} {
+		token, err := Sign(ES256, kid, MapClaims{"sub": "u"}, priv)
+		require.NoError(t, err)
+		_, err = VerifyWithJWKS(token, set, []string{ES256})
+		if kid == "" || kid == "second" {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+		}
+	}
+	token, err := Sign(ES256, "second", MapClaims{}, priv)
+	require.NoError(t, err)
+	for _, ops := range [][]string{nil, {}, {"verify"}, {"sign"}, {"encrypt"}, {"decrypt", "verify"}} {
+		key := second.PublicJWK()
+		key.Use = ""
+		key.KeyOps = ops
+		_, err := VerifyWithJWKS(token, &JWKS{Keys: []JSONWebKey{key}}, []string{ES256})
+		if ops == nil || algAllowed("verify", ops) {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+		}
+	}
+}

@@ -1,4 +1,4 @@
-// Package xjwt is a JOSE implementation (JWS, JWK, JWT, and JWE) using only the
+// Package xjwt is a JOSE implementation (JWS, JWK, JWT, and JWE) using the
 // Go standard library and github.com/vitalvas/gokit/secp256k1. It covers token
 // signing and verification, JWK/JWKS handling (including key generation and a
 // remote JWKS cache), JWK thumbprints, claim validation, and payload encryption.

@@ -1,6 +1,7 @@
 package xjwt
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -469,9 +470,9 @@ func TestVerifyTokenBadHeaderAndPayload(t *testing.T) {
 	})
 }
 
-func TestTokenKidMalformed(t *testing.T) {
-	// tokenKid returns "" for a malformed token (DecodeHeader fails).
-	assert.Equal(t, "", tokenKid("not-a-token"))
+func TestCacheHeaderMalformed(t *testing.T) {
+	_, err := DecodeHeader("not-a-token")
+	assert.Error(t, err)
 }
 
 func TestNumericDateUnmarshalBadJSON(t *testing.T) {
@@ -575,5 +576,19 @@ func TestRequireAccessTokenClaims(t *testing.T) {
 			})
 			require.ErrorIs(t, err, ErrTokenMissingClaim)
 		})
+	}
+}
+
+func TestVerifyAZPMalformedValues(t *testing.T) {
+	key := bytes.Repeat([]byte{1}, 32)
+	for _, azp := range []any{nil, 123, []string{"client"}, map[string]any{"client": true}, false, "", "wrong", "client"} {
+		token, err := Sign(HS256, "", MapClaims{"aud": "client", "azp": azp}, key)
+		require.NoError(t, err)
+		_, err = VerifyTokenWithOptions(token, func(Header) (any, error) { return key, nil }, []string{HS256}, VerifyTokenOptions{ExpectedAudience: "client", VerifyAZP: true})
+		if azp == "client" {
+			require.NoError(t, err)
+		} else {
+			require.ErrorIs(t, err, ErrTokenInvalidAudience)
+		}
 	}
 }

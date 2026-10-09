@@ -109,6 +109,12 @@ func pbes2DecryptCEK(alg string, password, encryptedKey []byte, header *jweHeade
 	if err != nil {
 		return nil, err
 	}
+	if len(p2s) < 8 {
+		return nil, fmt.Errorf("xjwt: PBES2 salt must be at least 8 bytes")
+	}
+	if len(encryptedKey) < 24 || len(encryptedKey)%8 != 0 {
+		return nil, fmt.Errorf("xjwt: invalid wrapped CEK length")
+	}
 
 	kek, err := pbes2DeriveKEK(alg, password, p2s, header.P2c)
 	if err != nil {

@@ -2,11 +2,14 @@ package xjwt
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -115,7 +118,7 @@ func TestJWERoundTripMatrix(t *testing.T) {
 				token, err := Encrypt(alg, enc, encKey, plaintext, EncryptOptions{Kid: "k1"})
 				require.NoError(t, err)
 
-				got, err := Decrypt(token, decKey)
+				got, err := DecryptWithOptions(token, decKey, DecryptOptions{AllowedAlgs: []string{alg}})
 				require.NoError(t, err)
 				assert.Equal(t, plaintext, got)
 			})
@@ -392,4 +395,38 @@ func TestEncryptDecryptErrors(t *testing.T) {
 		_, err := Decrypt(fmt.Sprintf("%s.AA.AA.AA.AA", hdr), rsaKey)
 		require.Error(t, err)
 	})
+}
+
+func protectedJSON(t *testing.T, header any) string {
+	t.Helper()
+	raw, err := json.Marshal(header)
+	require.NoError(t, err)
+	return b64(raw)
+}
+
+func rsaGCMToken(t *testing.T, priv *rsa.PrivateKey, header map[string]any, cek []byte) string {
+	t.Helper()
+	protected := protectedJSON(t, header)
+	wrapped, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, &priv.PublicKey, cek, nil)
+	require.NoError(t, err)
+	block, err := aes.NewCipher(cek)
+	require.NoError(t, err)
+	gcm, err := cipher.NewGCM(block)
+	require.NoError(t, err)
+	iv := bytes.Repeat([]byte{9}, gcm.NonceSize())
+	sealed := gcm.Seal(nil, iv, []byte("secret"), []byte(protected))
+	return strings.Join([]string{protected, b64(wrapped), b64(iv), b64(sealed[:len(sealed)-16]), b64(sealed[len(sealed)-16:])}, ".")
+}
+
+func TestJWECriticalHeaders(t *testing.T) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	for _, critical := range []any{[]string{"extension"}, "extension", []int{1}, []string{}, nil} {
+		token := rsaGCMToken(t, priv, map[string]any{"alg": RSAOAEP256, "enc": A256GCM, "crit": critical, "extension": true}, bytes.Repeat([]byte{7}, 32))
+		_, err := Decrypt(token, priv)
+		require.Error(t, err)
+	}
+	token := rsaGCMToken(t, priv, map[string]any{"alg": RSAOAEP256, "enc": A256GCM, "extension": true}, bytes.Repeat([]byte{7}, 32))
+	_, err = Decrypt(token, priv)
+	require.NoError(t, err, "non-critical extensions remain permitted")
 }

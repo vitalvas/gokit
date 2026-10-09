@@ -96,6 +96,9 @@ func ecdhPublicJWK(pub *ecdh.PublicKey) (*JSONWebKey, error) {
 
 // ecdhPublicFromJWK rebuilds an ECDH public key from an "epk" JWK.
 func ecdhPublicFromJWK(jwk *JSONWebKey) (*ecdh.PublicKey, error) {
+	if jwk == nil || jwk.D != "" {
+		return nil, fmt.Errorf("xjwt: epk must be a public key")
+	}
 	curve, err := ecdhCurve(jwk.Crv)
 	if err != nil {
 		return nil, err
@@ -107,6 +110,9 @@ func ecdhPublicFromJWK(jwk *JSONWebKey) (*ecdh.PublicKey, error) {
 	}
 
 	if jwk.Crv == "X25519" {
+		if jwk.Kty != "OKP" || jwk.Y != "" {
+			return nil, ErrKeyTypeMismatch
+		}
 		return curve.NewPublicKey(x) // raw 32-byte key
 	}
 
@@ -116,10 +122,13 @@ func ecdhPublicFromJWK(jwk *JSONWebKey) (*ecdh.PublicKey, error) {
 	}
 
 	byteLen := curveByteLen(jwk.Crv)
+	if jwk.Kty != "EC" || len(x) != byteLen || len(y) != byteLen {
+		return nil, fmt.Errorf("xjwt: epk requires EC coordinates of %d bytes", byteLen)
+	}
 	encoded := make([]byte, 1+2*byteLen)
 	encoded[0] = 0x04
-	copy(encoded[1+byteLen-len(x):1+byteLen], x)
-	copy(encoded[1+2*byteLen-len(y):], y)
+	copy(encoded[1:1+byteLen], x)
+	copy(encoded[1+byteLen:], y)
 
 	return curve.NewPublicKey(encoded)
 }

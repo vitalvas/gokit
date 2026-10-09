@@ -9,17 +9,18 @@ import (
 
 // jweHeader is the JWE protected header (RFC 7516 Section 4).
 type jweHeader struct {
-	Alg string      `json:"alg"`
-	Enc string      `json:"enc"`
-	Kid string      `json:"kid,omitempty"`
-	Epk *JSONWebKey `json:"epk,omitempty"`
-	Zip string      `json:"zip,omitempty"`
-	P2s string      `json:"p2s,omitempty"` // PBES2 salt input (base64url)
-	P2c int         `json:"p2c,omitempty"` // PBES2 iteration count
-	IV  string      `json:"iv,omitempty"`  // AES-GCMKW key-wrap IV (base64url)
-	Tag string      `json:"tag,omitempty"` // AES-GCMKW key-wrap tag (base64url)
-	Apu string      `json:"apu,omitempty"` // ECDH-ES PartyUInfo (base64url)
-	Apv string      `json:"apv,omitempty"` // ECDH-ES PartyVInfo (base64url)
+	Crit json.RawMessage `json:"crit,omitempty"`
+	Alg  string          `json:"alg"`
+	Enc  string          `json:"enc"`
+	Kid  string          `json:"kid,omitempty"`
+	Epk  *JSONWebKey     `json:"epk,omitempty"`
+	Zip  string          `json:"zip,omitempty"`
+	P2s  string          `json:"p2s,omitempty"` // PBES2 salt input (base64url)
+	P2c  int             `json:"p2c,omitempty"` // PBES2 iteration count
+	IV   string          `json:"iv,omitempty"`  // AES-GCMKW key-wrap IV (base64url)
+	Tag  string          `json:"tag,omitempty"` // AES-GCMKW key-wrap tag (base64url)
+	Apu  string          `json:"apu,omitempty"` // ECDH-ES PartyUInfo (base64url)
+	Apv  string          `json:"apv,omitempty"` // ECDH-ES PartyVInfo (base64url)
 }
 
 // EncryptOptions configures Encrypt.
@@ -107,17 +108,19 @@ func Encrypt(alg, enc string, key any, plaintext []byte, opts EncryptOptions) (s
 	}, "."), nil
 }
 
-// DecryptOptions restricts which algorithms a JWE may use. Empty slices mean
-// "accept any supported algorithm"; a non-empty slice is an allowlist that the
-// token's "alg"/"enc" must be a member of. Pinning these is defense-in-depth
-// against a sender downgrading to a weaker algorithm.
+// DecryptOptions restricts the algorithms and password-derivation work a JWE
+// may use. PBES2 always requires an explicit AllowedAlgs entry. Other supported
+// algorithms are accepted when the corresponding allowlist is empty.
 type DecryptOptions struct {
 	AllowedAlgs []string // permitted key-management "alg" values
 	AllowedEnc  []string // permitted content-encryption "enc" values
+	// MaxPBES2Count caps password derivation iterations. Zero uses 600000.
+	// Negative values are invalid; values above 10000000 are not permitted.
+	MaxPBES2Count int
 }
 
 // Decrypt decrypts a compact JWE with the recipient's private key, returning the
-// plaintext, accepting any supported algorithm. The key type depends on the
+// plaintext, accepting supported algorithms except PBES2. The key type depends on the
 // token's alg: *rsa.PrivateKey, []byte, or an EC private key. To restrict the
 // accepted algorithms, use DecryptWithOptions.
 func Decrypt(jwe string, key any) ([]byte, error) {
@@ -144,16 +147,8 @@ func DecryptWithOptions(jwe string, key any, opts DecryptOptions) ([]byte, error
 		return nil, fmt.Errorf("xjwt: parsing JWE header: %w", err)
 	}
 
-	if !isJWEKeyAlg(header.Alg) && !isPBES2Alg(header.Alg) && !isGCMKWAlg(header.Alg) {
-		return nil, fmt.Errorf("xjwt: unsupported key management algorithm %q", header.Alg)
-	}
-
-	if len(opts.AllowedAlgs) > 0 && !algAllowed(header.Alg, opts.AllowedAlgs) {
-		return nil, fmt.Errorf("xjwt: key management algorithm %q is not in the allowed set", header.Alg)
-	}
-
-	if len(opts.AllowedEnc) > 0 && !algAllowed(header.Enc, opts.AllowedEnc) {
-		return nil, fmt.Errorf("xjwt: content encryption algorithm %q is not in the allowed set", header.Enc)
+	if err := validateJWEHeader(header, opts); err != nil {
+		return nil, err
 	}
 
 	encryptedKey, err := enc64.DecodeString(parts[1])
@@ -173,6 +168,12 @@ func DecryptWithOptions(jwe string, key any, opts DecryptOptions) ([]byte, error
 
 	tag, err := enc64.DecodeString(parts[4])
 	if err != nil {
+		return nil, err
+	}
+	if err := validateContentCiphertext(contentCiphertext{enc: header.Enc, iv: iv, ciphertext: ciphertext, tag: tag}); err != nil {
+		return nil, err
+	}
+	if err := validateEncryptedKey(header, encryptedKey); err != nil {
 		return nil, err
 	}
 
@@ -229,6 +230,64 @@ func DecryptWithOptions(jwe string, key any, opts DecryptOptions) ([]byte, error
 	default:
 		return nil, fmt.Errorf("xjwt: unsupported compression algorithm %q", header.Zip)
 	}
+}
+
+func validateJWEHeader(header jweHeader, opts DecryptOptions) error {
+	if len(header.Crit) > 0 {
+		return fmt.Errorf("xjwt: unsupported critical JWE headers")
+	}
+	if header.Zip != "" && header.Zip != zipDEF {
+		return fmt.Errorf("xjwt: unsupported compression algorithm %q", header.Zip)
+	}
+	if !isJWEKeyAlg(header.Alg) && !isPBES2Alg(header.Alg) && !isGCMKWAlg(header.Alg) {
+		return fmt.Errorf("xjwt: unsupported key management algorithm %q", header.Alg)
+	}
+	if (len(opts.AllowedAlgs) > 0 || isPBES2Alg(header.Alg)) && !algAllowed(header.Alg, opts.AllowedAlgs) {
+		return fmt.Errorf("xjwt: key management algorithm %q is not in the allowed set", header.Alg)
+	}
+	if len(opts.AllowedEnc) > 0 && !algAllowed(header.Enc, opts.AllowedEnc) {
+		return fmt.Errorf("xjwt: content encryption algorithm %q is not in the allowed set", header.Enc)
+	}
+	if _, err := cekLength(header.Enc); err != nil {
+		return err
+	}
+	if opts.MaxPBES2Count < 0 || opts.MaxPBES2Count > maxPBES2Count {
+		return fmt.Errorf("xjwt: invalid maximum PBES2 count")
+	}
+	maximum := opts.MaxPBES2Count
+	if maximum == 0 {
+		maximum = 600000
+	}
+	if isPBES2Alg(header.Alg) && (header.P2c <= 0 || header.P2c > maximum) {
+		return fmt.Errorf("xjwt: PBES2 iteration count outside permitted range")
+	}
+	return nil
+}
+
+func validateEncryptedKey(header jweHeader, encryptedKey []byte) error {
+	cekLen, err := cekLength(header.Enc)
+	if err != nil {
+		return err
+	}
+	switch {
+	case header.Alg == Dir || header.Alg == ECDHES:
+		if len(encryptedKey) != 0 {
+			return fmt.Errorf("xjwt: direct encryption requires an empty encrypted key")
+		}
+	case isPBES2Alg(header.Alg) || aesKWKeyLen(header.Alg) != 0 || header.Alg == ECDHESA128 || header.Alg == ECDHESA192 || header.Alg == ECDHESA256:
+		if len(encryptedKey) != cekLen+8 {
+			return fmt.Errorf("xjwt: invalid wrapped CEK length")
+		}
+	case isGCMKWAlg(header.Alg):
+		if len(encryptedKey) != cekLen {
+			return fmt.Errorf("xjwt: invalid GCM wrapped CEK length")
+		}
+	default:
+		if len(encryptedKey) == 0 {
+			return fmt.Errorf("xjwt: missing encrypted key")
+		}
+	}
+	return nil
 }
 
 // decodeOptionalB64 decodes an optional base64url header value, returning nil for

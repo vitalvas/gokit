@@ -264,8 +264,14 @@ func parseOKPPublicKey(crv, xStr string) (ed25519.PublicKey, error) {
 // a kid, only a key with that exact kid is considered. A token without a kid is
 // matched against any key of a compatible type/alg. This prevents a token that
 // names a specific kid from being verified by an unrelated key in the set.
+type verificationKeys []any
+
 func resolverFromJWKS(set *JWKS) KeyResolver {
 	return func(h Header) (any, error) {
+		if set == nil {
+			return nil, fmt.Errorf("xjwt: missing JWKS")
+		}
+		var keys verificationKeys
 		for i := range set.Keys {
 			k := set.Keys[i]
 
@@ -282,12 +288,23 @@ func resolverFromJWKS(set *JWKS) KeyResolver {
 			if k.Use != "" && k.Use != "sig" {
 				continue
 			}
+			if k.KeyOps != nil && !algAllowed("verify", k.KeyOps) {
+				continue
+			}
 
 			if !matchesAlg(k.Kty, k.Crv, h.Alg) {
 				continue
 			}
 
-			return k.PublicKey(h.Alg)
+			if key, err := k.PublicKey(h.Alg); err == nil {
+				keys = append(keys, key)
+			}
+		}
+		if len(keys) == 1 {
+			return keys[0], nil
+		}
+		if len(keys) > 1 {
+			return keys, nil
 		}
 
 		return nil, fmt.Errorf("xjwt: no matching key for kid %q alg %q", h.Kid, h.Alg)

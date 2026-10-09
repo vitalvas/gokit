@@ -274,8 +274,11 @@ func (m MapClaims) validateAudience(want string, verifyAZP bool) error {
 			return fmt.Errorf("%w: azp %q does not match", ErrTokenInvalidAudience, azp)
 		}
 	} else if verifyAZP {
-		if azp, ok := m.String("azp"); ok && azp != want {
-			return fmt.Errorf("%w: azp %q does not match", ErrTokenInvalidAudience, azp)
+		if raw, present := m["azp"]; present {
+			azp, ok := raw.(string)
+			if !ok || azp != want {
+				return fmt.Errorf("%w: azp %q does not match", ErrTokenInvalidAudience, azp)
+			}
 		}
 	}
 

@@ -1,6 +1,7 @@
 package xjwt
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -214,4 +215,37 @@ func TestJWSJSONUnprotectedAlgRejected(t *testing.T) {
 
 	_, err := VerifyJSON([]byte(doc), func(Header) (any, error) { return key, nil }, []string{HS256})
 	require.Error(t, err)
+}
+
+func TestJSONJWSEmptyPayload(t *testing.T) {
+	input := SignInput{Alg: HS256, Key: bytes.Repeat([]byte{1}, 32)}
+	resolve := func(Header) (any, error) { return input.Key, nil }
+	for _, payload := range [][]byte{nil, {}} {
+		general, err := SignJSON(payload, input)
+		require.NoError(t, err)
+		flat, err := SignFlattenedJSON(payload, input)
+		require.NoError(t, err)
+		for _, data := range [][]byte{general, flat} {
+			assert.Contains(t, string(data), `"payload":""`)
+			got, err := VerifyJSON(data, resolve, []string{HS256})
+			require.NoError(t, err)
+			assert.Empty(t, got)
+			_, err = VerifyDetachedJSON(data, payload, resolve, []string{HS256})
+			require.Error(t, err)
+		}
+		detached, err := SignDetachedJSON(payload, input)
+		require.NoError(t, err)
+		got, err := VerifyDetachedJSON(detached, payload, resolve, []string{HS256})
+		require.NoError(t, err)
+		assert.Empty(t, got)
+		_, err = VerifyJSON(detached, resolve, []string{HS256})
+		require.Error(t, err)
+	}
+	for _, payload := range []string{"null", "123", "[]", "{}", "true"} {
+		data := []byte(fmt.Sprintf(`{"payload":%s,"protected":"AA","signature":"AA"}`, payload))
+		_, err := VerifyJSON(data, resolve, []string{HS256})
+		require.Error(t, err)
+		_, err = VerifyDetachedJSON(data, nil, resolve, []string{HS256})
+		require.Error(t, err)
+	}
 }

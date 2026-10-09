@@ -68,20 +68,8 @@ func Verify(token string, resolve KeyResolver, allowedAlgs []string) ([]byte, er
 		return nil, err
 	}
 
-	if header.Alg == "" || strings.EqualFold(header.Alg, "none") {
-		return nil, fmt.Errorf("xjwt: algorithm %q is not permitted", header.Alg)
-	}
-
-	if err := validateVerificationHeader(header); err != nil {
+	if err := validateJWSAlgorithm(header, allowedAlgs); err != nil {
 		return nil, err
-	}
-
-	if !algAllowed(header.Alg, allowedAlgs) {
-		return nil, fmt.Errorf("xjwt: algorithm %q is not in the allowed set", header.Alg)
-	}
-
-	if !IsSupportedAlg(header.Alg) {
-		return nil, fmt.Errorf("xjwt: unsupported signing algorithm %q", header.Alg)
 	}
 
 	key, err := resolve(header)
@@ -205,6 +193,26 @@ func validateVerificationHeader(header Header) error {
 
 	if header.B64 != nil && !*header.B64 {
 		return fmt.Errorf("xjwt: unencoded payloads are not supported")
+	}
+
+	return nil
+}
+
+func validateJWSAlgorithm(header Header, allowedAlgs []string) error {
+	if header.Alg == "" || strings.EqualFold(header.Alg, "none") {
+		return fmt.Errorf("xjwt: algorithm %q is not permitted", header.Alg)
+	}
+
+	if err := validateVerificationHeader(header); err != nil {
+		return err
+	}
+
+	if !algAllowed(header.Alg, allowedAlgs) {
+		return fmt.Errorf("xjwt: algorithm %q is not in the allowed set", header.Alg)
+	}
+
+	if !IsSupportedAlg(header.Alg) {
+		return fmt.Errorf("xjwt: unsupported signing algorithm %q", header.Alg)
 	}
 
 	return nil

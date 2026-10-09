@@ -1,7 +1,11 @@
 package xjwt
 
 import (
+	"bytes"
 	"crypto/aes"
+	"crypto/rand"
+	"crypto/rsa"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -96,4 +100,24 @@ func TestContentEncryptUnsupported(t *testing.T) {
 	require.Nil(t, iv)
 	_, err = contentDecrypt(contentCiphertext{enc: "BADENC"})
 	require.Error(t, err)
+}
+
+func TestGCMContentKeyAlgorithmBinding(t *testing.T) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	for _, enc := range []string{A128GCM, A192GCM, A256GCM} {
+		for _, size := range []int{16, 24, 32} {
+			t.Run(fmt.Sprintf("%s/%d", enc, size), func(t *testing.T) {
+				token := rsaGCMToken(t, priv, map[string]any{"alg": RSAOAEP256, "enc": enc}, bytes.Repeat([]byte{7}, size))
+				got, err := DecryptWithOptions(token, priv, DecryptOptions{AllowedEnc: []string{enc}})
+				want, _ := cekLength(enc)
+				if size == want {
+					require.NoError(t, err)
+					assert.Equal(t, []byte("secret"), got)
+				} else {
+					require.Error(t, err)
+				}
+			})
+		}
+	}
 }

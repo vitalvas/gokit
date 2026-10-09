@@ -1,8 +1,11 @@
 package xjwt
 
 import (
+	"bytes"
 	"crypto/ecdh"
 	"crypto/rand"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -96,4 +99,33 @@ func TestEcdhDerivedSpecDefault(t *testing.T) {
 	assert.Equal(t, "UNKNOWN", algID)
 	assert.Equal(t, 16, keyLen)
 	assert.True(t, direct)
+}
+
+func TestAESKWAlgorithmKeyBinding(t *testing.T) {
+	for _, alg := range []string{A128KW, A192KW, A256KW} {
+		for _, size := range []int{16, 24, 32} {
+			t.Run(fmt.Sprintf("%s/%d", alg, size), func(t *testing.T) {
+				key := bytes.Repeat([]byte{1}, size)
+				_, err := Encrypt(alg, A256GCM, key, []byte("secret"), EncryptOptions{})
+				if size == aesKWKeyLen(alg) {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+				}
+				cek := bytes.Repeat([]byte{7}, 32)
+				wrapped, err := aesKeyWrap(key, cek)
+				require.NoError(t, err)
+				protected := protectedJSON(t, jweHeader{Alg: alg, Enc: A256GCM})
+				iv, ciphertext, tag, err := contentEncrypt(A256GCM, cek, []byte("secret"), []byte(protected))
+				require.NoError(t, err)
+				token := strings.Join([]string{protected, b64(wrapped), b64(iv), b64(ciphertext), b64(tag)}, ".")
+				_, err = Decrypt(token, key)
+				if size == aesKWKeyLen(alg) {
+					require.NoError(t, err)
+				} else {
+					require.ErrorIs(t, err, ErrKeyTypeMismatch)
+				}
+			})
+		}
+	}
 }

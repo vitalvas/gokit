@@ -1,6 +1,7 @@
 package xjwt
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"strings"
@@ -26,12 +27,12 @@ func TestPBES2DefaultCountRoundTrip(t *testing.T) {
 	assert.NotEmpty(t, hdr.P2s)
 	assert.Equal(t, defaultPBES2Count, hdr.P2c)
 
-	got, err := Decrypt(token, password)
+	got, err := DecryptWithOptions(token, password, DecryptOptions{AllowedAlgs: []string{PBES2HS256A128KW}})
 	require.NoError(t, err)
 	assert.Equal(t, plaintext, got)
 
 	t.Run("wrong password fails", func(t *testing.T) {
-		_, err := Decrypt(token, []byte("wrong"))
+		_, err := DecryptWithOptions(token, []byte("wrong"), DecryptOptions{AllowedAlgs: []string{PBES2HS256A128KW}})
 		assert.Error(t, err)
 	})
 }
@@ -57,7 +58,7 @@ func TestPBES2RejectsExcessiveCount(t *testing.T) {
 	require.NoError(t, err)
 	parts[0] = base64.RawURLEncoding.EncodeToString(newHdr)
 
-	_, err = Decrypt(strings.Join(parts, "."), password)
+	_, err = DecryptWithOptions(strings.Join(parts, "."), password, DecryptOptions{AllowedAlgs: []string{PBES2HS256A128KW}})
 	assert.Error(t, err)
 }
 
@@ -93,4 +94,50 @@ func TestPBES2EncryptCEKUnsupportedEnc(t *testing.T) {
 func TestPBES2ParamsUnsupported(t *testing.T) {
 	_, _, err := pbes2Params("PBES2-BAD")
 	require.Error(t, err)
+}
+
+func TestPBES2RequiresExplicitPolicy(t *testing.T) {
+	header := jweHeader{Alg: PBES2HS256A128KW, Enc: A128GCM, P2s: b64([]byte("12345678")), P2c: 600001}
+	token := strings.Join([]string{protectedJSON(t, header), b64(make([]byte, 24)), b64(make([]byte, 12)), "", b64(make([]byte, 16))}, ".")
+	_, err := Decrypt(token, []byte("pw"))
+	require.ErrorContains(t, err, "allowed set")
+	_, err = DecryptWithOptions(token, []byte("pw"), DecryptOptions{AllowedAlgs: []string{PBES2HS256A128KW}})
+	require.ErrorContains(t, err, "iteration count")
+	for _, maximum := range []int{-1, maxPBES2Count + 1} {
+		_, err := DecryptWithOptions(token, nil, DecryptOptions{AllowedAlgs: []string{header.Alg}, MaxPBES2Count: maximum})
+		require.ErrorContains(t, err, "maximum PBES2")
+	}
+	restore := defaultPBES2Count
+	defaultPBES2Count = 1000
+	t.Cleanup(func() { defaultPBES2Count = restore })
+	token, err = Encrypt(header.Alg, header.Enc, []byte("pw"), []byte("secret"), EncryptOptions{})
+	require.NoError(t, err)
+	_, err = DecryptWithOptions(token, []byte("pw"), DecryptOptions{AllowedAlgs: []string{header.Alg}, MaxPBES2Count: 999})
+	require.ErrorContains(t, err, "iteration count")
+	got, err := DecryptWithOptions(token, []byte("pw"), DecryptOptions{AllowedAlgs: []string{header.Alg}, MaxPBES2Count: 1000})
+	require.NoError(t, err)
+	assert.Equal(t, []byte("secret"), got)
+}
+
+func TestPBES2ValidatesFramingBeforeDerivation(t *testing.T) {
+	header := jweHeader{Alg: PBES2HS256A128KW, Enc: A128GCM, P2s: b64([]byte("12345678")), P2c: maxPBES2Count}
+	goodParts := []string{protectedJSON(t, header), b64(make([]byte, 24)), b64(make([]byte, 12)), "", b64(make([]byte, 16))}
+	for _, tc := range []struct {
+		segment   int
+		size      int
+		errorText string
+	}{
+		{1, 0, "wrapped CEK"}, {1, 23, "wrapped CEK"}, {1, 32, "wrapped CEK"},
+		{2, 0, "GCM nonce"}, {2, 11, "GCM nonce"}, {4, 0, "GCM nonce"}, {4, 15, "GCM nonce"}, {4, 17, "GCM nonce"},
+	} {
+		parts := append([]string(nil), goodParts...)
+		parts[tc.segment] = b64(make([]byte, tc.size))
+		_, err := DecryptWithOptions(strings.Join(parts, "."), "wrong-type", DecryptOptions{AllowedAlgs: []string{header.Alg}, MaxPBES2Count: maxPBES2Count})
+		require.ErrorContains(t, err, tc.errorText)
+	}
+	for _, salt := range [][]byte{nil, {1}, bytes.Repeat([]byte{1}, 7)} {
+		header.P2s = b64(salt)
+		_, err := pbes2DecryptCEK(header.Alg, []byte("pw"), make([]byte, 24), &header)
+		require.Error(t, err)
+	}
 }

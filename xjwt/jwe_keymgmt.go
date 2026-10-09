@@ -54,6 +54,9 @@ func encryptCEK(alg, enc string, key any, apu, apv []byte) (cek, encryptedKey []
 		if !ok {
 			return nil, nil, nil, ErrKeyTypeMismatch
 		}
+		if len(kek) != aesKWKeyLen(alg) {
+			return nil, nil, nil, ErrKeyTypeMismatch
+		}
 		cek = make([]byte, cekLen)
 		if _, err = rand.Read(cek); err != nil {
 			return nil, nil, nil, err
@@ -121,6 +124,9 @@ func decryptCEK(in cekDecryptInput) ([]byte, error) {
 		if !ok {
 			return nil, ErrKeyTypeMismatch
 		}
+		if len(kek) != aesKWKeyLen(in.alg) {
+			return nil, ErrKeyTypeMismatch
+		}
 
 		return aesKeyUnwrap(kek, in.encryptedKey)
 
@@ -140,6 +146,19 @@ func decryptCEK(in cekDecryptInput) ([]byte, error) {
 
 	default:
 		return nil, fmt.Errorf("xjwt: unsupported key management algorithm %q", in.alg)
+	}
+}
+
+func aesKWKeyLen(alg string) int {
+	switch alg {
+	case A128KW:
+		return 16
+	case A192KW:
+		return 24
+	case A256KW:
+		return 32
+	default:
+		return 0
 	}
 }
 
