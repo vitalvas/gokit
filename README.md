@@ -2,6 +2,33 @@
 
 Cemetery of libraries
 
+## Q&A
+
+**Is it production ready?**
+Yes. All libraries mentioned in the v1 release are already used in production.
+
+**Why is it called "Cemetery of libraries"?**
+It is one central place to manage shared code instead of updating 100500 repositories - like a zookeeper in a zoo. One shared monorepo for shared libraries is better than dependency hell.
+
+**Is it secure?**
+Almost. Once per quarter this repository passes an aggressive security scan, and all found defects are fixed in a short time.
+
+**What if I use a library not listed in the v1 release?**
+Use it at your own risk. Such a library can be refactored or removed at any time.
+
+**How do libraries end up here?**
+In most cases the code is created in some private repository together with its origin project. After some time, if the library looks reusable in other projects or as OSS, it is extracted and refactored for public usage.
+
+**Is there a chance that some libraries will move out of this repo?**
+Yes. A good example is [wirefilter](https://github.com/vitalvas/wirefilter): it was extracted by a private request to make a synced private fork (that fork is maintained by me and a group of people).
+
+**Why implement things that already have public, tested options?**
+There were compelling reasons. Primarily, the old code contained a multitude of vulnerabilities that had gone unpatched for years. Additionally, the code might simply have been abandoned, or it lacked features - necessitating the creation of numerous wrappers. Performance is also a big reason.
+
+## Mechanics of creating libs
+
+Libraries are built from official documentation - the original specification, the reference paper, and especially the RFC when one exists (including its test vectors). Implementations use the standard library only, to avoid any external dependency issues, including security ones.
+
 ## Upcoming Release v1.0.0
 
 The following libraries will be released in v1.0.0:
