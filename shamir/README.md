@@ -218,3 +218,10 @@ parse with an unknown length (`SecretLen == 0`), and `CombineAuto` falls back to
 the minimal encoding for them, so use `Combine` with an explicit length when
 reconstructing legacy shares whose secret may begin with zero bytes. Shares
 produced by the current version are not readable by older releases.
+
+Prime-field `Split` and `SplitWithCustomX` accept at most 65535 secret bytes,
+threshold shares, and total shares because the binary format uses 16-bit length
+fields. Larger data should use `SplitBytes`. `Combine` and `CombineAuto` reject
+inconsistent known secret lengths; mixed legacy and current shares use the known
+length regardless of share order. `Share.Bytes` returns nil for invalid metadata
+rather than silently truncating it.

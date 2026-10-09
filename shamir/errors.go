@@ -9,7 +9,8 @@ var (
 	// ErrInvalidTotal is returned when total shares is less than threshold.
 	ErrInvalidTotal = errors.New("shamir: total shares must be at least equal to threshold")
 
-	// ErrSecretTooLarge is returned when the secret exceeds the field size.
+	// ErrSecretTooLarge is returned when the secret exceeds the field size
+	// or the 65535-byte serialized length limit.
 	ErrSecretTooLarge = errors.New("shamir: secret is too large for the field")
 
 	// ErrInsufficientShares is returned when not enough shares are provided for reconstruction.
@@ -31,7 +32,7 @@ var (
 	ErrEmptySecret = errors.New("shamir: secret cannot be empty")
 
 	// ErrInconsistentShares is returned when shares have inconsistent parameters.
-	ErrInconsistentShares = errors.New("shamir: shares have inconsistent threshold or total values")
+	ErrInconsistentShares = errors.New("shamir: shares have inconsistent threshold, total or secret length values")
 
 	// ErrVerificationFailed is returned when share verification fails.
 	ErrVerificationFailed = errors.New("shamir: share verification failed")

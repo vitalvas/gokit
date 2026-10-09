@@ -27,15 +27,21 @@ type Share struct {
 // Binary format versions and header sizes.
 const (
 	// shareVersion1 lacked the secretLen field.
+	maxShareValue    = 1<<16 - 1
 	shareVersion1    = 1
 	shareHeaderSize1 = 1 + 2 + 2 + 2 + 2 // version + threshold + total + xLen + yLen
 	shareVersion     = 2
 	shareHeaderSize  = 1 + 2 + 2 + 2 + 2 + 2 // + secretLen
 )
 
-// Bytes serializes the share to a binary format.
+// Bytes serializes the share to a binary format, or returns nil for invalid
+// coordinates or metadata that cannot be represented without truncation.
 // Format: version(1) | threshold(2) | total(2) | secretLen(2) | xLen(2) | yLen(2) | x | y
 func (s *Share) Bytes() []byte {
+	if s == nil || s.X == nil || s.Y == nil || s.Threshold < 2 || s.Threshold > maxShareValue || s.Total < s.Threshold || s.Total > maxShareValue || s.SecretLen < 0 || s.SecretLen > maxShareValue || s.X.Sign() <= 0 || s.X.Cmp(prime) >= 0 || s.Y.Sign() < 0 || s.Y.Cmp(prime) >= 0 {
+		return nil
+	}
+
 	xBytes := s.X.Bytes()
 	yBytes := s.Y.Bytes()
 

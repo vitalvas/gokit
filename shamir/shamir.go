@@ -8,21 +8,24 @@ import (
 // The secret is treated as a big-endian byte representation of a field element.
 //
 // Parameters:
-//   - secret: the secret data to split (must be non-empty and smaller than the field prime)
+//   - secret: the secret data to split (must be non-empty, at most 65535 bytes, and numerically smaller than the field prime)
 //   - threshold: minimum number of shares required for reconstruction (k)
 //   - total: total number of shares to generate (n)
 //
 // Returns a slice of Share objects that can be distributed to participants.
 func Split(secret []byte, threshold, total int) ([]*Share, error) {
+	if len(secret) > maxShareValue {
+		return nil, ErrSecretTooLarge
+	}
 	if len(secret) == 0 {
 		return nil, ErrEmptySecret
 	}
 
-	if threshold < 2 {
+	if threshold < 2 || threshold > maxShareValue {
 		return nil, ErrInvalidThreshold
 	}
 
-	if total < threshold {
+	if total < threshold || total > maxShareValue {
 		return nil, ErrInvalidTotal
 	}
 
@@ -67,22 +70,25 @@ func Split(secret []byte, threshold, total int) ([]*Share, error) {
 //   - threshold: minimum number of shares required for reconstruction
 //   - xCoords: x-coordinates for each share (must all be non-zero and unique)
 func SplitWithCustomX(secret []byte, threshold int, xCoords []*big.Int) ([]*Share, error) {
+	if len(secret) > maxShareValue {
+		return nil, ErrSecretTooLarge
+	}
 	if len(secret) == 0 {
 		return nil, ErrEmptySecret
 	}
 
-	if threshold < 2 {
+	if threshold < 2 || threshold > maxShareValue {
 		return nil, ErrInvalidThreshold
 	}
 
-	if len(xCoords) < threshold {
+	if len(xCoords) < threshold || len(xCoords) > maxShareValue {
 		return nil, ErrInvalidTotal
 	}
 
 	// Verify all x-coordinates are non-zero and unique
 	seen := make(map[string]bool)
 	for _, x := range xCoords {
-		if x.Sign() == 0 {
+		if x == nil || x.Sign() <= 0 || x.Cmp(prime) >= 0 {
 			return nil, ErrInvalidShareX
 		}
 		key := x.String()
@@ -131,100 +137,97 @@ func SplitWithCustomX(secret []byte, threshold int, xCoords []*big.Int) ([]*Shar
 //
 // Returns the reconstructed secret.
 func Combine(shares []*Share, secretLen int) ([]byte, error) {
-	if len(shares) == 0 {
-		return nil, ErrInsufficientShares
+	knownLen, err := validateShares(shares)
+	if err != nil {
+		return nil, err
 	}
-
-	threshold := shares[0].Threshold
-	if len(shares) < threshold {
-		return nil, ErrInsufficientShares
+	if secretLen < 0 || secretLen > maxShareValue || (knownLen > 0 && knownLen != secretLen) {
+		return nil, ErrInconsistentShares
 	}
-
-	// Verify shares have consistent parameters and unique x-coordinates
-	seen := make(map[string]bool)
-	for _, share := range shares {
-		if share.Threshold != threshold {
-			return nil, ErrInconsistentShares
-		}
-		key := share.X.String()
-		if seen[key] {
-			return nil, ErrDuplicateShares
-		}
-		seen[key] = true
+	value, err := reconstruct(shares)
+	if err != nil {
+		return nil, err
 	}
-
-	// Use only the required number of shares
-	usedShares := shares[:threshold]
-
-	// Extract x and y coordinates
-	xs := make([]*big.Int, threshold)
-	ys := make([]*big.Int, threshold)
-	for i, share := range usedShares {
-		xs[i] = share.X
-		ys[i] = share.Y
+	if len(value.Bytes()) > secretLen {
+		return nil, ErrInconsistentShares
 	}
-
-	// Perform Lagrange interpolation to find f(0) = secret
-	secretInt := lagrangeInterpolate(xs, ys)
-	if secretInt == nil {
-		return nil, ErrVerificationFailed
-	}
-
-	return fieldElementToBytes(secretInt, secretLen), nil
+	return fieldElementToBytes(value, secretLen), nil
 }
 
-// CombineAuto reconstructs the secret from shares, determining the secret length
-// automatically. When the shares carry the original length (SecretLen, set by
-// Split), the exact secret is restored, including any leading zero bytes.
-//
-// Shares created before SecretLen existed (SecretLen == 0) fall back to the
-// minimal field-element encoding, which drops leading zero bytes; for those,
-// prefer Combine with an explicit length.
+// CombineAuto reconstructs the exact secret using consistent known lengths.
+// Legacy shares with SecretLen == 0 may be mixed with current shares; a known
+// length from any share is used. With only legacy shares, leading zeros are lost.
 func CombineAuto(shares []*Share) ([]byte, error) {
+	secretLen, err := validateShares(shares)
+	if err != nil {
+		return nil, err
+	}
+	value, err := reconstruct(shares)
+	if err != nil {
+		return nil, err
+	}
+	if secretLen == 0 {
+		return value.Bytes(), nil
+	}
+	if len(value.Bytes()) > secretLen {
+		return nil, ErrInconsistentShares
+	}
+	return fieldElementToBytes(value, secretLen), nil
+}
+
+func validateShares(shares []*Share) (int, error) {
 	if len(shares) == 0 {
-		return nil, ErrInsufficientShares
+		return 0, ErrInsufficientShares
 	}
-
-	threshold := shares[0].Threshold
+	if shares[0] == nil {
+		return 0, ErrInvalidShareFormat
+	}
+	threshold, total := shares[0].Threshold, shares[0].Total
+	if threshold < 2 || threshold > maxShareValue || total < threshold || total > maxShareValue {
+		return 0, ErrInvalidShareFormat
+	}
 	if len(shares) < threshold {
-		return nil, ErrInsufficientShares
+		return 0, ErrInsufficientShares
 	}
-
-	// Verify shares have consistent parameters and unique x-coordinates
-	seen := make(map[string]bool)
+	seen := make(map[string]bool, len(shares))
+	knownLen := 0
 	for _, share := range shares {
-		if share.Threshold != threshold {
-			return nil, ErrInconsistentShares
+		if share == nil || share.X == nil || share.Y == nil {
+			return 0, ErrInvalidShareFormat
+		}
+		if share.Threshold != threshold || share.Total != total || share.SecretLen < 0 || share.SecretLen > maxShareValue {
+			return 0, ErrInconsistentShares
+		}
+		if share.X.Sign() <= 0 || share.X.Cmp(prime) >= 0 {
+			return 0, ErrInvalidShareX
+		}
+		if share.Y.Sign() < 0 || share.Y.Cmp(prime) >= 0 {
+			return 0, ErrInvalidShareFormat
+		}
+		if share.SecretLen > 0 {
+			if knownLen != 0 && knownLen != share.SecretLen {
+				return 0, ErrInconsistentShares
+			}
+			knownLen = share.SecretLen
 		}
 		key := share.X.String()
 		if seen[key] {
-			return nil, ErrDuplicateShares
+			return 0, ErrDuplicateShares
 		}
 		seen[key] = true
 	}
+	return knownLen, nil
+}
 
-	// Use only the required number of shares
-	usedShares := shares[:threshold]
-
-	// Extract x and y coordinates
-	xs := make([]*big.Int, threshold)
-	ys := make([]*big.Int, threshold)
-	for i, share := range usedShares {
-		xs[i] = share.X
-		ys[i] = share.Y
+func reconstruct(shares []*Share) (*big.Int, error) {
+	threshold := shares[0].Threshold
+	xs, ys := make([]*big.Int, threshold), make([]*big.Int, threshold)
+	for i, share := range shares[:threshold] {
+		xs[i], ys[i] = share.X, share.Y
 	}
-
-	// Perform Lagrange interpolation to find f(0) = secret
-	secretInt := lagrangeInterpolate(xs, ys)
-	if secretInt == nil {
+	value := lagrangeInterpolate(xs, ys)
+	if value == nil {
 		return nil, ErrVerificationFailed
 	}
-
-	// When the original length is known, pad to it so leading zero bytes -- which
-	// the field-element representation drops -- are restored exactly.
-	if secretLen := shares[0].SecretLen; secretLen > 0 {
-		return fieldElementToBytes(secretInt, secretLen), nil
-	}
-
-	return secretInt.Bytes(), nil
+	return value, nil
 }

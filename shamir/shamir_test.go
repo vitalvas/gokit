@@ -485,3 +485,78 @@ func FuzzSplitCombine(f *testing.F) {
 		}
 	})
 }
+
+func TestCombineSecretLengthConsistency(t *testing.T) {
+	secret := []byte{0, 1, 2}
+	shares, err := Split(secret, 2, 3)
+	require.NoError(t, err)
+	bad := shares[0].Clone()
+	bad.SecretLen++
+	bad, err = ParseShare(bad.Bytes())
+	require.NoError(t, err)
+	for _, input := range [][]*Share{{bad, shares[1]}, {shares[1], bad}, {shares[1], shares[2], bad}} {
+		_, err := CombineAuto(input)
+		require.ErrorIs(t, err, ErrInconsistentShares)
+		_, err = Combine(input, len(secret))
+		require.ErrorIs(t, err, ErrInconsistentShares)
+	}
+	legacy := shares[0].Clone()
+	legacy.SecretLen = 0
+	for _, input := range [][]*Share{{legacy, shares[1]}, {shares[1], legacy}} {
+		got, err := CombineAuto(input)
+		require.NoError(t, err)
+		assert.Equal(t, secret, got)
+	}
+	for _, s := range shares {
+		s.SecretLen = 1
+	}
+	_, err = CombineAuto(shares)
+	require.ErrorIs(t, err, ErrInconsistentShares)
+	_, err = Combine(shares, 1)
+	require.ErrorIs(t, err, ErrInconsistentShares)
+}
+
+func TestSplitSerializedLengthBoundary(t *testing.T) {
+	for _, size := range []int{maxShareValue, maxShareValue + 1} {
+		secret := make([]byte, size)
+		secret[size-1] = 1
+		for _, split := range []func() ([]*Share, error){
+			func() ([]*Share, error) { return Split(secret, 2, 2) },
+			func() ([]*Share, error) { return SplitWithCustomX(secret, 2, []*big.Int{big.NewInt(1), big.NewInt(2)}) },
+		} {
+			shares, err := split()
+			if size > maxShareValue {
+				require.ErrorIs(t, err, ErrSecretTooLarge)
+				continue
+			}
+			require.NoError(t, err)
+			for i, s := range shares {
+				shares[i], err = ParseShare(s.Bytes())
+				require.NoError(t, err)
+				assert.Equal(t, size, shares[i].SecretLen)
+			}
+			got, err := CombineAuto(shares)
+			require.NoError(t, err)
+			assert.Equal(t, secret, got)
+			shares[0].SecretLen = maxShareValue + 1
+			assert.Nil(t, shares[0].Bytes(), "invalid manually constructed metadata cannot wrap")
+		}
+	}
+}
+
+func TestCombineRejectsInvalidShares(t *testing.T) {
+	shares, err := Split([]byte{1}, 2, 3)
+	require.NoError(t, err)
+	for _, mut := range []func(*Share){
+		func(s *Share) { s.Total++ }, func(s *Share) { s.X = nil },
+		func(s *Share) { s.Y = nil }, func(s *Share) { s.X = big.NewInt(0) },
+		func(s *Share) { s.Y = new(big.Int).Set(prime) }, func(s *Share) { s.SecretLen = -1 },
+	} {
+		bad := shares[0].Clone()
+		mut(bad)
+		_, err := CombineAuto([]*Share{bad, shares[1]})
+		require.Error(t, err)
+	}
+	_, err = CombineAuto([]*Share{nil, shares[0]})
+	require.Error(t, err)
+}
