@@ -11,12 +11,12 @@ A GCRA (Generic Cell Rate Algorithm) rate limiter in Go with per-key state, burs
 - **Export/Import**: Serialize state to survive restarts; offline time is credited on restore
 - **Minimal state**: One pointer-free int64 per key, invisible to the garbage collector
 - **Monotonic time**: Immune to wall-clock jumps (NTP corrections, DST)
-- **Max key eviction**: Drained-first, then oldest-state eviction when max tracked keys is reached
+- **Bounded key capacity**: Reclaims drained entries and denies new keys while all tracked state is active
 - **Configurable cleanup**: Optional background goroutine for drained entry removal
 - **Thread-safe**: All operations protected by mutex
 - **O(1) operations**: Map lookup + integer comparison per operation
 - **Zero dependencies**: Only uses Go standard library
-- **Zero allocations**: No allocations on the request path
+- **Zero allocations for tracked keys**: Existing-key requests reuse stored state
 
 ## What is GCRA?
 
@@ -91,7 +91,7 @@ The emission interval is `period / limit`: one unit of capacity refills every in
 
 | Mode | cleanupInterval | Behavior |
 |------|----------------|----------|
-| Lazy only | `0` | Drained entries removed only during eviction |
+| Lazy only | `0` | Drained entries removed when admitting new keys |
 | Background | `> 0` | Background goroutine removes drained entries periodically |
 
 A drained entry (a key idle long enough to regain full burst) is indistinguishable from an untracked key, so removal never changes behavior - it only frees memory.
@@ -193,12 +193,13 @@ defer l.Stop()
 - Configuration (rate, burst, maxKeys, cleanup interval) travels with the state; the background cleanup goroutine is restarted if it was configured
 - `Import` returns `ErrInvalidData` for structurally valid but inconsistent data (corrupted configuration)
 
-## Eviction Behavior
+## Capacity Behavior
 
-When the number of tracked keys reaches `maxKeys`, adding a new key triggers eviction:
+When the number of tracked keys reaches `maxKeys`, adding a new key checks capacity:
 
 1. First, remove all drained entries (keys that regained full burst capacity)
-2. If still at capacity, evict the key whose state drains soonest
+2. If still at capacity, deny the new key until an existing key fully drains.
+   `RetryAfter` reports the earliest capacity release time for an untracked key.
 
 **Sizing guidelines:**
 
@@ -208,7 +209,8 @@ When the number of tracked keys reaches `maxKeys`, adding a new key triggers evi
 | Per-IP rate limiting | Number of unique client IPs |
 | Per-endpoint limiting | Number of endpoints |
 
-Set `maxKeys` large enough that eviction rarely occurs: an evicted key gets a fresh burst on its next request.
+Set `maxKeys` to accommodate the expected active key population. Active limits
+are never reset by key churn; capacity exhaustion denies new keys.
 
 ## Use Cases
 

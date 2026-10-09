@@ -35,7 +35,7 @@ const (
 //   - O(n) memory where n = number of tracked keys (one int64 per key)
 //   - Smooth rate enforcement, no window-edge bursts
 //   - Thread-safe
-//   - Max tracked keys with oldest-state eviction
+//   - Max tracked keys without evicting active rate-limit state
 type Limiter struct {
 	// ponytail: single mutex; shard entries by key hash if cross-core contention matters
 	mu              sync.Mutex
@@ -52,12 +52,12 @@ type Limiter struct {
 
 // New creates a new Limiter allowing limit requests per period with the given
 // burst capacity (the number of requests a key may make instantly from a cold
-// start; burst below 1 is treated as 1). When maxKeys is reached, the key
-// whose state drains soonest is evicted.
+// start; burst below 1 is treated as 1). When maxKeys is reached, new keys are
+// denied until an existing key fully drains. Active state is never evicted.
 //
 // If cleanupInterval is positive, a background goroutine runs at that interval
 // to remove fully drained entries. If zero or negative, no background cleanup
-// is performed and drained entries are only removed lazily during eviction.
+// is performed and drained entries are only removed lazily when admitting new keys.
 // Call Stop() to release the background goroutine when done.
 func New(limit int, period time.Duration, burst, maxKeys int, cleanupInterval time.Duration) *Limiter {
 	if limit <= 0 {
@@ -91,7 +91,7 @@ func New(limit int, period time.Duration, burst, maxKeys int, cleanupInterval ti
 	}
 
 	l := &Limiter{
-		entries:         make(map[string]int64, maxKeys),
+		entries:         make(map[string]int64),
 		base:            time.Now(),
 		interval:        interval,
 		tau:             tau,
@@ -157,12 +157,12 @@ func Import(data []byte) (*Limiter, error) {
 		return nil, err
 	}
 
-	if d.Interval < 1 || d.Interval > maxInterval || d.Tau < 0 || d.Tau > maxTau || d.MaxKeys < 1 {
+	if d.Interval < 1 || d.Interval > maxInterval || d.Tau < 0 || d.Tau > maxTau || d.MaxKeys < 1 || len(d.Entries) > d.MaxKeys {
 		return nil, ErrInvalidData
 	}
 
 	l := &Limiter{
-		entries:         make(map[string]int64, d.MaxKeys),
+		entries:         make(map[string]int64, len(d.Entries)),
 		base:            time.Now(),
 		interval:        d.Interval,
 		tau:             d.Tau,
@@ -276,8 +276,8 @@ func (l *Limiter) allowN(key string, n int, now int64) bool {
 		return false
 	}
 
-	if !ok {
-		l.evictIfNeeded(now)
+	if !ok && !l.admitKey(now) {
+		return false
 	}
 
 	l.entries[key] = tat + int64(n)*l.interval
@@ -297,6 +297,18 @@ func (l *Limiter) retryAfter(key string, now int64) time.Duration {
 
 	tat, ok := l.entries[key]
 	if !ok {
+		if len(l.entries) < l.maxKeys {
+			return 0
+		}
+		earliest := int64(math.MaxInt64)
+		for _, pending := range l.entries {
+			if pending < earliest {
+				earliest = pending
+			}
+		}
+		if earliest > now {
+			return time.Duration(earliest - now)
+		}
 		return 0
 	}
 
@@ -312,7 +324,7 @@ func (l *Limiter) Reset() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.entries = make(map[string]int64, l.maxKeys)
+	l.entries = make(map[string]int64)
 }
 
 // Len returns the number of currently tracked keys (including drained but not
@@ -324,32 +336,15 @@ func (l *Limiter) Len() int {
 	return len(l.entries)
 }
 
-// evictIfNeeded removes drained entries first, then evicts the key with the
-// earliest TAT if still at capacity. Caller must hold l.mu.
-func (l *Limiter) evictIfNeeded(now int64) {
+// admitKey reclaims fully drained state. Caller must hold l.mu.
+func (l *Limiter) admitKey(now int64) bool {
 	if len(l.entries) < l.maxKeys {
-		return
+		return true
 	}
-
 	for key, tat := range l.entries {
 		if tat <= now {
 			delete(l.entries, key)
 		}
 	}
-
-	if len(l.entries) < l.maxKeys {
-		return
-	}
-
-	oldestKey := ""
-	oldestTAT := int64(math.MaxInt64)
-
-	for key, tat := range l.entries {
-		if tat < oldestTAT {
-			oldestKey = key
-			oldestTAT = tat
-		}
-	}
-
-	delete(l.entries, oldestKey)
+	return len(l.entries) < l.maxKeys
 }

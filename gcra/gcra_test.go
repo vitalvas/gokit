@@ -204,17 +204,17 @@ func TestEviction(t *testing.T) {
 		assert.Equal(t, 1, l.Len())
 	})
 
-	t.Run("oldest state evicted at capacity", func(t *testing.T) {
+	t.Run("active state retained at capacity", func(t *testing.T) {
 		l := New(10, time.Second, 5, 2, 0)
 		defer l.Stop()
 
 		assert.True(t, l.allowN("key1", 1, 0))
 		assert.True(t, l.allowN("key2", 5, 0))
-		assert.True(t, l.allowN("key3", 1, 0))
+		assert.False(t, l.allowN("key3", 1, 0))
 
 		assert.Equal(t, 2, l.Len())
 		_, key1Tracked := l.entries["key1"]
-		assert.False(t, key1Tracked)
+		assert.True(t, key1Tracked)
 		_, key2Tracked := l.entries["key2"]
 		assert.True(t, key2Tracked)
 	})
@@ -508,4 +508,20 @@ func BenchmarkAllow(b *testing.B) {
 			}
 		})
 	})
+}
+
+func TestKeyChurnCannotResetActiveLimits(t *testing.T) {
+	l := New(1, time.Hour, 2, 2, 0)
+	defer l.Stop()
+	assert.True(t, l.allowN("victim", 2, 0))
+	assert.True(t, l.allowN("attacker", 2, 0))
+	for range 10 {
+		assert.False(t, l.allowN("new-key", 1, 0))
+		assert.False(t, l.allowN("victim", 1, 0))
+	}
+	assert.Equal(t, 2, l.Len())
+	assert.Equal(t, 2*time.Hour, l.retryAfter("new-key", 0))
+	assert.Equal(t, time.Hour, l.retryAfter("victim", 0))
+	assert.True(t, l.allowN("new-key", 1, int64(2*time.Hour)))
+	assert.Equal(t, 1, l.Len())
 }
