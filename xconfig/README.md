@@ -17,12 +17,6 @@ A flexible Go configuration library that supports loading from multiple sources 
 - **Type safety**: compile-time type checking
 - **Zero dependencies**: only uses Go standard library + gopkg.in/yaml.v3
 
-## Installation
-
-```bash
-go get github.com/vitalvas/gokit/xconfig
-```
-
 ## Quick Start
 
 ```go

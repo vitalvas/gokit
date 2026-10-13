@@ -25,12 +25,6 @@ T-Digest is a probabilistic data structure for computing approximate quantiles f
 
 **Use Cases:** Monitoring systems, analytics platforms, database query optimization, distributed tracing, performance analysis, SLA tracking.
 
-## Installation
-
-```bash
-go get github.com/vitalvas/gokit/tdigest
-```
-
 ## Quick Start
 
 ```go

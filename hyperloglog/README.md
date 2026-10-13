@@ -27,12 +27,6 @@ HyperLogLog is a probabilistic data structure that estimates the cardinality (nu
 
 **Use Cases**: Unique visitor counting, distinct IP tracking, database query optimization, stream processing, distributed systems.
 
-## Installation
-
-```bash
-go get github.com/vitalvas/gokit/hyperloglog
-```
-
 ## Quick Start
 
 ```go

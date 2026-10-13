@@ -26,12 +26,6 @@ A Cuckoo Filter is a probabilistic data structure for approximate set membership
 
 **Use Cases:** Cache management, duplicate detection, rate limiting, database query optimization, network packet filtering.
 
-## Installation
-
-```bash
-go get github.com/vitalvas/gokit/cuckoo
-```
-
 ## Quick Start
 
 ```go

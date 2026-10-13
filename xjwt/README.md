@@ -22,12 +22,6 @@ rejects `none`, enforces a per-call algorithm allowlist before any key lookup
 (blocking algorithm-substitution and RS/HS confusion), binds each algorithm to
 its key type and EC curve, compares HMACs in constant time, and performs no I/O.
 
-## Installation
-
-```go
-import "github.com/vitalvas/gokit/xjwt"
-```
-
 ## Usage
 
 ### Sign and verify

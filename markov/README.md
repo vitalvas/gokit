@@ -19,12 +19,6 @@ A Markov chain is a probabilistic model that generates sequences based on observ
 
 **Use Cases**: Text generation, name generation, music composition, predictive text, autocomplete systems.
 
-## Installation
-
-```bash
-go get github.com/vitalvas/gokit/markov
-```
-
 ## Quick Start
 
 ```go

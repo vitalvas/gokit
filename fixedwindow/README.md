@@ -32,12 +32,6 @@ The fixed window counter algorithm divides time into fixed-duration windows and 
 - Cloudflare Rate Limiting (fixed window counters)
 - RFC 6585 (429 Too Many Requests)
 
-## Installation
-
-```bash
-go get github.com/vitalvas/gokit/fixedwindow
-```
-
 ## Quick Start
 
 ```go

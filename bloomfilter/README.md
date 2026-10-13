@@ -24,12 +24,6 @@ A Bloom filter is a space-efficient probabilistic data structure used to test wh
 
 **Use Cases**: URL deduplication, cache filtering, spell checkers, database query optimization, distributed systems.
 
-## Installation
-
-```bash
-go get github.com/vitalvas/gokit/bloomfilter
-```
-
 ## Quick Start
 
 ```go

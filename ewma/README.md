@@ -27,12 +27,6 @@ Exponentially Weighted Moving Average (EWMA) is a statistical method for smoothi
 
 **Use Cases:** Request rate monitoring, load balancing, system metrics, rate limiting, response time tracking, resource utilization.
 
-## Installation
-
-```bash
-go get github.com/vitalvas/gokit/ewma
-```
-
 ## Quick Start
 
 ```go

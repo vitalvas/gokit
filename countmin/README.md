@@ -35,12 +35,6 @@ where:
 
 **Use Cases**: Request frequency tracking, top-k queries, heavy hitter detection, rate limiting, traffic analysis.
 
-## Installation
-
-```bash
-go get github.com/vitalvas/gokit/countmin
-```
-
 ## Quick Start
 
 ```go

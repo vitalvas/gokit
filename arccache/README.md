@@ -33,12 +33,6 @@ The adaptation parameter **p** (target size for T1) adjusts based on ghost hits:
 
 **Use Cases:** General-purpose caching, database page caches, CDN caches, application-level caches with mixed workloads.
 
-## Installation
-
-```bash
-go get github.com/vitalvas/gokit/arccache
-```
-
 ## Quick Start
 
 ```go

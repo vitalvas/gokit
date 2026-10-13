@@ -17,12 +17,6 @@ curve and the operations commonly needed with it:
 
 Signing is deterministic (RFC 6979 for ECDSA, the BIP-340 scheme for Schnorr).
 
-## Installation
-
-```go
-import "github.com/vitalvas/gokit/secp256k1"
-```
-
 ## Usage
 
 ### Key generation and encoding

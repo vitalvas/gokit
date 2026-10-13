@@ -2,12 +2,6 @@
 
 Package xcmd provides utilities for command execution and goroutine management.
 
-## Installation
-
-```bash
-go get github.com/vitalvas/gokit/xcmd
-```
-
 ## Features
 
 ### ErrGroup

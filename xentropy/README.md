@@ -42,12 +42,6 @@ Min-entropy (Rényi entropy with α=∞) measures the **worst-case** predictabil
 - **Shannon**: Average-case analysis (e.g., "How compressible is this data?")
 - **Min-Entropy**: Worst-case analysis (e.g., "How secure is this key against focused attacks?")
 
-## Installation
-
-```bash
-go get github.com/vitalvas/gokit/xentropy
-```
-
 ## Quick Start
 
 ```go

@@ -26,12 +26,6 @@ Space-Saving is a streaming algorithm for finding the top-k most frequent items 
 
 **Use Cases:** Network traffic analysis, trending topics detection, popular products tracking, frequent query monitoring, clickstream analysis, log analysis.
 
-## Installation
-
-```bash
-go get github.com/vitalvas/gokit/spacesaving
-```
-
 ## Quick Start
 
 ```go

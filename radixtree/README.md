@@ -26,12 +26,6 @@ A radix tree (also called a compressed trie or Patricia tree) is a space-optimiz
 
 **Use cases:** HTTP routing, IP/BGP prefix lookup, autocomplete, file system paths, configuration key storage.
 
-## Installation
-
-```bash
-go get github.com/vitalvas/gokit/radixtree
-```
-
 ## Quick Start
 
 ```go

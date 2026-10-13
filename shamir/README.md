@@ -10,12 +10,6 @@ Two implementations are provided:
 - **Prime Field** (256-bit): Self-describing shares with metadata
 - **GF(2^8)**: Minimal share size (`len(secret) + 1` bytes)
 
-## Installation
-
-```go
-import "github.com/vitalvas/gokit/shamir"
-```
-
 ## Usage
 
 ### Minimal Shares with GF(2^8) (Recommended for most cases)

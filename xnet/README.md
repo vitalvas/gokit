@@ -14,12 +14,6 @@ A Go networking utility library for working with IP addresses, CIDR blocks, and 
 - **Type Safety**: Compile-time type checking
 - **Zero Dependencies**: Only uses Go standard library
 
-## Installation
-
-```bash
-go get github.com/vitalvas/gokit/xnet
-```
-
 ## Quick Start
 
 ```go
