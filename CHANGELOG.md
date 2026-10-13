@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.0](https://github.com/vitalvas/gokit/compare/v0.38.0...v0.39.0) (2026-10-13)
+
+
+### Features
+
+* remove uxid package ([135bc0b](https://github.com/vitalvas/gokit/commit/135bc0b80716d318e7664a82879c6c64c97728ca))
+
 ## [0.38.0](https://github.com/vitalvas/gokit/compare/v0.37.0...v0.38.0) (2026-10-09)
 
 
