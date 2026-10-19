@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.0](https://github.com/vitalvas/gokit/compare/v0.39.0...v0.40.0) (2026-10-19)
+
+
+### Features
+
+* add jsonrpc2 package ([2d773da](https://github.com/vitalvas/gokit/commit/2d773da051319b023f360fd64d7098674a526b62))
+
 ## [0.39.0](https://github.com/vitalvas/gokit/compare/v0.38.0...v0.39.0) (2026-10-13)
 
 
