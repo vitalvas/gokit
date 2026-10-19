@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"jsonrpC\":\"2.0\",\"method\":\"subtract\",\"pArAms\":[0]}")

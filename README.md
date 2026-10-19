@@ -42,6 +42,7 @@ The following libraries will be released in v1.0.0:
 - **fixedwindow** - Fixed window counter rate limiter with per-key lockout, configurable cleanup, and oldest-window eviction
 - **gcra** - GCRA (leaky bucket) rate limiter with per-key state, burst capacity, batch requests, and retry-after
 - **hyperloglog** - Cardinality estimation for counting distinct elements with minimal memory
+- **jsonrpc2** - JSON-RPC 2.0 server dispatcher, client, and bidirectional Conn with batch and notification handling
 - **markov** - Markov chain text generator with thread-safe operations
 - **otp** - HOTP/TOTP/OCRA one-time passwords (RFC 4226/6238/6287) with secret generation, skew-tolerant verification, and otpauth URIs
 - **radixtree** - Generic concurrent-safe radix tree with zero-allocation lookups, prefix search, and longest prefix matching
