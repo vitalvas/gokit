@@ -138,7 +138,7 @@ func (c *Command) Find(args []string) (*Command, []string, error) {
 		sub, ok := cur.byCommand[arg]
 		if !ok {
 			if len(cur.commands) > 0 {
-				return cur, args[i:], fmt.Errorf("xflags: unknown command %q for %q", arg, cur.name)
+				return cur, args[i:], fmt.Errorf("unknown command %q for %q", arg, cur.name)
 			}
 			break
 		}
@@ -184,11 +184,7 @@ func (p *Parser) SetOutput(w io.Writer) {
 // Execute parses the arguments set by SetArgs, falling back to os.Args[1:] when
 // none were set, and returns any parse error.
 func (p *Parser) Execute() error {
-	args := p.args
-	if args == nil {
-		args = os.Args[1:]
-	}
-	return p.Parse(args)
+	return p.Parse(p.args...)
 }
 
 // output returns the writer for built-in help and version text.

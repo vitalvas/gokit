@@ -16,7 +16,7 @@ func TestIntegerBase(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		require.NoError(t, p.Parse([]string{"--mask=ff"}))
+		require.NoError(t, p.Parse([]string{"--mask=ff"}...))
 		assert.Equal(t, 255, o.Mask)
 	})
 
@@ -27,7 +27,7 @@ func TestIntegerBase(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		require.NoError(t, p.Parse([]string{"--a=0x10", "--b=0o17"}))
+		require.NoError(t, p.Parse([]string{"--a=0x10", "--b=0o17"}...))
 		assert.Equal(t, 16, o.A)
 		assert.Equal(t, 15, o.B)
 	})
@@ -46,7 +46,7 @@ func TestIntegerBase(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		require.NoError(t, p.Parse([]string{"--a=42"}))
+		require.NoError(t, p.Parse([]string{"--a=42"}...))
 		assert.Equal(t, 42, o.A)
 	})
 }
@@ -59,7 +59,7 @@ func TestNilCallbackNoPanic(t *testing.T) {
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
 		require.NotPanics(t, func() {
-			require.NoError(t, p.Parse([]string{"--fn=x"}))
+			require.NoError(t, p.Parse([]string{"--fn=x"}...))
 		})
 	})
 }
@@ -79,13 +79,13 @@ func TestCounterBounds(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := New("app")
 			require.NoError(t, p.register(optionSpec{ptr: tc.dst, long: "n", short: "n", choice: choiceCount}))
-			require.NoError(t, p.Parse([]string{"-nn"}))
+			require.NoError(t, p.Parse([]string{"-nn"}...))
 			assert.EqualValues(t, 2, reflect.ValueOf(tc.dst).Elem().Interface())
-			require.NoError(t, p.Parse([]string{fmt.Sprintf("--n=%s", tc.max)}))
+			require.NoError(t, p.Parse([]string{fmt.Sprintf("--n=%s", tc.max)}...))
 			maximum := reflect.ValueOf(tc.dst).Elem().Interface()
-			require.Error(t, p.Parse([]string{fmt.Sprintf("--n=%s", tc.max), "--n"}))
+			require.Error(t, p.Parse([]string{fmt.Sprintf("--n=%s", tc.max), "--n"}...))
 			assert.Equal(t, maximum, reflect.ValueOf(tc.dst).Elem().Interface())
-			require.Error(t, p.Parse([]string{fmt.Sprintf("--n=%s", tc.overflow)}))
+			require.Error(t, p.Parse([]string{fmt.Sprintf("--n=%s", tc.overflow)}...))
 		})
 	}
 	var invalid struct {
@@ -101,6 +101,6 @@ func TestNamedMapKey(t *testing.T) {
 	}
 	p := New("app")
 	require.NoError(t, p.AddGroup("", &o))
-	require.NoError(t, p.Parse([]string{"--label=http=80", "--label=http=8080"}))
+	require.NoError(t, p.Parse([]string{"--label=http=80", "--label=http=8080"}...))
 	assert.Equal(t, map[key]int{"http": 8080}, o.Labels)
 }

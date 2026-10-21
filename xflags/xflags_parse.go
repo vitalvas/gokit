@@ -2,6 +2,7 @@ package xflags
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 )
@@ -10,7 +11,14 @@ import (
 // (command line > environment > default), runs validation callbacks, and
 // checks required options. Built-in --help and --version are handled
 // internally and do not surface as errors.
-func (p *Parser) Parse(args []string) error {
+//
+// The arguments are optional: calling Parse() with no arguments parses
+// os.Args[1:]. To parse an explicitly empty argument list, pass one with
+// Parse([]string{}...).
+func (p *Parser) Parse(args ...string) error {
+	if args == nil {
+		args = os.Args[1:]
+	}
 	p.handled = false
 	p.reset()
 	err := p.parse(args)
@@ -78,7 +86,7 @@ func (c *Command) parse(args []string) error {
 				if sub, ok := c.byCommand[args[i]]; ok {
 					return sub.parse(args[i+1:])
 				}
-				return fmt.Errorf("xflags: unexpected argument %q", args[i])
+				return fmt.Errorf("unexpected argument %q", args[i])
 			}
 			return nil
 
@@ -100,7 +108,7 @@ func (c *Command) parse(args []string) error {
 			if sub, ok := c.byCommand[arg]; ok {
 				return sub.parse(args[i+1:])
 			}
-			return fmt.Errorf("xflags: unexpected argument %q", arg)
+			return fmt.Errorf("unexpected argument %q", arg)
 		}
 	}
 
@@ -122,7 +130,7 @@ func (c *Command) parseLong(token string, rest []string) (int, error) {
 		if name == "version" && c.rootVersion() != "" {
 			return 0, errVersion
 		}
-		return 0, fmt.Errorf("xflags: unknown option --%s", name)
+		return 0, fmt.Errorf("unknown option --%s", name)
 	}
 
 	return c.applyToken(opt, inlineVal, hasInline, rest)
@@ -145,7 +153,7 @@ func (c *Command) parseShort(cluster string, rest []string) (int, error) {
 			if name == "v" && c.rootVersion() != "" {
 				return 0, errVersion
 			}
-			return 0, fmt.Errorf("xflags: unknown option -%s", name)
+			return 0, fmt.Errorf("unknown option -%s", name)
 		}
 
 		// The remainder of the cluster after this flag. A leading '=' is an
@@ -207,7 +215,7 @@ func (c *Command) applyToken(opt *Option, inlineVal string, hasInline bool, rest
 	}
 
 	if len(rest) == 0 {
-		return 0, fmt.Errorf("xflags: option %s expects a value", optionName(opt))
+		return 0, fmt.Errorf("option %s expects a value", optionName(opt))
 	}
 	return 1, opt.applyString(rest[0])
 }
@@ -307,7 +315,7 @@ func (opt *Option) resolve() error {
 	}
 
 	if opt.Required && !opt.set {
-		return fmt.Errorf("xflags: required option %s is not set", optionName(opt))
+		return fmt.Errorf("required option %s is not set", optionName(opt))
 	}
 	if opt.value.IsValid() && opt.callback.IsValid() && !opt.callback.IsNil() {
 		var args []reflect.Value
@@ -315,7 +323,7 @@ func (opt *Option) resolve() error {
 			args = []reflect.Value{opt.value}
 		}
 		if err := callError(opt.callback.Call(args)); err != nil {
-			return fmt.Errorf("xflags: option %s: %w", optionName(opt), err)
+			return fmt.Errorf("option %s: %w", optionName(opt), err)
 		}
 	}
 
@@ -328,7 +336,7 @@ func (opt *Option) runValidate() error {
 		return nil
 	}
 	if err := opt.validate(opt.value.Interface()); err != nil {
-		return fmt.Errorf("xflags: option %s: %w", optionName(opt), err)
+		return fmt.Errorf("option %s: %w", optionName(opt), err)
 	}
 	return nil
 }

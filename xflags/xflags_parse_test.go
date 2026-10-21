@@ -2,12 +2,53 @@ package xflags
 
 import (
 	"errors"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestParseOptionalArgs(t *testing.T) {
+	t.Run("no arguments parses os.Args", func(t *testing.T) {
+		var opts struct {
+			Name string `long:"name"`
+		}
+		old := os.Args
+		os.Args = []string{"app", "--name=fromosargs"}
+		t.Cleanup(func() { os.Args = old })
+
+		p := New("app")
+		require.NoError(t, p.AddGroup("", &opts))
+		require.NoError(t, p.Parse())
+		assert.Equal(t, "fromosargs", opts.Name)
+	})
+
+	t.Run("explicit empty list ignores os.Args", func(t *testing.T) {
+		var opts struct {
+			Name string `long:"name" default:"fallback"`
+		}
+		old := os.Args
+		os.Args = []string{"app", "--name=fromosargs"}
+		t.Cleanup(func() { os.Args = old })
+
+		p := New("app")
+		require.NoError(t, p.AddGroup("", &opts))
+		require.NoError(t, p.Parse([]string{}...))
+		assert.Equal(t, "fallback", opts.Name)
+	})
+
+	t.Run("explicit arguments", func(t *testing.T) {
+		var opts struct {
+			Name string `long:"name"`
+		}
+		p := New("app")
+		require.NoError(t, p.AddGroup("", &opts))
+		require.NoError(t, p.Parse("--name", "explicit"))
+		assert.Equal(t, "explicit", opts.Name)
+	})
+}
 
 func TestParseLongOptions(t *testing.T) {
 	t.Run("equals and space forms", func(t *testing.T) {
@@ -17,7 +58,7 @@ func TestParseLongOptions(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"--name=alice", "--host", "localhost"}))
+		require.NoError(t, p.Parse([]string{"--name=alice", "--host", "localhost"}...))
 		assert.Equal(t, "alice", opts.Name)
 		assert.Equal(t, "localhost", opts.Host)
 	})
@@ -28,12 +69,12 @@ func TestParseLongOptions(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.Error(t, p.Parse([]string{"--name"}))
+		require.Error(t, p.Parse([]string{"--name"}...))
 	})
 
 	t.Run("unknown option errors", func(t *testing.T) {
 		p := New("app")
-		require.Error(t, p.Parse([]string{"--nope"}))
+		require.Error(t, p.Parse([]string{"--nope"}...))
 	})
 }
 
@@ -44,7 +85,7 @@ func TestParseBool(t *testing.T) {
 	}
 	p := New("app")
 	require.NoError(t, p.AddGroup("", &opts))
-	require.NoError(t, p.Parse([]string{"--debug", "--quiet=false"}))
+	require.NoError(t, p.Parse([]string{"--debug", "--quiet=false"}...))
 	assert.True(t, opts.Debug)
 	assert.False(t, opts.Quiet)
 }
@@ -58,7 +99,7 @@ func TestParseShortClusters(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"-abc"}))
+		require.NoError(t, p.Parse([]string{"-abc"}...))
 		assert.True(t, opts.A)
 		assert.True(t, opts.B)
 		assert.True(t, opts.C)
@@ -70,7 +111,7 @@ func TestParseShortClusters(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"-ofile.txt"}))
+		require.NoError(t, p.Parse([]string{"-ofile.txt"}...))
 		assert.Equal(t, "file.txt", opts.Out)
 	})
 
@@ -80,13 +121,13 @@ func TestParseShortClusters(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"-o", "file.txt"}))
+		require.NoError(t, p.Parse([]string{"-o", "file.txt"}...))
 		assert.Equal(t, "file.txt", opts.Out)
 	})
 
 	t.Run("unknown short errors", func(t *testing.T) {
 		p := New("app")
-		require.Error(t, p.Parse([]string{"-z"}))
+		require.Error(t, p.Parse([]string{"-z"}...))
 	})
 }
 
@@ -104,7 +145,7 @@ func TestPrimitiveTypes(t *testing.T) {
 	require.NoError(t, p.AddGroup("", &opts))
 	require.NoError(t, p.Parse([]string{
 		"--s=text", "--i=-5", "--i8=127", "--u=9", "--f=1.5", "--b", "--dur=30s",
-	}))
+	}...))
 	assert.Equal(t, "text", opts.S)
 	assert.Equal(t, -5, opts.I)
 	assert.Equal(t, int8(127), opts.I8)
@@ -188,7 +229,7 @@ func TestInvalidValues(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			require.Error(t, tc.build().Parse(tc.args))
+			require.Error(t, tc.build().Parse(tc.args...))
 		})
 	}
 }
@@ -200,7 +241,7 @@ func TestChoicePolicies(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"--tag=a", "--tag=b", "--tag=c"}))
+		require.NoError(t, p.Parse([]string{"--tag=a", "--tag=b", "--tag=c"}...))
 		assert.Equal(t, []string{"a", "b", "c"}, opts.Tags)
 	})
 
@@ -210,7 +251,7 @@ func TestChoicePolicies(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"-vvv"}))
+		require.NoError(t, p.Parse([]string{"-vvv"}...))
 		assert.Equal(t, 3, opts.V)
 	})
 
@@ -220,7 +261,7 @@ func TestChoicePolicies(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"--name=a", "--name=b"}))
+		require.NoError(t, p.Parse([]string{"--name=a", "--name=b"}...))
 		assert.Equal(t, "b", opts.Name)
 	})
 
@@ -230,7 +271,7 @@ func TestChoicePolicies(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"--tag=a", "--tag=b"}))
+		require.NoError(t, p.Parse([]string{"--tag=a", "--tag=b"}...))
 		assert.Equal(t, []string{"a", "b"}, opts.Tags)
 	})
 
@@ -250,7 +291,7 @@ func TestMaps(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"--label=env=prod", "--label", "tier=web"}))
+		require.NoError(t, p.Parse([]string{"--label=env=prod", "--label", "tier=web"}...))
 		assert.Equal(t, map[string]string{"env": "prod", "tier": "web"}, opts.Labels)
 	})
 
@@ -260,7 +301,7 @@ func TestMaps(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"--port=http=80"}))
+		require.NoError(t, p.Parse([]string{"--port=http=80"}...))
 		assert.Equal(t, map[string]int{"http": 80}, opts.Ports)
 	})
 
@@ -270,7 +311,7 @@ func TestMaps(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.Error(t, p.Parse([]string{"--label=novalue"}))
+		require.Error(t, p.Parse([]string{"--label=novalue"}...))
 	})
 
 	t.Run("empty key errors", func(t *testing.T) {
@@ -279,7 +320,7 @@ func TestMaps(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.Error(t, p.Parse([]string{"--label==v"}))
+		require.Error(t, p.Parse([]string{"--label==v"}...))
 	})
 }
 
@@ -290,7 +331,7 @@ func TestDefaults(t *testing.T) {
 	}
 	p := New("app")
 	require.NoError(t, p.AddGroup("", &opts))
-	require.NoError(t, p.Parse(nil))
+	require.NoError(t, p.Parse([]string{}...))
 	assert.Equal(t, 8080, opts.Port)
 	assert.Equal(t, "app", opts.Name)
 }
@@ -302,7 +343,7 @@ func TestRequired(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.Error(t, p.Parse(nil))
+		require.Error(t, p.Parse([]string{}...))
 	})
 
 	t.Run("satisfied by cli", func(t *testing.T) {
@@ -311,7 +352,7 @@ func TestRequired(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"--name=x"}))
+		require.NoError(t, p.Parse([]string{"--name=x"}...))
 	})
 
 	t.Run("default does not satisfy required", func(t *testing.T) {
@@ -320,7 +361,7 @@ func TestRequired(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.Error(t, p.Parse(nil))
+		require.Error(t, p.Parse([]string{}...))
 	})
 
 	t.Run("env satisfies required", func(t *testing.T) {
@@ -330,7 +371,7 @@ func TestRequired(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse(nil))
+		require.NoError(t, p.Parse([]string{}...))
 	})
 }
 
@@ -347,8 +388,8 @@ func TestValidationCallback(t *testing.T) {
 			}
 			return nil
 		}))
-		require.Error(t, p.Parse([]string{"--port=99999"}))
-		require.NoError(t, p.Parse([]string{"--port=8080"}))
+		require.Error(t, p.Parse([]string{"--port=99999"}...))
+		require.NoError(t, p.Parse([]string{"--port=8080"}...))
 	})
 
 	t.Run("struct func field callback", func(t *testing.T) {
@@ -360,7 +401,7 @@ func TestValidationCallback(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"--config=file.yaml"}))
+		require.NoError(t, p.Parse([]string{"--config=file.yaml"}...))
 		assert.Equal(t, "file.yaml", called)
 	})
 
@@ -372,7 +413,7 @@ func TestValidationCallback(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.Error(t, p.Parse([]string{"--config=x"}))
+		require.Error(t, p.Parse([]string{"--config=x"}...))
 	})
 
 	t.Run("zero-arg func callback", func(t *testing.T) {
@@ -384,7 +425,7 @@ func TestValidationCallback(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"--debug"}))
+		require.NoError(t, p.Parse([]string{"--debug"}...))
 		assert.Equal(t, 1, n)
 	})
 
@@ -398,7 +439,7 @@ func TestValidationCallback(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"--port=8080"}))
+		require.NoError(t, p.Parse([]string{"--port=8080"}...))
 		assert.Equal(t, 8080, opts.Port)
 		assert.Equal(t, 8080, seen)
 	})
@@ -410,7 +451,7 @@ func TestDoubleDash(t *testing.T) {
 	}
 	p := New("app")
 	require.NoError(t, p.AddGroup("", &opts))
-	require.NoError(t, p.Parse([]string{"--name=x", "--"}))
+	require.NoError(t, p.Parse([]string{"--name=x", "--"}...))
 	assert.Equal(t, "x", opts.Name)
 }
 
@@ -423,7 +464,7 @@ func TestSubcommandsBuilder(t *testing.T) {
 		_, err := p.AddCommand("server", &serverOpts)
 		require.NoError(t, err)
 
-		require.NoError(t, p.Parse([]string{"server", "--port=9090"}))
+		require.NoError(t, p.Parse([]string{"server", "--port=9090"}...))
 		assert.Equal(t, 9090, serverOpts.Port)
 	})
 
@@ -437,7 +478,7 @@ func TestSubcommandsBuilder(t *testing.T) {
 		_, err = server.AddCommand("start", &startOpts)
 		require.NoError(t, err)
 
-		require.NoError(t, p.Parse([]string{"server", "start", "--detach"}))
+		require.NoError(t, p.Parse([]string{"server", "start", "--detach"}...))
 		assert.True(t, startOpts.Detach)
 	})
 
@@ -453,7 +494,7 @@ func TestSubcommandsBuilder(t *testing.T) {
 		_, err := p.AddCommand("server", &serverOpts)
 		require.NoError(t, err)
 
-		require.NoError(t, p.Parse([]string{"-v", "server", "--port=80"}))
+		require.NoError(t, p.Parse([]string{"-v", "server", "--port=80"}...))
 		assert.True(t, rootOpts.Verbose)
 		assert.Equal(t, 80, serverOpts.Port)
 	})
@@ -468,7 +509,7 @@ func TestSubcommandsBuilder(t *testing.T) {
 
 	t.Run("unexpected positional errors", func(t *testing.T) {
 		p := New("app")
-		require.Error(t, p.Parse([]string{"bogus"}))
+		require.Error(t, p.Parse([]string{"bogus"}...))
 	})
 }
 
@@ -488,7 +529,7 @@ func TestSubcommandsTag(t *testing.T) {
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &root))
 
-		require.NoError(t, p.Parse([]string{"server", "--port=9090"}))
+		require.NoError(t, p.Parse([]string{"server", "--port=9090"}...))
 		assert.Equal(t, 9090, root.Server.Port)
 		assert.Equal(t, "run the server", p.byCommand["server"].description)
 	})
@@ -500,7 +541,7 @@ func TestSubcommandsTag(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &root))
-		require.NoError(t, p.Parse([]string{"client", "--addr=127.0.0.1"}))
+		require.NoError(t, p.Parse([]string{"client", "--addr=127.0.0.1"}...))
 		assert.Equal(t, "127.0.0.1", root.Client.Addr)
 	})
 }
@@ -512,7 +553,7 @@ func TestShortEquals(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		require.NoError(t, p.Parse([]string{"-o=value"}))
+		require.NoError(t, p.Parse([]string{"-o=value"}...))
 		assert.Equal(t, "value", o.Out)
 	})
 
@@ -522,7 +563,7 @@ func TestShortEquals(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		require.NoError(t, p.Parse([]string{"-d=false"}))
+		require.NoError(t, p.Parse([]string{"-d=false"}...))
 		assert.False(t, o.Debug)
 	})
 
@@ -533,7 +574,7 @@ func TestShortEquals(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		require.NoError(t, p.Parse([]string{"-ao=file"}))
+		require.NoError(t, p.Parse([]string{"-ao=file"}...))
 		assert.True(t, o.A)
 		assert.Equal(t, "file", o.Out)
 	})
@@ -546,7 +587,7 @@ func TestOptionalValue(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		require.NoError(t, p.Parse([]string{"--log"}))
+		require.NoError(t, p.Parse([]string{"--log"}...))
 		assert.Equal(t, "info", o.Log)
 	})
 
@@ -556,7 +597,7 @@ func TestOptionalValue(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		require.NoError(t, p.Parse([]string{"--log=debug"}))
+		require.NoError(t, p.Parse([]string{"--log=debug"}...))
 		assert.Equal(t, "debug", o.Log)
 	})
 
@@ -566,7 +607,7 @@ func TestOptionalValue(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		require.NoError(t, p.Parse([]string{"--log", "trace"}))
+		require.NoError(t, p.Parse([]string{"--log", "trace"}...))
 		assert.Equal(t, "trace", o.Log)
 	})
 
@@ -577,7 +618,7 @@ func TestOptionalValue(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		require.NoError(t, p.Parse([]string{"--log", "--debug"}))
+		require.NoError(t, p.Parse([]string{"--log", "--debug"}...))
 		assert.Equal(t, "info", o.Log)
 		assert.True(t, o.Debug)
 	})
@@ -588,7 +629,7 @@ func TestOptionalValue(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		require.NoError(t, p.Parse([]string{"--log"}))
+		require.NoError(t, p.Parse([]string{"--log"}...))
 		assert.Empty(t, o.Log)
 	})
 
@@ -598,7 +639,7 @@ func TestOptionalValue(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		require.NoError(t, p.Parse([]string{"--offset", "-5"}))
+		require.NoError(t, p.Parse([]string{"--offset", "-5"}...))
 		assert.Equal(t, -5, o.Offset)
 	})
 }
@@ -610,7 +651,7 @@ func TestUserHelpVersionNotShadowed(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		require.NoError(t, p.Parse([]string{"--help=topic"}))
+		require.NoError(t, p.Parse([]string{"--help=topic"}...))
 		assert.Equal(t, "topic", o.Help)
 	})
 
@@ -620,7 +661,7 @@ func TestUserHelpVersionNotShadowed(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &o))
-		require.NoError(t, p.Parse([]string{"-h", "myhost"}))
+		require.NoError(t, p.Parse([]string{"-h", "myhost"}...))
 		assert.Equal(t, "myhost", o.Host)
 	})
 
@@ -631,13 +672,13 @@ func TestUserHelpVersionNotShadowed(t *testing.T) {
 		p := New("app")
 		p.SetVersion("9.9")
 		require.NoError(t, p.AddGroup("", &o))
-		require.NoError(t, p.Parse([]string{"--version=1.2"}))
+		require.NoError(t, p.Parse([]string{"--version=1.2"}...))
 		assert.Equal(t, "1.2", o.Version)
 	})
 
 	t.Run("builtin help still works without user option", func(t *testing.T) {
 		p := New("app")
-		require.NoError(t, p.Parse([]string{"--help"}))
+		require.NoError(t, p.Parse([]string{"--help"}...))
 	})
 }
 
@@ -646,7 +687,7 @@ func TestPositionalsAfterDoubleDash(t *testing.T) {
 		p := New("app")
 		_, err := p.AddCommand("server", nil)
 		require.NoError(t, err)
-		require.Error(t, p.Parse([]string{"--", "notacommand"}))
+		require.Error(t, p.Parse([]string{"--", "notacommand"}...))
 	})
 
 	t.Run("subcommand after -- still dispatches", func(t *testing.T) {
@@ -656,7 +697,7 @@ func TestPositionalsAfterDoubleDash(t *testing.T) {
 		p := New("app")
 		_, err := p.AddCommand("server", &serverOpts)
 		require.NoError(t, err)
-		require.NoError(t, p.Parse([]string{"--", "server", "--port=7070"}))
+		require.NoError(t, p.Parse([]string{"--", "server", "--port=7070"}...))
 		assert.Equal(t, 7070, serverOpts.Port)
 	})
 }
@@ -693,12 +734,12 @@ func TestResolvedPairedCallbacks(t *testing.T) {
 	}}
 	p := New("app")
 	require.NoError(t, p.AddGroup("", &o))
-	require.NoError(t, p.Parse([]string{"--n=20", "--n=5"}))
+	require.NoError(t, p.Parse([]string{"--n=20", "--n=5"}...))
 	assert.Equal(t, 5, o.N)
 	assert.Equal(t, 1, calls)
-	require.NoError(t, p.Parse(nil))
+	require.NoError(t, p.Parse([]string{}...))
 	assert.Equal(t, 2, calls, "zero values must also be validated")
-	require.Error(t, p.Parse([]string{"--n=20"}))
+	require.Error(t, p.Parse([]string{"--n=20"}...))
 
 	var seenCount int
 	var seenTags []string
@@ -713,7 +754,7 @@ func TestResolvedPairedCallbacks(t *testing.T) {
 	}{NFn: func(n int) error { seenCount = n; return nil }, TagsFn: func(v []string) error { seenTags = v; return nil }, MapFn: func(v map[string]int) error { seenMap = v; return nil }}
 	p = New("app")
 	require.NoError(t, p.AddGroup("", &containers))
-	require.NoError(t, p.Parse([]string{"--n", "--n", "--tag=a", "--tag=b", "--map=x=1", "--map=y=2"}))
+	require.NoError(t, p.Parse([]string{"--n", "--n", "--tag=a", "--tag=b", "--map=x=1", "--map=y=2"}...))
 	assert.Equal(t, 2, seenCount)
 	assert.Equal(t, []string{"a", "b"}, seenTags)
 	assert.Equal(t, map[string]int{"x": 1, "y": 2}, seenMap)
@@ -729,7 +770,7 @@ func TestStandaloneCallbackOccurrences(t *testing.T) {
 	var seen []string
 	p := New("app")
 	require.NoError(t, p.Func("f", "", "", func(s string) error { seen = append(seen, s); return nil }))
-	require.NoError(t, p.Parse([]string{"--f=a", "--f=b"}))
+	require.NoError(t, p.Parse([]string{"--f=a", "--f=b"}...))
 	assert.Equal(t, []string{"a", "b"}, seen)
 }
 
@@ -744,20 +785,20 @@ func TestParseResetsSourcesAndDestinations(t *testing.T) {
 	}{Tags: []string{"initial"}, Labels: map[string]string{"initial": "yes"}}
 	p := New("app")
 	require.NoError(t, p.AddGroup("", &o))
-	require.Error(t, p.Parse([]string{"--n=bad"}))
-	require.Error(t, p.Parse(nil))
-	require.NoError(t, p.Parse([]string{"--n=1", "--tag=a", "--label=x=y", "--ptr=9"}))
+	require.Error(t, p.Parse([]string{"--n=bad"}...))
+	require.Error(t, p.Parse([]string{}...))
+	require.NoError(t, p.Parse([]string{"--n=1", "--tag=a", "--label=x=y", "--ptr=9"}...))
 	assert.Equal(t, "first", o.Name)
 	t.Setenv("XF_REUSE", "second")
-	require.NoError(t, p.Parse([]string{"--n=2"}))
+	require.NoError(t, p.Parse([]string{"--n=2"}...))
 	assert.Equal(t, "second", o.Name)
 	assert.Equal(t, []string{"initial"}, o.Tags)
 	assert.Equal(t, map[string]string{"initial": "yes"}, o.Labels)
 	assert.Nil(t, o.Ptr)
 	t.Setenv("XF_REUSE", "")
-	require.NoError(t, p.Parse([]string{"--n=3"}))
+	require.NoError(t, p.Parse([]string{"--n=3"}...))
 	assert.Equal(t, "fallback", o.Name)
-	require.Error(t, p.Parse(nil))
+	require.Error(t, p.Parse([]string{}...))
 }
 
 func TestOptionalZeroValues(t *testing.T) {
@@ -773,11 +814,11 @@ func TestOptionalZeroValues(t *testing.T) {
 	o.Fn = func(n int) error { seen = n; return nil }
 	p := New("app")
 	require.NoError(t, p.AddGroup("", &o))
-	require.NoError(t, p.Parse([]string{"--n", "--f", "--d", "--slice", "--fn"}))
+	require.NoError(t, p.Parse([]string{"--n", "--f", "--d", "--slice", "--fn"}...))
 	assert.Zero(t, o.N)
 	assert.Zero(t, o.F)
 	assert.Zero(t, o.D)
 	assert.Equal(t, []int{0}, o.Slice)
 	assert.Zero(t, seen)
-	require.Error(t, p.Parse([]string{"--n="}), "explicit empty numeric values are invalid")
+	require.Error(t, p.Parse([]string{"--n="}...), "explicit empty numeric values are invalid")
 }

@@ -45,7 +45,7 @@ func main() {
 	p.SetVersion("1.2.3")
 	p.AddGroup("Application Options", &opts)
 
-	if err := p.Parse(os.Args[1:]); err != nil {
+	if err := p.Parse(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -402,10 +402,12 @@ p.SetVersion("1.2.3")
 
 `Parse` returns errors; it never calls `os.Exit`. The caller decides how to react. Built-in `--help` and `--version` are handled internally and do not surface as errors.
 
+The arguments to `Parse` are optional. `p.Parse()` parses `os.Args[1:]`; `p.Parse("--name", "x")` parses an explicit list. To parse a `[]string` slice, spread it with `p.Parse(args...)`, and to parse an explicitly empty list use `p.Parse([]string{}...)`.
+
 Each `Parse` starts from destination values captured at the first parse, then resolves the current command line, environment, and defaults again. Failed parses may leave partial destination values and callback side effects; the next parse resets destinations and occurrence state. Parsers are not safe for concurrent use. `Handled()` resets on every parse. After an error, `SelectedCommand()` may describe a partially parsed path.
 
 ```go
-if err := p.Parse(os.Args[1:]); err != nil {
+if err := p.Parse(); err != nil {
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)
 }

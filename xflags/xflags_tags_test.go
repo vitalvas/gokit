@@ -19,7 +19,7 @@ func TestNamespaces(t *testing.T) {
 		require.NoError(t, p.AddGroup("", &opts))
 		assert.Contains(t, p.byLong, "server.port")
 		assert.Contains(t, p.byLong, "server.host")
-		require.NoError(t, p.Parse([]string{"--server.port=9090"}))
+		require.NoError(t, p.Parse([]string{"--server.port=9090"}...))
 		assert.Equal(t, 9090, opts.Server.Port)
 		assert.Equal(t, "0.0.0.0", opts.Server.Host)
 	})
@@ -34,7 +34,7 @@ func TestNamespaces(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"--a.b.val=7"}))
+		require.NoError(t, p.Parse([]string{"--a.b.val=7"}...))
 		assert.Equal(t, 7, opts.A.B.Val)
 	})
 
@@ -47,7 +47,7 @@ func TestNamespaces(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"--nested.val=3"}))
+		require.NoError(t, p.Parse([]string{"--nested.val=3"}...))
 		require.NotNil(t, opts.Nested)
 		assert.Equal(t, 3, opts.Nested.Val)
 	})
@@ -93,7 +93,7 @@ func TestMergePreservesMetadata(t *testing.T) {
 		assert.True(t, opt.Required)
 		require.Contains(t, p.byShort, "p")
 
-		require.NoError(t, p.Parse([]string{"-p", "9090"}))
+		require.NoError(t, p.Parse([]string{"-p", "9090"}...))
 		assert.Equal(t, 9090, o.Port)
 	})
 
@@ -115,11 +115,11 @@ func TestMergedValueMetadata(t *testing.T) {
 	}{Fn: func(n int) error { seen = n; return nil }}
 	p := New("app")
 	require.NoError(t, p.AddGroup("", &o))
-	require.NoError(t, p.Parse([]string{"-n"}))
+	require.NoError(t, p.Parse([]string{"-n"}...))
 	assert.Equal(t, 255, o.N)
 	assert.Equal(t, 255, seen)
 	assert.NotContains(t, p.Help(), "--n")
 	assert.Equal(t, "HEX", p.byLong["n"].ValueName)
-	require.NoError(t, p.Parse(nil))
+	require.NoError(t, p.Parse([]string{}...))
 	assert.Equal(t, 10, o.N)
 }

@@ -15,7 +15,7 @@ func TestPrecedence(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse([]string{"--name=fromcli"}))
+		require.NoError(t, p.Parse([]string{"--name=fromcli"}...))
 		assert.Equal(t, "fromcli", opts.Name)
 	})
 
@@ -26,7 +26,7 @@ func TestPrecedence(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse(nil))
+		require.NoError(t, p.Parse([]string{}...))
 		assert.Equal(t, "fromenv", opts.Name)
 	})
 
@@ -36,7 +36,7 @@ func TestPrecedence(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse(nil))
+		require.NoError(t, p.Parse([]string{}...))
 		assert.Equal(t, "fromdefault", opts.Name)
 	})
 
@@ -47,7 +47,7 @@ func TestPrecedence(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse(nil))
+		require.NoError(t, p.Parse([]string{}...))
 		assert.Equal(t, "fromdefault", opts.Name)
 	})
 }
@@ -60,7 +60,7 @@ func TestEnvMultiValue(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse(nil))
+		require.NoError(t, p.Parse([]string{}...))
 		assert.Equal(t, []string{"a", "b", "c"}, opts.Tags)
 	})
 
@@ -71,7 +71,7 @@ func TestEnvMultiValue(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse(nil))
+		require.NoError(t, p.Parse([]string{}...))
 		assert.Equal(t, map[string]string{"env": "prod", "tier": "web"}, opts.Labels)
 	})
 
@@ -82,7 +82,7 @@ func TestEnvMultiValue(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &opts))
-		require.NoError(t, p.Parse(nil))
+		require.NoError(t, p.Parse([]string{}...))
 		assert.Equal(t, []string{"a", "b", "c"}, opts.Tags)
 	})
 }

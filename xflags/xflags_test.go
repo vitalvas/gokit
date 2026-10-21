@@ -81,7 +81,7 @@ func TestRegistrationRollback(t *testing.T) {
 	var a, b string
 	require.NoError(t, p.StringVar(&a, "a", "x", "", ""))
 	require.Error(t, p.StringVar(&b, "b", "x", "", ""))
-	require.Error(t, p.Parse([]string{"--b=leaked"}))
+	require.Error(t, p.Parse([]string{"--b=leaked"}...))
 	assert.Empty(t, b)
 
 	var bad struct {
@@ -96,7 +96,7 @@ func TestRegistrationRollback(t *testing.T) {
 	assert.NotContains(t, p.byCommand, "sub")
 	assert.NotContains(t, p.byLong, "new")
 	require.NoError(t, p.StringVar(&b, "b", "b", "", ""))
-	require.NoError(t, p.Parse([]string{"-b", "ok"}))
+	require.NoError(t, p.Parse([]string{"-b", "ok"}...))
 	assert.Equal(t, "ok", b)
 }
 
@@ -133,7 +133,7 @@ func TestIsSet(t *testing.T) {
 
 	t.Run("set on command line", func(t *testing.T) {
 		p, _ := newParser(t)
-		require.NoError(t, p.Parse([]string{"--name=x"}))
+		require.NoError(t, p.Parse([]string{"--name=x"}...))
 		assert.True(t, p.IsSet("name"))
 	})
 
@@ -143,7 +143,7 @@ func TestIsSet(t *testing.T) {
 		require.NoError(t, p.StringVar(&name, "name", "", "", ""))
 		p.byLong["name"].Env = "XF_ISSET"
 		t.Setenv("XF_ISSET", "y")
-		require.NoError(t, p.Parse(nil))
+		require.NoError(t, p.Parse([]string{}...))
 		assert.True(t, p.IsSet("name"))
 	})
 
@@ -151,14 +151,14 @@ func TestIsSet(t *testing.T) {
 		var name string
 		p := New("app")
 		require.NoError(t, p.StringVar(&name, "name", "", "fallback", ""))
-		require.NoError(t, p.Parse(nil))
+		require.NoError(t, p.Parse([]string{}...))
 		assert.Equal(t, "fallback", name)
 		assert.False(t, p.IsSet("name"))
 	})
 
 	t.Run("unknown name", func(t *testing.T) {
 		p, _ := newParser(t)
-		require.NoError(t, p.Parse(nil))
+		require.NoError(t, p.Parse([]string{}...))
 		assert.False(t, p.IsSet("nope"))
 	})
 }
@@ -174,19 +174,19 @@ func TestCount(t *testing.T) {
 
 	t.Run("counts occurrences", func(t *testing.T) {
 		p := newParser(t)
-		require.NoError(t, p.Parse([]string{"-vvv"}))
+		require.NoError(t, p.Parse([]string{"-vvv"}...))
 		assert.Equal(t, 3, p.Count("verbose"))
 	})
 
 	t.Run("unset is zero", func(t *testing.T) {
 		p := newParser(t)
-		require.NoError(t, p.Parse(nil))
+		require.NoError(t, p.Parse([]string{}...))
 		assert.Equal(t, 0, p.Count("verbose"))
 	})
 
 	t.Run("unknown name is zero", func(t *testing.T) {
 		p := newParser(t)
-		require.NoError(t, p.Parse(nil))
+		require.NoError(t, p.Parse([]string{}...))
 		assert.Equal(t, 0, p.Count("nope"))
 	})
 }

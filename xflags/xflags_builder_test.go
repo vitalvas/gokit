@@ -20,7 +20,7 @@ func TestBuilder(t *testing.T) {
 		require.NoError(t, p.IntVar(&count, "count", "c", 0, "the count"))
 		require.NoError(t, p.BoolVar(&debug, "debug", "d", false, "debug mode"))
 
-		require.NoError(t, p.Parse([]string{"-n", "alice", "--count=3", "-d"}))
+		require.NoError(t, p.Parse([]string{"-n", "alice", "--count=3", "-d"}...))
 		assert.Equal(t, "alice", name)
 		assert.Equal(t, 3, count)
 		assert.True(t, debug)
@@ -30,7 +30,7 @@ func TestBuilder(t *testing.T) {
 		var name string
 		p := New("app")
 		require.NoError(t, p.StringVar(&name, "name", "", "fallback", ""))
-		require.NoError(t, p.Parse(nil))
+		require.NoError(t, p.Parse([]string{}...))
 		assert.Equal(t, "fallback", name)
 	})
 
@@ -38,7 +38,7 @@ func TestBuilder(t *testing.T) {
 		var v int
 		p := New("app")
 		require.NoError(t, p.CountVar(&v, "verbose", "v", "verbosity"))
-		require.NoError(t, p.Parse([]string{"-vvvv"}))
+		require.NoError(t, p.Parse([]string{"-vvvv"}...))
 		assert.Equal(t, 4, v)
 	})
 
@@ -46,7 +46,7 @@ func TestBuilder(t *testing.T) {
 		var tags []string
 		p := New("app")
 		require.NoError(t, p.StringSliceVar(&tags, "tag", "t", "tags"))
-		require.NoError(t, p.Parse([]string{"-t", "a", "--tag=b"}))
+		require.NoError(t, p.Parse([]string{"-t", "a", "--tag=b"}...))
 		assert.Equal(t, []string{"a", "b"}, tags)
 	})
 
@@ -54,7 +54,7 @@ func TestBuilder(t *testing.T) {
 		var labels map[string]string
 		p := New("app")
 		require.NoError(t, p.StringMapVar(&labels, "label", "l", "labels"))
-		require.NoError(t, p.Parse([]string{"--label=a=1", "--label=b=2"}))
+		require.NoError(t, p.Parse([]string{"--label=a=1", "--label=b=2"}...))
 		assert.Equal(t, map[string]string{"a": "1", "b": "2"}, labels)
 	})
 
@@ -65,7 +65,7 @@ func TestBuilder(t *testing.T) {
 			seen = s
 			return nil
 		}))
-		require.NoError(t, p.Parse([]string{"--config=x.yaml"}))
+		require.NoError(t, p.Parse([]string{"--config=x.yaml"}...))
 		assert.Equal(t, "x.yaml", seen)
 	})
 
@@ -74,7 +74,7 @@ func TestBuilder(t *testing.T) {
 		require.NoError(t, p.Func("config", "", "", func(string) error {
 			return errors.New("bad")
 		}))
-		require.Error(t, p.Parse([]string{"--config=x"}))
+		require.Error(t, p.Parse([]string{"--config=x"}...))
 	})
 
 	t.Run("nil pointer errors", func(t *testing.T) {
@@ -86,7 +86,7 @@ func TestBuilder(t *testing.T) {
 		var flag bool
 		p := New("app")
 		require.NoError(t, p.BoolVar(&flag, "on", "", true, ""))
-		require.NoError(t, p.Parse(nil))
+		require.NoError(t, p.Parse([]string{}...))
 		assert.True(t, flag)
 	})
 }
@@ -113,7 +113,7 @@ func TestBuilderFeatureSetters(t *testing.T) {
 		p := New("app")
 		require.NoError(t, p.IntVar(&n, "mask", "", 0, ""))
 		require.NoError(t, p.SetBase("mask", 16))
-		require.NoError(t, p.Parse([]string{"--mask=ff"}))
+		require.NoError(t, p.Parse([]string{"--mask=ff"}...))
 		assert.Equal(t, 255, n)
 	})
 
@@ -122,7 +122,7 @@ func TestBuilderFeatureSetters(t *testing.T) {
 		p := New("app")
 		require.NoError(t, p.StringVar(&s, "log", "", "", ""))
 		require.NoError(t, p.SetOptionalValue("log", "info"))
-		require.NoError(t, p.Parse([]string{"--log"}))
+		require.NoError(t, p.Parse([]string{"--log"}...))
 		assert.Equal(t, "info", s)
 	})
 
@@ -142,11 +142,11 @@ func TestTypedBuilderDefaults(t *testing.T) {
 	require.NoError(t, p.StringVar(&s, "s", "", "", ""))
 	require.NoError(t, p.IntVar(&n, "n", "", 10, ""))
 	require.NoError(t, p.SetBase("n", 16))
-	require.NoError(t, p.Parse(nil))
+	require.NoError(t, p.Parse([]string{}...))
 	assert.False(t, b)
 	assert.Empty(t, s)
 	assert.Equal(t, 10, n)
-	require.NoError(t, p.Parse([]string{"--n=ff"}))
+	require.NoError(t, p.Parse([]string{"--n=ff"}...))
 	assert.Equal(t, 255, n)
 
 	o := struct {
@@ -154,6 +154,6 @@ func TestTypedBuilderDefaults(t *testing.T) {
 	}{S: "old"}
 	p = New("app")
 	require.NoError(t, p.AddGroup("", &o))
-	require.NoError(t, p.Parse(nil))
+	require.NoError(t, p.Parse([]string{}...))
 	assert.Empty(t, o.S)
 }
