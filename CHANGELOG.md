@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.0](https://github.com/vitalvas/gokit/compare/v0.41.0...v0.42.0) (2026-10-21)
+
+
+### Features
+
+* **xflags:** add command tree with context-aware Run handlers ([47080bc](https://github.com/vitalvas/gokit/commit/47080bcb45f698ea90697b2fafd51f83c68d84f0))
+
 ## [0.41.0](https://github.com/vitalvas/gokit/compare/v0.40.0...v0.41.0) (2026-10-21)
 
 
