@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.0](https://github.com/vitalvas/gokit/compare/v0.42.0...v0.43.0) (2026-10-21)
+
+
+### Features
+
+* migrate module namespace to go.vitalvas.com/gokit ([b8b7fa1](https://github.com/vitalvas/gokit/commit/b8b7fa1de0d458df396e963f35d246379029811d))
+
 ## [0.42.0](https://github.com/vitalvas/gokit/compare/v0.41.0...v0.42.0) (2026-10-21)
 
 
