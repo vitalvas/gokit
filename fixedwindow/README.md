@@ -41,7 +41,7 @@ import (
     "fmt"
     "time"
 
-    "github.com/vitalvas/gokit/fixedwindow"
+    "go.vitalvas.com/gokit/fixedwindow"
 )
 
 func main() {

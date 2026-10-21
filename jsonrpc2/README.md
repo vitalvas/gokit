@@ -25,7 +25,7 @@ import (
     "encoding/json"
     "fmt"
 
-    "github.com/vitalvas/gokit/jsonrpc2"
+    "go.vitalvas.com/gokit/jsonrpc2"
 )
 
 func main() {

@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/vitalvas/gokit/secp256k1"
+	"go.vitalvas.com/gokit/secp256k1"
 )
 
 // JSONWebKey is a JSON Web Key (RFC 7517), modelling RSA, EC (including

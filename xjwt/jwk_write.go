@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/vitalvas/gokit/secp256k1"
+	"go.vitalvas.com/gokit/secp256k1"
 )
 
 // JWKFromKey builds a JSONWebKey from a crypto key. Private keys yield a private

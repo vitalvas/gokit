@@ -32,7 +32,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/vitalvas/gokit/xflags"
+	"go.vitalvas.com/gokit/xflags"
 )
 
 type Options struct {
@@ -63,7 +63,7 @@ func main() {
 
 The examples below are complete programs. Runnable versions of each live in
 [`example_test.go`](example_test.go) and render on
-[pkg.go.dev](https://pkg.go.dev/github.com/vitalvas/gokit/xflags#pkg-examples).
+[pkg.go.dev](https://pkg.go.dev/go.vitalvas.com/gokit/xflags#pkg-examples).
 
 ### Subcommands with handlers
 
@@ -79,7 +79,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/vitalvas/gokit/xflags"
+	"go.vitalvas.com/gokit/xflags"
 )
 
 type serveOptions struct {

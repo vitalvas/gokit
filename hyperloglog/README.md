@@ -34,7 +34,7 @@ package main
 
 import (
     "fmt"
-    "github.com/vitalvas/gokit/hyperloglog"
+    "go.vitalvas.com/gokit/hyperloglog"
 )
 
 func main() {

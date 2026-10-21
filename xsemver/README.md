@@ -16,7 +16,7 @@ Semantic version parsing, validation, comparison, and constraints per the [semve
 ## Quick Start
 
 ```go
-import "github.com/vitalvas/gokit/xsemver"
+import "go.vitalvas.com/gokit/xsemver"
 
 v, err := xsemver.Parse("v1.2.3-beta.1+build.456")
 // v.Major=1, v.Minor=2, v.Patch=3, v.PreRelease="beta.1", v.Build="build.456"

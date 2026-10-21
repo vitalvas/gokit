@@ -19,7 +19,7 @@ import (
     "fmt"
     "time"
 
-    "github.com/vitalvas/gokit/xcmd"
+    "go.vitalvas.com/gokit/xcmd"
 )
 
 func main() {

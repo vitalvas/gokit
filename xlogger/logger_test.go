@@ -189,12 +189,12 @@ func TestDetectSourcePath(t *testing.T) {
 
 func TestNewReplaceAttr(t *testing.T) {
 	t.Run("with source path", func(t *testing.T) {
-		replaceFunc := newReplaceAttr("github.com/vitalvas/gokit")
+		replaceFunc := newReplaceAttr("go.vitalvas.com/gokit")
 
 		attr := slog.Attr{
 			Key: slog.SourceKey,
 			Value: slog.AnyValue(&slog.Source{
-				File: "/home/user/go/pkg/mod/github.com/vitalvas/gokit/xlogger/logger.go",
+				File: "/home/user/go/pkg/mod/go.vitalvas.com/gokit/xlogger/logger.go",
 				Line: 42,
 			}),
 		}
@@ -221,7 +221,7 @@ func TestNewReplaceAttr(t *testing.T) {
 	})
 
 	t.Run("non-source attribute unchanged", func(t *testing.T) {
-		replaceFunc := newReplaceAttr("github.com/vitalvas/gokit")
+		replaceFunc := newReplaceAttr("go.vitalvas.com/gokit")
 
 		attr := slog.Attr{
 			Key:   "message",

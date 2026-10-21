@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/vitalvas/gokit/xflags"
+	"go.vitalvas.com/gokit/xflags"
 )
 
 // Parsing root options declared as struct tags across the supported kinds, then

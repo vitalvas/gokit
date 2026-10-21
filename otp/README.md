@@ -32,7 +32,7 @@ import (
     "fmt"
     "time"
 
-    "github.com/vitalvas/gokit/otp"
+    "go.vitalvas.com/gokit/otp"
 )
 
 func main() {

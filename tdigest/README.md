@@ -32,7 +32,7 @@ package main
 
 import (
     "fmt"
-    "github.com/vitalvas/gokit/tdigest"
+    "go.vitalvas.com/gokit/tdigest"
 )
 
 func main() {

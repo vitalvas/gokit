@@ -46,7 +46,7 @@ import (
     "fmt"
     "time"
 
-    "github.com/vitalvas/gokit/gcra"
+    "go.vitalvas.com/gokit/gcra"
 )
 
 func main() {

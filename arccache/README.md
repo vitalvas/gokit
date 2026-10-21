@@ -42,7 +42,7 @@ import (
     "fmt"
     "time"
 
-    "github.com/vitalvas/gokit/arccache"
+    "go.vitalvas.com/gokit/arccache"
 )
 
 func main() {

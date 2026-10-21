@@ -31,7 +31,7 @@ package main
 
 import (
     "fmt"
-    "github.com/vitalvas/gokit/bloomfilter"
+    "go.vitalvas.com/gokit/bloomfilter"
 )
 
 func main() {

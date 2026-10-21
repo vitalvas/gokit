@@ -1,4 +1,4 @@
-module github.com/vitalvas/gokit
+module go.vitalvas.com/gokit
 
 go 1.27.2
 

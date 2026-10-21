@@ -42,7 +42,7 @@ package main
 
 import (
     "fmt"
-    "github.com/vitalvas/gokit/countmin"
+    "go.vitalvas.com/gokit/countmin"
 )
 
 func main() {

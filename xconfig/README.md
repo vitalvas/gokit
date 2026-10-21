@@ -24,7 +24,7 @@ package main
 
 import (
     "fmt"
-    "github.com/vitalvas/gokit/xconfig"
+    "go.vitalvas.com/gokit/xconfig"
 )
 
 type Config struct {

@@ -33,7 +33,7 @@ package main
 
 import (
     "fmt"
-    "github.com/vitalvas/gokit/spacesaving"
+    "go.vitalvas.com/gokit/spacesaving"
 )
 
 func main() {
@@ -477,7 +477,7 @@ import (
     "github.com/google/gopacket"
     "github.com/google/gopacket/layers"
     "github.com/google/gopacket/pcap"
-    "github.com/vitalvas/gokit/spacesaving"
+    "go.vitalvas.com/gokit/spacesaving"
 )
 
 func main() {

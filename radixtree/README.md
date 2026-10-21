@@ -33,7 +33,7 @@ package main
 
 import (
     "fmt"
-    "github.com/vitalvas/gokit/radixtree"
+    "go.vitalvas.com/gokit/radixtree"
 )
 
 func main() {

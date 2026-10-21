@@ -22,7 +22,7 @@ package main
 import (
     "fmt"
     "net"
-    "github.com/vitalvas/gokit/xnet"
+    "go.vitalvas.com/gokit/xnet"
 )
 
 func main() {

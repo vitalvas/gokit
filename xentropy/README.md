@@ -49,7 +49,7 @@ package main
 
 import (
     "fmt"
-    "github.com/vitalvas/gokit/xentropy"
+    "go.vitalvas.com/gokit/xentropy"
 )
 
 func main() {
@@ -361,7 +361,7 @@ package main
 import (
     "fmt"
     "os"
-    "github.com/vitalvas/gokit/xentropy"
+    "go.vitalvas.com/gokit/xentropy"
 )
 
 func analyzeFile(filename string) {

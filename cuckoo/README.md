@@ -33,7 +33,7 @@ package main
 
 import (
     "fmt"
-    "github.com/vitalvas/gokit/cuckoo"
+    "go.vitalvas.com/gokit/cuckoo"
 )
 
 func main() {

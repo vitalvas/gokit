@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/vitalvas/gokit/secp256k1"
+	"go.vitalvas.com/gokit/secp256k1"
 )
 
 func TestGenerateKeyAndRoundTrip(t *testing.T) {

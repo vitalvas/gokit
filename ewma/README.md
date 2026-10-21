@@ -35,7 +35,7 @@ package main
 import (
     "fmt"
     "time"
-    "github.com/vitalvas/gokit/ewma"
+    "go.vitalvas.com/gokit/ewma"
 )
 
 func main() {

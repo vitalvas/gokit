@@ -27,7 +27,7 @@ package main
 import (
     "fmt"
     "strings"
-    "github.com/vitalvas/gokit/markov"
+    "go.vitalvas.com/gokit/markov"
 )
 
 func main() {
@@ -780,7 +780,7 @@ package main
 import (
     "fmt"
     "strings"
-    "github.com/vitalvas/gokit/markov"
+    "go.vitalvas.com/gokit/markov"
 )
 
 func main() {

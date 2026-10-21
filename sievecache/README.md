@@ -32,7 +32,7 @@ import (
     "fmt"
     "time"
 
-    "github.com/vitalvas/gokit/sievecache"
+    "go.vitalvas.com/gokit/sievecache"
 )
 
 func main() {
