@@ -59,6 +59,146 @@ func main() {
 }
 ```
 
+## Examples
+
+The examples below are complete programs. Runnable versions of each live in
+[`example_test.go`](example_test.go) and render on
+[pkg.go.dev](https://pkg.go.dev/github.com/vitalvas/gokit/xflags#pkg-examples).
+
+### Subcommands with handlers
+
+Each command owns its logic in a `Run` handler. `Execute` parses the arguments
+and dispatches to the deepest selected command, passing a context the caller
+controls.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/vitalvas/gokit/xflags"
+)
+
+type serveOptions struct {
+	Port int    `long:"port" default:"8080"`
+	Host string `long:"host" default:"localhost"`
+}
+
+func main() {
+	var serve serveOptions
+
+	server := xflags.NewCommand("serve", "serve traffic")
+	if err := server.AddGroup("", &serve); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	server.SetRun(func(ctx context.Context, cmd *xflags.Command, args []string) error {
+		fmt.Printf("serving on %s:%d (files: %v)\n", serve.Host, serve.Port, args)
+		return nil
+	})
+
+	p := xflags.New("app")
+	if err := p.AddCommand(server); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	if err := p.Execute(context.Background()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+// app serve --port 9090 a.txt -> serving on localhost:9090 (files: [a.txt])
+```
+
+### Root action plus subcommands
+
+`./app` runs the root handler; `./app <name>` runs the matching subcommand. The
+typed `BindRoot` and `BindCommand` hand each handler its own populated config.
+
+```go
+type rootConfig struct {
+	Verbose bool `short:"v" long:"verbose"`
+}
+
+type pingConfig struct {
+	Host string `long:"host" default:"localhost"`
+}
+
+func main() {
+	p := xflags.New("app")
+
+	if _, err := xflags.BindRoot(p, func(_ context.Context, _ *xflags.Command, cfg *rootConfig, _ []string) error {
+		fmt.Printf("root, verbose=%t\n", cfg.Verbose)
+		return nil
+	}); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	_, ping, err := xflags.BindCommand("ping", "ping a host",
+		func(_ context.Context, _ *xflags.Command, cfg *pingConfig, _ []string) error {
+			fmt.Printf("pinging %s\n", cfg.Host)
+			return nil
+		})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if err := p.AddCommand(ping); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	if err := p.Execute(context.Background()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+// app -v            -> root, verbose=true
+// app ping          -> pinging localhost
+// app ping --host x -> pinging x
+```
+
+### Commands split across packages
+
+A command carries no parent until it is attached, so each can be built in its own
+package and exported as a `*xflags.Command`. The root package imports the value
+and wires it in with `AddCommand` — the cobra-style layout.
+
+```go
+// package user
+var Cmd = xflags.NewCommand("user", "manage users")
+
+func init() {
+	create := xflags.NewCommand("create", "create a user")
+	create.SetRun(runCreate)
+	Cmd.AddCommand(create)
+}
+```
+
+```go
+// package main
+func main() {
+	p := xflags.New("app")
+	if err := p.AddCommand(user.Cmd, group.Cmd); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if err := p.Execute(context.Background()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+// app user create ...
+```
+
 ## Declaring Options
 
 Options can be declared with struct tags, the builder API, or both.
