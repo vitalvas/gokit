@@ -66,7 +66,7 @@ func (c *Command) collectCommand(name string, field reflect.StructField, fieldVa
 		return fmt.Errorf("xflags: command field %q is not addressable", field.Name)
 	}
 
-	sub, err := c.AddCommand(name, fieldValue.Addr().Interface())
+	sub, err := c.newChildCommand(name, fieldValue.Addr().Interface())
 	if err != nil {
 		return err
 	}

@@ -50,6 +50,7 @@ func (p *Parser) Parse(args ...string) error {
 
 func (c *Command) reset() {
 	c.selected = nil
+	c.positionals = nil
 	for _, opt := range c.options {
 		opt.set, opt.count = false, 0
 		if opt.value.IsValid() {
@@ -80,13 +81,14 @@ func (c *Command) parse(args []string) error {
 		case arg == "--":
 			i++
 			// After the terminator flag parsing stops. The next token may name
-			// a subcommand; any other leftover token is an unexpected positional
+			// a subcommand; any other leftover token is a positional (passed to
+			// the run handler) or, without a handler, an unexpected argument
 			// (consistent with the pre-terminator path).
 			if i < len(args) {
 				if sub, ok := c.byCommand[args[i]]; ok {
 					return sub.parse(args[i+1:])
 				}
-				return fmt.Errorf("unexpected argument %q", args[i])
+				return c.takePositionals(args[i:])
 			}
 			return nil
 
@@ -108,10 +110,21 @@ func (c *Command) parse(args []string) error {
 			if sub, ok := c.byCommand[arg]; ok {
 				return sub.parse(args[i+1:])
 			}
-			return fmt.Errorf("unexpected argument %q", arg)
+			return c.takePositionals(args[i:])
 		}
 	}
 
+	return nil
+}
+
+// takePositionals records the remaining tokens as this command's positional
+// arguments when it has a run handler. Without a handler, a positional is an
+// unexpected argument.
+func (c *Command) takePositionals(rest []string) error {
+	if c.run == nil {
+		return fmt.Errorf("unexpected argument %q", rest[0])
+	}
+	c.positionals = append(c.positionals, rest...)
 	return nil
 }
 

@@ -90,10 +90,14 @@
 //
 // # Subcommands
 //
-// Commands form a nested tree. AddCommand registers a subcommand with its own
-// options and optional child commands; a struct field tagged command declares
-// one from the field's struct. After parsing, SelectedCommand reports the
-// deepest command reached.
+// Commands form a nested tree. NewCommand builds a standalone command, which is
+// attached to a parent with AddCommand; because a command has no parent until
+// attached, it can be built in its own package and wired into the tree
+// elsewhere. BindCommand builds one bound to a typed config and handler. A
+// struct field tagged command declares a subcommand from the field's struct.
+// SetRun attaches a handler that Execute invokes for the selected command,
+// passing a context, the command, and its trailing positional arguments. After
+// parsing, SelectedCommand reports the deepest command reached.
 //
 // # Built-in help and version
 //
@@ -113,8 +117,8 @@
 //
 // Several methods support writing tests for a parser without inspecting the
 // destination struct. SetArgs configures the arguments Execute parses, so a
-// test can set arguments and call Execute with no parameters; Execute falls back
-// to os.Args[1:] when SetArgs was not called. IsSet reports whether an option
+// test can set arguments and call Execute with a context; Execute falls back to
+// os.Args[1:] when SetArgs was not called. IsSet reports whether an option
 // was provided by the command line or environment (a default alone does not
 // count), and Count reports how many times a counting option occurred. Find
 // walks the command tree to locate a subcommand by name without parsing,

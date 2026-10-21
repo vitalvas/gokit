@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -111,8 +112,7 @@ func TestInvalidRegistrationNames(t *testing.T) {
 		p := New("app")
 		var b bool
 		require.Error(t, p.BoolVar(&b, name, "", false, ""))
-		_, err := p.AddCommand(name, nil)
-		require.Error(t, err)
+		require.Error(t, p.AddCommand(NewCommand(name, "")))
 	}
 	var n int
 	p := New("app")
@@ -197,7 +197,7 @@ func TestSetArgsExecute(t *testing.T) {
 		p := New("app")
 		require.NoError(t, p.StringVar(&name, "name", "", "", ""))
 		p.SetArgs([]string{"--name=configured"})
-		require.NoError(t, p.Execute())
+		require.NoError(t, p.Execute(context.Background()))
 		assert.Equal(t, "configured", name)
 		assert.True(t, p.IsSet("name"))
 	})
@@ -205,7 +205,7 @@ func TestSetArgsExecute(t *testing.T) {
 	t.Run("execute surfaces parse error", func(t *testing.T) {
 		p := New("app")
 		p.SetArgs([]string{"does-not-exist"})
-		require.Error(t, p.Execute())
+		require.Error(t, p.Execute(context.Background()))
 	})
 
 	t.Run("execute falls back to os.Args", func(t *testing.T) {
@@ -215,7 +215,7 @@ func TestSetArgsExecute(t *testing.T) {
 		p := New("app")
 		require.NoError(t, p.StringVar(&name, "name", "", "", ""))
 		os.Args = []string{"app", "--name=fromargs"}
-		require.NoError(t, p.Execute())
+		require.NoError(t, p.Execute(context.Background()))
 		assert.Equal(t, "fromargs", name)
 	})
 }
@@ -224,8 +224,7 @@ func TestFind(t *testing.T) {
 	buildRoot := func(t *testing.T) *Parser {
 		t.Helper()
 		p := New("app")
-		_, err := p.AddCommand("serve", nil)
-		require.NoError(t, err)
+		require.NoError(t, p.AddCommand(NewCommand("serve", "")))
 		return p
 	}
 
@@ -247,10 +246,9 @@ func TestFind(t *testing.T) {
 
 	t.Run("nested subcommands", func(t *testing.T) {
 		root := New("app")
-		parent, err := root.AddCommand("remote", nil)
-		require.NoError(t, err)
-		_, err = parent.AddCommand("add", nil)
-		require.NoError(t, err)
+		parent := NewCommand("remote", "")
+		require.NoError(t, root.AddCommand(parent))
+		require.NoError(t, parent.AddCommand(NewCommand("add", "")))
 		cmd, _, err := root.Find([]string{"remote", "add"})
 		require.NoError(t, err)
 		assert.Equal(t, "add", cmd.Name())

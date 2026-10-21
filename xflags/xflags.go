@@ -1,6 +1,7 @@
 package xflags
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -73,6 +74,9 @@ type Command struct {
 	groups    []*group           // option groups, in declaration order
 	commands  []*Command         // subcommands, in declaration order
 	byCommand map[string]*Command
+
+	run         func(context.Context, *Command, []string) error // handler invoked by Execute
+	positionals []string                                        // trailing positional args for run
 
 	parent   *Command
 	selected *Command
@@ -150,17 +154,7 @@ func (c *Command) Find(args []string) (*Command, []string, error) {
 
 // New creates a new parser with the given program name.
 func New(name string) *Parser {
-	return &Parser{Command: newCommand(name, nil)}
-}
-
-func newCommand(name string, parent *Command) *Command {
-	return &Command{
-		name:      name,
-		byLong:    make(map[string]*Option),
-		byShort:   make(map[string]*Option),
-		byCommand: make(map[string]*Command),
-		parent:    parent,
-	}
+	return &Parser{Command: newCommand(name)}
 }
 
 // SetVersion sets the version string. When set, a built-in --version option is
@@ -170,7 +164,7 @@ func (p *Parser) SetVersion(version string) {
 }
 
 // SetArgs sets the arguments Execute parses. Intended for tests, which configure
-// arguments and then call Execute with no parameters.
+// arguments and then call Execute with a context.
 func (p *Parser) SetArgs(args []string) {
 	p.args = args
 }
@@ -182,9 +176,27 @@ func (p *Parser) SetOutput(w io.Writer) {
 }
 
 // Execute parses the arguments set by SetArgs, falling back to os.Args[1:] when
-// none were set, and returns any parse error.
-func (p *Parser) Execute() error {
-	return p.Parse(p.args...)
+// none were set, then dispatches to the selected command's run handler with the
+// given context. The caller supplies the context so it controls cancellation
+// and deadlines. When parsing printed built-in help or version, it returns
+// without dispatching. When the selected command has no run handler, it prints
+// that command's help and returns nil. It returns any parse or handler error.
+func (p *Parser) Execute(ctx context.Context) error {
+	if err := p.Parse(p.args...); err != nil {
+		return err
+	}
+	if p.handled {
+		return nil
+	}
+	cmd := p.selected
+	if cmd == nil {
+		cmd = p.Command
+	}
+	if cmd.run == nil {
+		fmt.Fprint(p.output(), cmd.Help())
+		return nil
+	}
+	return cmd.run(ctx, cmd, cmd.positionals)
 }
 
 // output returns the writer for built-in help and version text.
@@ -193,11 +205,6 @@ func (p *Parser) output() io.Writer {
 		return p.out
 	}
 	return os.Stdout
-}
-
-// SetDescription sets the command's help description.
-func (c *Command) SetDescription(description string) {
-	c.description = description
 }
 
 // AddGroup registers all options declared as struct tags on config under a
@@ -220,28 +227,6 @@ func (c *Command) AddGroup(title string, config any) error {
 	}
 	c.groups = append(c.groups, g)
 	return nil
-}
-
-// AddCommand registers a subcommand whose options come from config. config may
-// be nil for a command that only groups further subcommands.
-func (c *Command) AddCommand(name string, config any) (*Command, error) {
-	if !validName(name) {
-		return nil, fmt.Errorf("xflags: invalid command name %q", name)
-	}
-	if _, exists := c.byCommand[name]; exists {
-		return nil, fmt.Errorf("xflags: duplicate command %q", name)
-	}
-
-	sub := newCommand(name, c)
-	if config != nil {
-		if err := sub.AddGroup("", config); err != nil {
-			return nil, err
-		}
-	}
-
-	c.commands = append(c.commands, sub)
-	c.byCommand[name] = sub
-	return sub, nil
 }
 
 // Validate attaches a validation callback to the option with the given long

@@ -57,6 +57,9 @@ func (c *Command) usageLine() string {
 	if len(c.commands) > 0 {
 		parts = append(parts, "<command>")
 	}
+	if c.run != nil {
+		parts = append(parts, "[args]")
+	}
 	return strings.Join(parts, " ")
 }
 

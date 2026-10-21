@@ -50,9 +50,8 @@ func TestHelp(t *testing.T) {
 
 	t.Run("lists commands", func(t *testing.T) {
 		p := New("app")
-		sub, err := p.AddCommand("server", nil)
-		require.NoError(t, err)
-		sub.SetDescription("run the server")
+		sub := NewCommand("server", "run the server")
+		require.NoError(t, p.AddCommand(sub))
 		assert.Contains(t, p.Help(), "server")
 		assert.Contains(t, p.Help(), "run the server")
 	})
@@ -166,9 +165,8 @@ func TestHelpCommandAndParseOutcome(t *testing.T) {
 	require.NoError(t, p.AddGroup("", &o))
 	validations := 0
 	require.NoError(t, p.Validate("config", func(any) error { validations++; return nil }))
-	sub, err := p.AddCommand("server", nil)
-	require.NoError(t, err)
-	sub.SetDescription("run the server")
+	sub := NewCommand("server", "run the server")
+	require.NoError(t, p.AddCommand(sub))
 	assert.Nil(t, p.SelectedCommand())
 	for _, args := range [][]string{
 		{"--config", "file", "server", "--help"},

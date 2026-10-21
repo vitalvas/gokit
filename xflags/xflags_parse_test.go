@@ -461,8 +461,9 @@ func TestSubcommandsBuilder(t *testing.T) {
 			Port int `long:"port" default:"8080"`
 		}
 		p := New("app")
-		_, err := p.AddCommand("server", &serverOpts)
-		require.NoError(t, err)
+		server := NewCommand("server", "")
+		require.NoError(t, server.AddGroup("", &serverOpts))
+		require.NoError(t, p.AddCommand(server))
 
 		require.NoError(t, p.Parse([]string{"server", "--port=9090"}...))
 		assert.Equal(t, 9090, serverOpts.Port)
@@ -473,10 +474,11 @@ func TestSubcommandsBuilder(t *testing.T) {
 			Detach bool `long:"detach"`
 		}
 		p := New("app")
-		server, err := p.AddCommand("server", nil)
-		require.NoError(t, err)
-		_, err = server.AddCommand("start", &startOpts)
-		require.NoError(t, err)
+		server := NewCommand("server", "")
+		require.NoError(t, p.AddCommand(server))
+		start := NewCommand("start", "")
+		require.NoError(t, start.AddGroup("", &startOpts))
+		require.NoError(t, server.AddCommand(start))
 
 		require.NoError(t, p.Parse([]string{"server", "start", "--detach"}...))
 		assert.True(t, startOpts.Detach)
@@ -491,8 +493,9 @@ func TestSubcommandsBuilder(t *testing.T) {
 		}
 		p := New("app")
 		require.NoError(t, p.AddGroup("", &rootOpts))
-		_, err := p.AddCommand("server", &serverOpts)
-		require.NoError(t, err)
+		server := NewCommand("server", "")
+		require.NoError(t, server.AddGroup("", &serverOpts))
+		require.NoError(t, p.AddCommand(server))
 
 		require.NoError(t, p.Parse([]string{"-v", "server", "--port=80"}...))
 		assert.True(t, rootOpts.Verbose)
@@ -501,10 +504,8 @@ func TestSubcommandsBuilder(t *testing.T) {
 
 	t.Run("duplicate command errors", func(t *testing.T) {
 		p := New("app")
-		_, err := p.AddCommand("dup", nil)
-		require.NoError(t, err)
-		_, err = p.AddCommand("dup", nil)
-		require.Error(t, err)
+		require.NoError(t, p.AddCommand(NewCommand("dup", "")))
+		require.Error(t, p.AddCommand(NewCommand("dup", "")))
 	})
 
 	t.Run("unexpected positional errors", func(t *testing.T) {
@@ -543,6 +544,26 @@ func TestSubcommandsTag(t *testing.T) {
 		require.NoError(t, p.AddGroup("", &root))
 		require.NoError(t, p.Parse([]string{"client", "--addr=127.0.0.1"}...))
 		assert.Equal(t, "127.0.0.1", root.Client.Addr)
+	})
+
+	t.Run("invalid option in command struct errors", func(t *testing.T) {
+		type badCommand struct {
+			Fn func(string) string `long:"fn"`
+		}
+		var root struct {
+			Bad badCommand `command:"bad"`
+		}
+		p := New("app")
+		require.Error(t, p.AddGroup("", &root))
+	})
+
+	t.Run("duplicate command tag errors", func(t *testing.T) {
+		var root struct {
+			First  serverOptions `command:"dup"`
+			Second clientOptions `command:"dup"`
+		}
+		p := New("app")
+		require.Error(t, p.AddGroup("", &root))
 	})
 }
 
@@ -685,8 +706,7 @@ func TestUserHelpVersionNotShadowed(t *testing.T) {
 func TestPositionalsAfterDoubleDash(t *testing.T) {
 	t.Run("unknown positional after -- errors", func(t *testing.T) {
 		p := New("app")
-		_, err := p.AddCommand("server", nil)
-		require.NoError(t, err)
+		require.NoError(t, p.AddCommand(NewCommand("server", "")))
 		require.Error(t, p.Parse([]string{"--", "notacommand"}...))
 	})
 
@@ -695,8 +715,9 @@ func TestPositionalsAfterDoubleDash(t *testing.T) {
 			Port int `long:"port" default:"8080"`
 		}
 		p := New("app")
-		_, err := p.AddCommand("server", &serverOpts)
-		require.NoError(t, err)
+		server := NewCommand("server", "")
+		require.NoError(t, server.AddGroup("", &serverOpts))
+		require.NoError(t, p.AddCommand(server))
 		require.NoError(t, p.Parse([]string{"--", "server", "--port=7070"}...))
 		assert.Equal(t, 7070, serverOpts.Port)
 	})

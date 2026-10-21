@@ -9,6 +9,8 @@ A command-line flag parser that fills a struct from tags or is built programmati
 - **Option groups** -- multiple named groups, each with its own set of options
 - **Namespaces** -- nested option groups with dotted prefixes (`--server.port`)
 - **Subcommands** -- nested command tree (`app server start`)
+- **Command handlers** -- a per-command `Run` handler dispatched by `Execute`
+- **Typed commands** -- `BindCommand`/`BindRoot` pair a command with its own typed config and handler
 - **All primitive Go types** -- `bool`, `string`, all sized `int`/`uint`, `float32`/`float64`, plus `time.Duration`
 - **Slices and maps** -- repeated values and `key=value` pairs
 - **Repeated options** -- explicit per-flag policy via `choice` (`append`, `count`, `last`)
@@ -326,22 +328,31 @@ type Options struct {
 
 ## Subcommands
 
-Subcommands form a nested tree. Each command has its own options and may have child commands. Declare them with the builder or a struct tag.
+Subcommands form a nested tree. Each command has its own options and may have child commands. Build them as standalone commands and attach them, or declare them with a struct tag.
 
 ### Via the builder
 
-```go
-type ServerOptions struct {
-	Port int `long:"port" default:"8080"`
-}
+A command is built on its own with `NewCommand`, given options and a handler, and then attached to a parent with `AddCommand`. Because a command carries no parent until it is attached, it can be constructed in its own package and wired into the tree elsewhere:
 
+```go
+// package server
+var Cmd = xflags.NewCommand("server", "run the server")
+
+func init() {
+	Cmd.AddGroup("", &opts)
+	Cmd.SetRun(run)
+}
+```
+
+```go
+// package main
 p := xflags.New("app")
-server, err := p.AddCommand("server", &serverOpts)
-if err != nil {
+if err := p.AddCommand(server.Cmd, client.Cmd); err != nil {
 	return err
 }
-server.SetDescription("run the server")
 ```
+
+`AddCommand` takes one or more pre-built commands and attaches nothing when any is nil, already attached, or has an invalid or duplicate name. Nest deeper by attaching to the returned command's children the same way.
 
 ### Via a struct tag
 
@@ -361,7 +372,84 @@ app server --port 9090
 app client connect --addr 127.0.0.1
 ```
 
-After parsing successfully, `p.SelectedCommand()` returns the deepest selected `*Command` (the root when no subcommand was selected). Compare it with the command returned by `AddCommand`, or use its `Name()` method, to dispatch application logic.
+After parsing successfully, `p.SelectedCommand()` returns the deepest selected `*Command` (the root when no subcommand was selected). Use its `Name()` method, or compare it with a command you built, to dispatch application logic manually when you do not use handlers.
+
+### Command Handlers
+
+Attach a handler to any command with `SetRun` to keep each command's logic in its own function. `Execute` takes a `context.Context` from the caller, parses the arguments, and then invokes the handler of the deepest selected command with that context, so no manual dispatch on `SelectedCommand()` is needed. The handler receives the context as its first argument, for cancellation and deadlines.
+
+```go
+server := xflags.NewCommand("server", "run the server")
+server.AddGroup("", &serverOpts)
+server.SetRun(func(ctx context.Context, cmd *xflags.Command, args []string) error {
+	// serverOpts is already populated; args holds trailing positionals.
+	return runServer(ctx, serverOpts, args)
+})
+
+p := xflags.New("app")
+p.AddCommand(server)
+
+if err := p.Execute(context.Background()); err != nil {
+	fmt.Fprintln(os.Stderr, err)
+	os.Exit(1)
+}
+```
+
+A command with a handler accepts positional arguments: any token that is not a flag and does not name a subcommand, together with everything after it, becomes a positional argument and is passed to the handler as `args` (also available via `cmd.Args()`). Flags that appear after the first positional are treated as positionals, not parsed. Arguments after a `--` terminator are always positional. A command without a handler rejects positional arguments with an `unexpected argument` error.
+
+`Execute` only dispatches; the lower-level `Parse` never calls a handler. When built-in `--help` or `--version` was handled, `Execute` returns without dispatching. When the selected command has no handler, `Execute` prints that command's help and returns nil. A handler's returned error is propagated unchanged.
+
+### Typed Commands
+
+`BindCommand` builds a standalone command bound to its own typed config and handler in one call, so each command can live in a fully isolated function -- in its own package -- with no closures over shared state and no type assertions. It allocates the config struct, binds its tags, and attaches a handler that receives that same `*T`. The command carries no parent until attached with `AddCommand`.
+
+The handler takes the context first, then the command, mirroring the untyped `SetRun` handler (`func(ctx context.Context, cmd *xflags.Command, args []string) error`) with the typed config inserted:
+
+```go
+type ServerConfig struct {
+	Port int    `long:"port" default:"8080"`
+	Host string `long:"host"`
+}
+
+// An isolated handler -- a free function in its own file:
+func runServer(ctx context.Context, cmd *xflags.Command, cfg *ServerConfig, args []string) error {
+	return serve(ctx, cfg.Host, cfg.Port, args)
+}
+
+cfg, server, err := xflags.BindCommand("server", "run the server", runServer)
+if err != nil {
+	return err
+}
+_ = cfg // same *ServerConfig the handler receives; read it after Execute if needed
+
+p := xflags.New("app")
+p.AddCommand(server)
+
+if err := p.Execute(context.Background()); err != nil {
+	fmt.Fprintln(os.Stderr, err)
+	os.Exit(1)
+}
+```
+
+Child commands nest by attaching to the returned `*Command`:
+
+```go
+_, server, _ := xflags.BindCommand("server", "run the server", runServer)
+_, start, _ := xflags.BindCommand("start", "start the server", runServerStart)
+server.AddCommand(start)
+```
+
+A command with no bound config uses `NewCommand` plus `SetRun` instead, whose handler is `func(ctx context.Context, cmd *xflags.Command, args []string) error` -- the same shape without the config argument.
+
+`BindRoot` is the typed counterpart for the root command, invoked by `Execute` when no subcommand is selected:
+
+```go
+cfg, err := xflags.BindRoot(p, func(ctx context.Context, cmd *xflags.Command, cfg *RootConfig, args []string) error {
+	return nil
+})
+```
+
+Both take `T any`; a non-struct `T` fails at bind time with the same error as `AddGroup`. Pass a nil handler to bind only the config (for a command that just groups subcommands). The dispatch rules, positional-argument handling, and error propagation are identical to `SetRun`.
 
 ## Help
 
