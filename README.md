@@ -52,6 +52,7 @@ The following libraries will be released in v1.0.0:
 - **spacesaving** - Space-Saving algorithm for finding top-k most frequent items (heavy hitters) in streams
 - **tdigest** - T-Digest for accurate quantile estimation from streaming or distributed data
 - **xsemver** - Semantic versioning with lenient parsing, comparison, constraints, version increment, and diff
+- **xstd** - Ordered generic collections: BTreeMap and BTreeSet with ordered iteration and bounded range queries
 - **xcmd** - Periodic task execution and signal handling for long-running processes
 - **xconfig** - Flexible configuration library supporting multiple formats and sources
 - **xdigits** - Numeric utilities for float rounding with precision and random integer generation
