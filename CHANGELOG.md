@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.44.0](https://github.com/vitalvas/gokit/compare/v0.43.0...v0.44.0) (2026-10-28)
+
+
+### Features
+
+* remove license footers from module READMEs ([957f364](https://github.com/vitalvas/gokit/commit/957f364d4e701faa715fe7e6df990073256aecc0))
+* **xstd:** add BTreeMap and BTreeSet ordered collections ([99a56ff](https://github.com/vitalvas/gokit/commit/99a56ff149aba5ea63e0b1dcda135f410ca84dec))
+
+
+### Bug Fixes
+
+* **xstd:** correct root collapse, key identity, and memory retention ([287c21e](https://github.com/vitalvas/gokit/commit/287c21ec4aa67de6e4dbfd42208a545baa14a319))
+
 ## [0.43.0](https://github.com/vitalvas/gokit/compare/v0.42.0...v0.43.0) (2026-10-21)
 
 
