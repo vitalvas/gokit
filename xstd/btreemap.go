@@ -2,7 +2,10 @@
 // library: BTreeMap and BTreeSet, both backed by an in-memory B-tree.
 package xstd
 
-import "cmp"
+import (
+	"cmp"
+	"slices"
+)
 
 // btreeDegree is the minimum degree (t) of the B-tree. Each node holds
 // between t-1 and 2t-1 keys. 32 keeps nodes cache-friendly while shallow.
@@ -197,9 +200,12 @@ func (n *btreeNode[K, V]) splitChild(i int) {
 	}
 
 	midKey, midVal := child.keys[mid], child.values[mid]
+	clear(child.keys[mid:])
+	clear(child.values[mid:])
 	child.keys = child.keys[:mid]
 	child.values = child.values[:mid]
 	if !child.leaf() {
+		clear(child.children[mid+1:])
 		child.children = child.children[:mid+1]
 	}
 
@@ -223,25 +229,31 @@ func (m *BTreeMap[K, V]) Remove(key K) (V, bool) {
 		return zero, false
 	}
 	old, found := m.root.delete(key)
+	// An unsuccessful deletion can still merge the root's children.
+	if len(m.root.keys) == 0 {
+		if m.root.leaf() {
+			m.root = nil
+		} else {
+			m.root = m.root.children[0]
+		}
+	}
 	if !found {
 		return zero, false
 	}
 	m.size--
-	if len(m.root.keys) == 0 && !m.root.leaf() {
-		m.root = m.root.children[0]
-	}
 	return old, true
 }
 
 // RemoveEntry removes key and returns the stored key and value and whether it
 // was present, mirroring Rust's BTreeMap::remove_entry.
 func (m *BTreeMap[K, V]) RemoveEntry(key K) (K, V, bool) {
-	v, ok := m.Remove(key)
+	k, v, ok := m.GetKeyValue(key)
 	if !ok {
 		var zeroK K
 		return zeroK, v, false
 	}
-	return key, v, true
+	m.Remove(key)
+	return k, v, true
 }
 
 // delete removes key from the subtree rooted at n, which is assumed to hold
@@ -254,8 +266,8 @@ func (n *btreeNode[K, V]) delete(key K) (V, bool) {
 			return zero, false
 		}
 		old := n.values[i]
-		n.keys = append(n.keys[:i], n.keys[i+1:]...)
-		n.values = append(n.values[:i], n.values[i+1:]...)
+		n.keys = slices.Delete(n.keys, i, i+1)
+		n.values = slices.Delete(n.values, i, i+1)
 		return old, true
 	}
 	if found {
@@ -335,13 +347,13 @@ func (n *btreeNode[K, V]) borrowFromPrev(i int) {
 
 	lastK := len(left.keys) - 1
 	n.keys[i-1], n.values[i-1] = left.keys[lastK], left.values[lastK]
-	left.keys = left.keys[:lastK]
-	left.values = left.values[:lastK]
+	left.keys = slices.Delete(left.keys, lastK, lastK+1)
+	left.values = slices.Delete(left.values, lastK, lastK+1)
 
 	if !child.leaf() {
 		lastC := len(left.children) - 1
 		child.children = append([]*btreeNode[K, V]{left.children[lastC]}, child.children...)
-		left.children = left.children[:lastC]
+		left.children = slices.Delete(left.children, lastC, lastC+1)
 	}
 }
 
@@ -352,12 +364,12 @@ func (n *btreeNode[K, V]) borrowFromNext(i int) {
 	child.values = append(child.values, n.values[i])
 
 	n.keys[i], n.values[i] = right.keys[0], right.values[0]
-	right.keys = right.keys[1:]
-	right.values = right.values[1:]
+	right.keys = slices.Delete(right.keys, 0, 1)
+	right.values = slices.Delete(right.values, 0, 1)
 
 	if !child.leaf() {
 		child.children = append(child.children, right.children[0])
-		right.children = right.children[1:]
+		right.children = slices.Delete(right.children, 0, 1)
 	}
 }
 
@@ -371,7 +383,7 @@ func (n *btreeNode[K, V]) mergeChild(i int) {
 	left.values = append(left.values, right.values...)
 	left.children = append(left.children, right.children...)
 
-	n.keys = append(n.keys[:i], n.keys[i+1:]...)
-	n.values = append(n.values[:i], n.values[i+1:]...)
-	n.children = append(n.children[:i+1], n.children[i+2:]...)
+	n.keys = slices.Delete(n.keys, i, i+1)
+	n.values = slices.Delete(n.values, i, i+1)
+	n.children = slices.Delete(n.children, i+1, i+2)
 }

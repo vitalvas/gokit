@@ -4,8 +4,11 @@ Ordered generic collections: `BTreeMap` and `BTreeSet`, both backed by an
 in-memory B-tree.
 
 Keys are kept in ascending order, so iteration and range queries are ordered.
-Keys must satisfy `cmp.Ordered` (any comparable primitive). Neither type is safe
-for concurrent use; guard with your own lock if shared across goroutines.
+Keys must satisfy `cmp.Ordered` (integer, floating-point, or string types).
+Comparison uses `cmp.Compare`: NaNs compare equal to each other and sort before
+other floating-point values; negative and positive zero compare equal.
+Neither type is safe for concurrent use; guard with your own lock if shared
+across goroutines.
 
 Methods that may not find a value return `(T, bool)`; those that return a
 key/value pair return `(K, V, bool)`.

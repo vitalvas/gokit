@@ -69,7 +69,7 @@ func (s *BTreeSet[T]) Insert(value T) bool {
 // Rust's BTreeSet::replace. For cmp.Ordered elements the replaced element is
 // equal to value, so the returned value matters only for element identity.
 func (s *BTreeSet[T]) Replace(value T) (T, bool) {
-	old, _, existed := s.m.GetKeyValue(value)
+	old, existed := s.Take(value)
 	s.m.Insert(value, struct{}{})
 	return old, existed
 }
@@ -158,7 +158,7 @@ func (s *BTreeSet[T]) ExtractIf(pred func(T) bool) iter.Seq[T] {
 }
 
 // Append moves all elements from other into s, leaving other empty (Rust
-// BTreeSet::append).
+// BTreeSet::append). Appending a set to itself has no effect.
 func (s *BTreeSet[T]) Append(other *BTreeSet[T]) {
 	s.m.Append(other.m)
 }
@@ -218,7 +218,7 @@ func (s *BTreeSet[T]) Union(other *BTreeSet[T]) iter.Seq[T] {
 				}
 				ov, ok = next()
 			}
-			if ok && ov == v {
+			if ok && cmp.Compare(ov, v) == 0 {
 				ov, ok = next()
 			}
 			if !yield(v) {
@@ -276,7 +276,7 @@ func (s *BTreeSet[T]) SymmetricDifference(other *BTreeSet[T]) iter.Seq[T] {
 				}
 				ov, ok = next()
 			}
-			if ok && ov == v {
+			if ok && cmp.Compare(ov, v) == 0 {
 				ov, ok = next()
 				continue
 			}

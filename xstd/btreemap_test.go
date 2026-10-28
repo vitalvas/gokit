@@ -2,7 +2,10 @@ package xstd
 
 import (
 	"maps"
+	"math"
+	"math/rand/v2"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -76,6 +79,44 @@ func TestBTreeMapTryInsert(t *testing.T) {
 
 	got, _ := m.Get(1)
 	assert.Equal(t, 10, got)
+}
+
+func TestBTreeMapGetKeyValueAcrossNodes(t *testing.T) {
+	m := filledMap(100)
+	for _, key := range []int{0, btreeDegree - 1, 50, 99} {
+		k, v, ok := m.GetKeyValue(key)
+		assert.True(t, ok)
+		assert.Equal(t, key, k)
+		assert.Equal(t, key*10, v)
+	}
+	for _, key := range []int{-1, 100} {
+		k, v, ok := m.GetKeyValue(key)
+		assert.False(t, ok)
+		assert.Zero(t, k)
+		assert.Zero(t, v)
+	}
+}
+
+func TestBTreeMapUpdateDuringChildSplit(t *testing.T) {
+	// The right child is full; updating its median splits the child and
+	// promotes the existing key before its value is replaced.
+	const n = 3*btreeDegree - 1
+	const key = 2*btreeDegree - 1
+	m := filledMap(n)
+	old, existed := m.Insert(key, -1)
+	require.True(t, existed)
+	assert.Equal(t, key*10, old)
+	assert.Equal(t, n, m.Len())
+	keys, values := collectKV(m.Iter())
+	require.Len(t, keys, n)
+	for i, k := range keys {
+		assert.Equal(t, i, k)
+		if k == key {
+			assert.Equal(t, -1, values[i])
+		} else {
+			assert.Equal(t, k*10, values[i])
+		}
+	}
 }
 
 func TestBTreeMapGetOrInsertWith(t *testing.T) {
@@ -220,6 +261,104 @@ func TestBTreeMapRemoveOrders(t *testing.T) {
 			}
 			assert.Equal(t, 0, m.Len())
 		})
+	}
+}
+
+func TestBTreeMapRemoveLastEntry(t *testing.T) {
+	m := filledMap(100)
+	for i := 0; i < 100; i++ {
+		_, ok := m.Remove(i)
+		require.True(t, ok)
+	}
+	require.True(t, m.IsEmpty())
+	_, _, ok := m.FirstKeyValue()
+	assert.False(t, ok)
+	_, _, ok = m.LastKeyValue()
+	assert.False(t, ok)
+	_, _, ok = m.PopFirst()
+	assert.False(t, ok)
+	_, _, ok = m.PopLast()
+	assert.False(t, ok)
+	m.Insert(1, 10)
+	v, ok := m.Get(1)
+	assert.True(t, ok)
+	assert.Equal(t, 10, v)
+}
+
+func TestBTreeMapRemoveMissingCollapsesRoot(t *testing.T) {
+	// Make both children minimal so removing an absent key merges them.
+	m := filledMap(2 * btreeDegree)
+	m.Remove(2*btreeDegree - 1)
+	for i := 0; i < 2; i++ {
+		v, ok := m.Remove(-1)
+		require.False(t, ok)
+		require.Zero(t, v)
+		require.Equal(t, 2*btreeDegree-1, m.Len())
+		require.NotEmpty(t, m.root.keys)
+	}
+	keys, _ := collectKV(m.Iter())
+	want := make([]int, 2*btreeDegree-1)
+	for i := range want {
+		want[i] = i
+	}
+	assert.Equal(t, want, keys)
+}
+
+func TestBTreeMapRemoveEntryStoredKey(t *testing.T) {
+	negativeZero := math.Copysign(0, -1)
+	m := NewBTreeMap[float64, string]()
+	m.Insert(negativeZero, "zero")
+	k, v, ok := m.RemoveEntry(0)
+	require.True(t, ok)
+	assert.True(t, math.Signbit(k), "return the stored key, not the lookup key")
+	assert.Equal(t, "zero", v)
+}
+
+func TestBTreeMapRebalancingReleasesReferences(t *testing.T) {
+	m := NewBTreeMap[string, *int]()
+	const n = 5000
+	for i := 0; i < n; i++ {
+		m.Insert(strconv.Itoa(i), &i)
+	}
+	var check func(*btreeNode[string, *int]) int
+	check = func(node *btreeNode[string, *int]) int {
+		if node == nil {
+			return 0
+		}
+		require.NotEmpty(t, node.keys)
+		require.LessOrEqual(t, len(node.keys), 2*btreeDegree-1)
+		if node != m.root {
+			require.GreaterOrEqual(t, len(node.keys), btreeDegree-1)
+		}
+		require.Len(t, node.values, len(node.keys))
+		require.True(t, slices.IsSorted(node.keys))
+		for _, key := range node.keys[len(node.keys):cap(node.keys)] {
+			require.Empty(t, key, "unused key slots must release string references")
+		}
+		for _, value := range node.values[len(node.values):cap(node.values)] {
+			require.Nil(t, value, "unused value slots must release pointers")
+		}
+		for _, child := range node.children[len(node.children):cap(node.children)] {
+			require.Nil(t, child, "unused child slots must release subtrees")
+		}
+		if !node.leaf() {
+			require.Len(t, node.children, len(node.keys)+1)
+		}
+		count := len(node.keys)
+		for _, child := range node.children {
+			count += check(child)
+		}
+		return count
+	}
+	require.Equal(t, m.Len(), check(m.root))
+	rng := rand.New(rand.NewPCG(1, 2))
+	for i, key := range rng.Perm(n) {
+		value, ok := m.Remove(strconv.Itoa(key))
+		require.True(t, ok)
+		require.Equal(t, key, *value)
+		if i%100 == 0 || m.IsEmpty() {
+			require.Equal(t, m.Len(), check(m.root))
+		}
 	}
 }
 

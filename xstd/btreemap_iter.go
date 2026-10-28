@@ -3,6 +3,7 @@ package xstd
 import (
 	"cmp"
 	"iter"
+	"slices"
 )
 
 // Iter iterates over every entry in ascending key order, mirroring Rust's
@@ -197,20 +198,19 @@ func (m *BTreeMap[K, V]) Retain(f func(K, V) bool) {
 // ExtractIf removes and returns every entry for which pred returns true, in
 // ascending key order, mirroring Rust's BTreeMap::extract_if. Like Rust, each
 // matching entry is removed only as the returned iterator yields it: stopping
-// early leaves the not-yet-yielded matches in the map.
+// early leaves the not-yet-yielded matches in the map. The predicate is called
+// only during iteration and stops being called when iteration stops.
 func (m *BTreeMap[K, V]) ExtractIf(pred func(K, V) bool) iter.Seq2[K, V] {
-	var keys []K
-	var vals []V
-	for k, v := range m.Iter() {
-		if pred(k, v) {
-			keys = append(keys, k)
-			vals = append(vals, v)
-		}
-	}
 	return func(yield func(K, V) bool) {
-		for i, k := range keys {
+		// Snapshot keys so deletion and rebalancing cannot invalidate traversal.
+		keys := slices.Collect(m.Keys())
+		for _, k := range keys {
+			v, ok := m.Get(k)
+			if !ok || !pred(k, v) {
+				continue
+			}
 			m.Remove(k)
-			if !yield(k, vals[i]) {
+			if !yield(k, v) {
 				return
 			}
 		}
@@ -219,7 +219,11 @@ func (m *BTreeMap[K, V]) ExtractIf(pred func(K, V) bool) iter.Seq2[K, V] {
 
 // Append moves all entries from other into m, leaving other empty. On a key
 // present in both, other's value wins, mirroring Rust's BTreeMap::append.
+// Appending a map to itself has no effect.
 func (m *BTreeMap[K, V]) Append(other *BTreeMap[K, V]) {
+	if m == other {
+		return
+	}
 	for k, v := range other.Iter() {
 		m.Insert(k, v)
 	}

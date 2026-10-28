@@ -1,6 +1,7 @@
 package xstd
 
 import (
+	"math"
 	"slices"
 	"testing"
 
@@ -165,6 +166,8 @@ func TestBTreeSetPredicates(t *testing.T) {
 	assert.False(t, b.IsSubset(a))
 	assert.True(t, b.IsSuperset(a))
 	assert.False(t, a.IsSuperset(b))
+	assert.False(t, setOf(1, 2, 4).IsSubset(a), "equal size with a missing element")
+	assert.False(t, setOf(1, 6).IsSubset(b), "smaller size with a missing element")
 
 	assert.True(t, a.IsDisjoint(c))
 	assert.False(t, a.IsDisjoint(b))
@@ -201,6 +204,49 @@ func TestBTreeSetOperations(t *testing.T) {
 	})
 }
 
+func TestBTreeSetStoredFloat(t *testing.T) {
+	negativeZero := math.Copysign(0, -1)
+	s := NewBTreeSet[float64]()
+	s.Insert(negativeZero)
+	assert.False(t, s.Insert(0))
+	v, ok := s.Get(0)
+	require.True(t, ok)
+	assert.True(t, math.Signbit(v), "Insert preserves the existing element")
+	v, ok = s.Replace(0)
+	require.True(t, ok)
+	assert.True(t, math.Signbit(v), "Replace returns the previous element")
+	v, ok = s.Get(negativeZero)
+	require.True(t, ok)
+	assert.False(t, math.Signbit(v), "Replace stores the new element")
+	v, ok = s.Take(negativeZero)
+	require.True(t, ok)
+	assert.False(t, math.Signbit(v), "Take returns the stored element")
+}
+
+func TestBTreeSetOperationsNaN(t *testing.T) {
+	a := NewBTreeSet[float64]()
+	b := NewBTreeSet[float64]()
+	a.Insert(math.Float64frombits(0x7ff8000000000001))
+	b.Insert(math.Float64frombits(0x7ff8000000000002))
+	a.Insert(1)
+	b.Insert(2)
+	union := collectK(a.Union(b))
+	require.Len(t, union, 3)
+	assert.True(t, math.IsNaN(union[0]))
+	assert.Equal(t, []float64{1, 2}, union[1:])
+	assert.Equal(t, []float64{1, 2}, collectK(a.SymmetricDifference(b)))
+	intersection := collectK(a.Intersection(b))
+	require.Len(t, intersection, 1)
+	assert.True(t, math.IsNaN(intersection[0]))
+	assert.Equal(t, []float64{1}, collectK(a.Difference(b)))
+}
+
+func TestBTreeSetAppendSelf(t *testing.T) {
+	s := setOf(1, 2, 3)
+	s.Append(s)
+	assert.Equal(t, []int{1, 2, 3}, collectK(s.Iter()))
+}
+
 func TestBTreeSetOperationsEarlyStop(t *testing.T) {
 	a := setOf(1, 2, 3, 4, 5, 6)
 	b := setOf(4, 5, 6, 7, 8, 9)
@@ -216,9 +262,11 @@ func TestBTreeSetOperationsEarlyStop(t *testing.T) {
 		return out
 	}
 	assert.Equal(t, []int{1, 2}, stopAt(a.Union(b), 2))
+	assert.Equal(t, []int{1, 2}, stopAt(b.Union(a), 2))
 	assert.Equal(t, []int{4}, stopAt(a.Intersection(b), 4))
 	assert.Equal(t, []int{1, 2}, stopAt(a.Difference(b), 2))
 	assert.Equal(t, []int{1, 2}, stopAt(a.SymmetricDifference(b), 2))
+	assert.Equal(t, []int{1, 2}, stopAt(b.SymmetricDifference(a), 2))
 	// stop inside the drain-the-remainder tail of symmetric difference
 	assert.Equal(t, []int{1, 2, 3, 7}, stopAt(a.SymmetricDifference(b), 7))
 	// stop inside the drain-the-remainder tail of union

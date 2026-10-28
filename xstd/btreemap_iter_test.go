@@ -178,6 +178,43 @@ func TestBTreeMapRetain(t *testing.T) {
 }
 
 func TestBTreeMapExtractIf(t *testing.T) {
+	t.Run("lazy predicate and repeated iteration", func(t *testing.T) {
+		m := filledMap(100)
+		var visited []int
+		seq := m.ExtractIf(func(k, v int) bool {
+			visited = append(visited, k)
+			return v%20 == 0
+		})
+		require.Empty(t, visited, "creating an iterator must not call the predicate")
+		m.Insert(0, 1)
+		for k, v := range seq {
+			assert.Equal(t, 2, k)
+			assert.Equal(t, 20, v)
+			break
+		}
+		assert.Equal(t, []int{0, 1, 2}, visited, "stop evaluating after early termination")
+		assert.True(t, m.ContainsKey(0))
+		assert.True(t, m.ContainsKey(4))
+		assert.False(t, m.ContainsKey(2))
+		keys, _ := collectKV(seq)
+		require.Len(t, keys, 48)
+		assert.Equal(t, 4, keys[0], "a second iteration must not yield removed entries")
+	})
+
+	t.Run("predicate panic preserves unvisited entries", func(t *testing.T) {
+		m := filledMap(100)
+		seq := m.ExtractIf(func(k, _ int) bool {
+			if k == 1 {
+				panic("predicate")
+			}
+			return true
+		})
+		assert.Panics(t, func() { collectKV(seq) })
+		assert.False(t, m.ContainsKey(0))
+		assert.True(t, m.ContainsKey(1))
+		assert.True(t, m.ContainsKey(2))
+	})
+
 	t.Run("full drain", func(t *testing.T) {
 		m := filledMap(10)
 		extracted, _ := collectKV(m.ExtractIf(func(k, _ int) bool { return k < 3 }))
@@ -221,6 +258,17 @@ func TestBTreeMapAppend(t *testing.T) {
 	assert.Equal(t, 20, v)
 	keys, _ := collectKV(a.Iter())
 	assert.Equal(t, []int{1, 2, 3}, keys)
+}
+
+func TestBTreeMapAppendSelf(t *testing.T) {
+	m := filledMap(100)
+	m.Append(m)
+	require.Equal(t, 100, m.Len())
+	for i := 0; i < 100; i++ {
+		v, ok := m.Get(i)
+		assert.True(t, ok)
+		assert.Equal(t, i*10, v)
+	}
 }
 
 func TestBTreeMapSplitOff(t *testing.T) {
