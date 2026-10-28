@@ -183,5 +183,3 @@ xsemver.Sort(versions)
 | `ErrLeadingZero` | Numeric pre-release identifier has leading zeros |
 | `ErrEmptyIdentifier` | Empty dot-separated identifier |
 | `ErrInvalidConstraint` | Malformed constraint expression |
-
-This project is part of the [gokit](https://github.com/vitalvas/gokit) library.

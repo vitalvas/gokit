@@ -811,7 +811,3 @@ e15.Update()
 - ✅ Resource utilization metrics
 - ❌ Need exact counts (use counter)
 - ❌ Need precise percentiles (use histogram)
-
-## License
-
-This project is part of the [gokit](https://github.com/vitalvas/gokit) library.

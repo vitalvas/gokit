@@ -619,7 +619,3 @@ for _, worker := range workers {
 - ✅ Need to merge across time or servers
 - ❌ Need exact results (use sorting)
 - ❌ Need very fast adds (use histogram)
-
-## License
-
-This project is part of the [gokit](https://github.com/vitalvas/gokit) library.

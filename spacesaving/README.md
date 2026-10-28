@@ -1220,7 +1220,3 @@ go func() {
 - ✅ Can tolerate small count errors
 - ❌ Need exact counts (use exact counting)
 - ❌ Need arbitrary item queries (use Count-Min Sketch)
-
-## License
-
-This project is part of the [gokit](https://github.com/vitalvas/gokit) library.

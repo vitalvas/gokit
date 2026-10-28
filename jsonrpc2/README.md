@@ -266,7 +266,3 @@ func (s *jsonrpc2.Server) httpHandler(w http.ResponseWriter, r *http.Request) {
     w.Write(resp)
 }
 ```
-
-## License
-
-This project is part of the [gokit](https://github.com/vitalvas/gokit) library.

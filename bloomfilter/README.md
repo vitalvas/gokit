@@ -709,7 +709,3 @@ func middleware(next http.Handler) http.Handler {
     })
 }
 ```
-
-## License
-
-This project is part of the [gokit](https://github.com/vitalvas/gokit) library.

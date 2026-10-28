@@ -472,7 +472,3 @@ Natural language text has characteristic entropy ranges:
 - Compressed data: ~7-8 bits per byte
 
 These patterns don't indicate poor quality, just predictable structure.
-
-## License
-
-This project is part of the [gokit](https://github.com/vitalvas/gokit) library.

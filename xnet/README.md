@@ -760,7 +760,3 @@ merged := xnet.CIDRMerge(manyNetworks)
 - More memory than simple slice, but much faster lookups
 - Trade memory for speed when checking many IPs
 - ~2-50 KB for typical use cases (10-1000 networks)
-
-## License
-
-This project is part of the [gokit](https://github.com/vitalvas/gokit) library.

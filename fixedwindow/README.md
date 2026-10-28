@@ -533,7 +533,3 @@ defer apiLimiter.Stop()
 defer emailLimiter.Stop()
 defer loginLimiter.Stop()
 ```
-
-## License
-
-This project is part of the [gokit](https://github.com/vitalvas/gokit) library.

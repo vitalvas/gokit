@@ -582,7 +582,3 @@ func mightContain(filter *cuckoo.Filter, item string) bool {
 - ✅ Limited memory budget
 - ❌ Need 100% accuracy (use hash set)
 - ❌ Extremely low false positive requirement (use hash set)
-
-## License
-
-This project is part of the [gokit](https://github.com/vitalvas/gokit) library.

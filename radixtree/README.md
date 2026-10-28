@@ -365,7 +365,3 @@ Tree structure:
  |     |
 "ing" "m"
 ```
-
-## License
-
-This project is part of the [gokit](https://github.com/vitalvas/gokit) library.

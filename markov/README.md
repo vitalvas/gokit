@@ -826,7 +826,3 @@ func generateName(chain *markov.Chain) string {
     return strings.Join(tokens[chain.Order:len(tokens)-1], "")
 }
 ```
-
-## License
-
-This project is part of the [gokit](https://github.com/vitalvas/gokit) library.

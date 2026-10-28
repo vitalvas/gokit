@@ -91,7 +91,3 @@ Block until a signal is received or context is cancelled.
 ```go
 err := xcmd.WaitInterrupted(ctx, syscall.SIGINT, syscall.SIGTERM)
 ```
-
-## License
-
-This package is part of the gokit project.

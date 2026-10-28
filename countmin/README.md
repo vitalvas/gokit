@@ -859,7 +859,3 @@ func aggregator(dataStream <-chan []byte) {
 - Need to remove elements (use Count sketch)
 - Only need membership (use Bloom filter)
 - Very small datasets (use map)
-
-## License
-
-This project is part of the [gokit](https://github.com/vitalvas/gokit) library.

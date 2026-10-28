@@ -680,7 +680,3 @@ enabled: ${env:ENABLED}  # Won't expand - use environment variables instead
 - **Maps with custom separator**: `PREFIX_FIELD=key1=value1;key2=value2` (use `envSeparator:";"`)
 
 **Note**: The `envSeparator` tag allows customizing the delimiter for parsing slices and maps from environment variables. This is useful when values contain commas or when working with legacy systems that use different separators.
-
-## License
-
-This project is part of the [gokit](https://github.com/vitalvas/gokit) library.

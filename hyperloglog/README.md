@@ -825,7 +825,3 @@ func aggregator(dataStream <-chan []byte) {
 - **Mergeable** for distributed systems
 - **Predictable error** bounds
 - **Fast operations** (constant time add)
-
-## License
-
-This project is part of the [gokit](https://github.com/vitalvas/gokit) library.
