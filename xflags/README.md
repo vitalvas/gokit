@@ -96,7 +96,7 @@ func main() {
 	var serve serveOptions
 
 	server := xflags.NewCommand("serve", "serve traffic")
-	if err := server.AddGroup("", &serve); err != nil {
+	if err := server.AddOptions(&serve); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -239,6 +239,14 @@ type Options struct {
 	Tags    []string          `long:"tag" choice:"append"`
 	Labels  map[string]string `long:"label"`
 }
+```
+
+Register the struct with `AddOptions`. Use `AddGroup` instead when the options need their own titled section in the help output (see [Option Groups](#option-groups)):
+
+```go
+var opts Options
+p := xflags.New("app")
+p.AddOptions(&opts)
 ```
 
 ### Builder API
@@ -584,7 +592,7 @@ A command is built on its own with `NewCommand`, given options and a handler, an
 var Cmd = xflags.NewCommand("server", "run the server")
 
 func init() {
-	Cmd.AddGroup("", &opts)
+	Cmd.AddOptions(&opts)
 	Cmd.SetRun(run)
 }
 ```
@@ -625,7 +633,7 @@ Attach a handler to any command with `SetRun` to keep each command's logic in it
 
 ```go
 server := xflags.NewCommand("server", "run the server")
-server.AddGroup("", &serverOpts)
+server.AddOptions(&serverOpts)
 server.SetRun(func(ctx context.Context, cmd *xflags.Command, args []string) error {
 	// serverOpts is already populated; args holds trailing positionals.
 	return runServer(ctx, serverOpts, args)

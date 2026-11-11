@@ -81,7 +81,7 @@ func (c *Command) AddCommand(children ...*Command) error {
 func (c *Command) newChildCommand(name string, config any) (*Command, error) {
 	sub := newCommand(name)
 	if config != nil {
-		if err := sub.AddGroup("", config); err != nil {
+		if err := sub.AddOptions(config); err != nil {
 			return nil, err
 		}
 	}

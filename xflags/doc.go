@@ -93,7 +93,8 @@
 //
 // # Option groups and namespaces
 //
-// AddGroup registers a struct's options under a titled group for help output. A
+// AddOptions registers a struct's options under the default "Options" help
+// heading; AddGroup does the same but under a titled group for help output. A
 // nested struct field tagged with namespace prefixes its options with a dotted
 // path (namespaces may nest), for example --server.port.
 //

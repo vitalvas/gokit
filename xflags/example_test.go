@@ -21,7 +21,7 @@ func Example() {
 	}
 
 	p := xflags.New("greet")
-	if err := p.AddGroup("", &opts); err != nil {
+	if err := p.AddOptions(&opts); err != nil {
 		fmt.Println("error:", err)
 		return
 	}
@@ -44,7 +44,7 @@ func Example_repeated() {
 	}
 
 	p := xflags.New("app")
-	if err := p.AddGroup("", &opts); err != nil {
+	if err := p.AddOptions(&opts); err != nil {
 		fmt.Println("error:", err)
 		return
 	}
@@ -67,7 +67,7 @@ func Example_namespaces() {
 	}
 
 	p := xflags.New("app")
-	if err := p.AddGroup("", &opts); err != nil {
+	if err := p.AddOptions(&opts); err != nil {
 		fmt.Println("error:", err)
 		return
 	}
@@ -91,7 +91,7 @@ func Example_environmentFallback() {
 	}
 
 	p := xflags.New("app")
-	if err := p.AddGroup("", &opts); err != nil {
+	if err := p.AddOptions(&opts); err != nil {
 		fmt.Println("error:", err)
 		return
 	}
@@ -112,7 +112,7 @@ func Example_required() {
 	}
 
 	p := xflags.New("app")
-	if err := p.AddGroup("", &opts); err != nil {
+	if err := p.AddOptions(&opts); err != nil {
 		fmt.Println("error:", err)
 		return
 	}
@@ -134,7 +134,7 @@ func Example_validation() {
 	}
 
 	p := xflags.New("app")
-	if err := p.AddGroup("", &opts); err != nil {
+	if err := p.AddOptions(&opts); err != nil {
 		fmt.Println("error:", err)
 		return
 	}

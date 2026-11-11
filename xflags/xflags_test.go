@@ -60,6 +60,60 @@ func TestAddGroup(t *testing.T) {
 	})
 }
 
+func TestAddOptions(t *testing.T) {
+	t.Run("registers and parses options", func(t *testing.T) {
+		var o struct {
+			Name    string `long:"name"`
+			Verbose bool   `short:"v" long:"verbose"`
+		}
+		p := New("app")
+		require.NoError(t, p.AddOptions(&o))
+		require.NoError(t, p.Parse([]string{"--name=x", "-v"}...))
+		assert.Equal(t, "x", o.Name)
+		assert.True(t, o.Verbose)
+	})
+
+	t.Run("renders under the default Options heading", func(t *testing.T) {
+		var o struct {
+			Name string `long:"name" description:"the name"`
+		}
+		p := New("app")
+		require.NoError(t, p.AddOptions(&o))
+		assert.Contains(t, p.Help(), "Options:")
+	})
+
+	t.Run("matches AddGroup with empty title", func(t *testing.T) {
+		type opts struct {
+			Name string `long:"name" description:"the name"`
+		}
+		var a, b opts
+		pa := New("app")
+		require.NoError(t, pa.AddOptions(&a))
+		pb := New("app")
+		require.NoError(t, pb.AddGroup("", &b))
+		assert.Equal(t, pb.Help(), pa.Help())
+	})
+
+	t.Run("rejects a non-pointer", func(t *testing.T) {
+		var o struct {
+			Name string `long:"name"`
+		}
+		require.Error(t, New("app").AddOptions(o))
+	})
+
+	t.Run("rejects a nil pointer", func(t *testing.T) {
+		var o *struct {
+			Name string `long:"name"`
+		}
+		require.Error(t, New("app").AddOptions(o))
+	})
+
+	t.Run("rejects a non-struct pointer", func(t *testing.T) {
+		n := 0
+		require.Error(t, New("app").AddOptions(&n))
+	})
+}
+
 func TestValidate(t *testing.T) {
 	t.Run("unknown option", func(t *testing.T) {
 		p := New("app")

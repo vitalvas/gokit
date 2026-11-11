@@ -212,6 +212,14 @@ func (p *Parser) output() io.Writer {
 	return os.Stdout
 }
 
+// AddOptions registers all options declared as struct tags on config without a
+// group title, so they appear under the default "Options" help heading. config
+// must be a pointer to a struct. It is the common case of AddGroup; use AddGroup
+// when the options need their own titled section in the help output.
+func (c *Command) AddOptions(config any) error {
+	return c.AddGroup("", config)
+}
+
 // AddGroup registers all options declared as struct tags on config under a
 // named group. config must be a pointer to a struct.
 func (c *Command) AddGroup(title string, config any) error {

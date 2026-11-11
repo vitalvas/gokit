@@ -20,7 +20,7 @@ import "context"
 func BindCommand[T any](name, short string, run func(ctx context.Context, cmd *Command, cfg *T, args []string) error) (*T, *Command, error) {
 	cfg := new(T)
 	cmd := NewCommand(name, short)
-	if err := cmd.AddGroup("", cfg); err != nil {
+	if err := cmd.AddOptions(cfg); err != nil {
 		return nil, nil, err
 	}
 	if run != nil {
@@ -32,11 +32,11 @@ func BindCommand[T any](name, short string, run func(ctx context.Context, cmd *C
 // BindRoot binds a freshly allocated *T to the parser's root command and
 // attaches run as the root handler, invoked by Execute when no subcommand is
 // selected. The run handler takes the context first, then the command, like
-// BindCommand. It is the typed counterpart of AddGroup plus SetRun on the root.
-// T must be a struct type.
+// BindCommand. It is the typed counterpart of AddOptions plus SetRun on the
+// root. T must be a struct type.
 func BindRoot[T any](p *Parser, run func(ctx context.Context, cmd *Command, cfg *T, args []string) error) (*T, error) {
 	cfg := new(T)
-	if err := p.AddGroup("", cfg); err != nil {
+	if err := p.AddOptions(cfg); err != nil {
 		return nil, err
 	}
 	if run != nil {
