@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.45.0](https://github.com/vitalvas/gokit/compare/v0.44.0...v0.45.0) (2026-11-11)
+
+
+### Features
+
+* **xflags:** add AddOptions for ungrouped option registration ([187f836](https://github.com/vitalvas/gokit/commit/187f836c5980be77da5a82674b5cc174ee2236ab))
+* **xflags:** add TextUnmarshaler, ByteSize, Duration, ListenAddr, bounds ([e2dc703](https://github.com/vitalvas/gokit/commit/e2dc70379d3980507660e02442f5ac52a3aea8cb))
+
+
+### Bug Fixes
+
+* **xflags:** cover min/max bound propagation through option merge ([40be15d](https://github.com/vitalvas/gokit/commit/40be15d9ed90a81732052ab95896c185da069216))
+
 ## [0.44.0](https://github.com/vitalvas/gokit/compare/v0.43.0...v0.44.0) (2026-10-28)
 
 
