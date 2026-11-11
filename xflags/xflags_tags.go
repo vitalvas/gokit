@@ -123,6 +123,13 @@ func (c *Command) collectOption(field reflect.StructField, fieldValue reflect.Va
 		opt.optionalValSet = true
 	}
 
+	if minTag, ok := field.Tag.Lookup("min"); ok {
+		opt.minBound, opt.minBoundSet = minTag, true
+	}
+	if maxTag, ok := field.Tag.Lookup("max"); ok {
+		opt.maxBound, opt.maxBoundSet = maxTag, true
+	}
+
 	if baseTag, ok := field.Tag.Lookup("base"); ok {
 		base, err := strconv.Atoi(baseTag)
 		if err != nil || (base != 0 && (base < 2 || base > 36)) {
@@ -256,6 +263,12 @@ func (c *Command) mergeMetadata(existing, incoming *Option) error {
 	}
 	if !existing.optionalValSet && incoming.optionalValSet {
 		existing.optionalValue, existing.optionalValSet = incoming.optionalValue, true
+	}
+	if !existing.minBoundSet && incoming.minBoundSet {
+		existing.minBound, existing.minBoundSet = incoming.minBound, true
+	}
+	if !existing.maxBoundSet && incoming.maxBoundSet {
+		existing.maxBound, existing.maxBoundSet = incoming.maxBound, true
 	}
 	existing.optional = existing.optional || incoming.optional
 	existing.Hidden = existing.Hidden || incoming.Hidden

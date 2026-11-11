@@ -53,6 +53,11 @@ type Option struct {
 	typedDefault   reflect.Value
 	initial        reflect.Value
 
+	minBound    string // inclusive lower bound from the min tag, parsed as the field type
+	minBoundSet bool
+	maxBound    string // inclusive upper bound from the max tag, parsed as the field type
+	maxBoundSet bool
+
 	value    reflect.Value // destination value (settable)
 	callback reflect.Value // optional func(T) error, invalid if none
 	validate func(any) error

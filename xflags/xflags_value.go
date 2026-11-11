@@ -192,16 +192,24 @@ func (opt *Option) checkBinding() error {
 			return fmt.Errorf("option %s: callback argument must accept %s", optionName(opt), opt.value.Type())
 		}
 	}
-	return nil
+	return opt.checkBoundTypes(scalar)
 }
 
 func supportedScalar(t reflect.Type) bool {
+	// A type implementing encoding.TextUnmarshaler parses itself, so it is
+	// supported regardless of its underlying kind.
+	if implementsTextUnmarshaler(t) {
+		return true
+	}
 	seen := make(map[reflect.Type]bool)
 	for t.Kind() == reflect.Pointer {
 		if seen[t] {
 			return false
 		}
 		seen[t] = true
+		if implementsTextUnmarshaler(t) {
+			return true
+		}
 		t = t.Elem()
 	}
 	switch t.Kind() {
@@ -261,6 +269,16 @@ func (opt *Option) setScalar(dst reflect.Value, raw string) error {
 			return fmt.Errorf("option %s: invalid duration %q", optionName(opt), raw)
 		}
 		dst.SetInt(int64(d))
+		return nil
+	}
+
+	// A type implementing encoding.TextUnmarshaler parses itself. This takes
+	// precedence over the primitive kinds so a named type with its own
+	// UnmarshalText controls its parsing, matching encoding/json.
+	if u, ok := textUnmarshaler(dst); ok {
+		if err := u.UnmarshalText([]byte(raw)); err != nil {
+			return fmt.Errorf("option %s: invalid value %q: %w", optionName(opt), raw, err)
+		}
 		return nil
 	}
 

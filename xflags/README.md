@@ -12,11 +12,16 @@ A command-line flag parser that fills a struct from tags or is built programmati
 - **Command handlers** -- a per-command `Run` handler dispatched by `Execute`
 - **Typed commands** -- `BindCommand`/`BindRoot` pair a command with its own typed config and handler
 - **All primitive Go types** -- `bool`, `string`, all sized `int`/`uint`, `float32`/`float64`, plus `time.Duration`
+- **Custom types** -- any type implementing `encoding.TextUnmarshaler`, such as `net/netip.AddrPort`
+- **Byte sizes** -- `ByteSize` parses IEC suffixes like `32MiB` or `1GiB`
+- **Durations** -- `Duration` extends `time.Duration` with `d`/`w` suffixes and bare-number seconds
+- **Listen addresses** -- `ListenAddr` accepts the `:port` shorthand and binds the dual-stack wildcard
 - **Slices and maps** -- repeated values and `key=value` pairs
 - **Repeated options** -- explicit per-flag policy via `choice` (`append`, `count`, `last`)
 - **Default values** -- via the `default` tag or builder
 - **Environment fallback** -- via the `env` tag
 - **Validation callbacks** -- one `func(value) error` per option, covering both reaction and validation
+- **Numeric bounds** -- declarative `min`/`max` tags for numeric options
 - **Required options** -- `required:"true"`
 - **Struct parsing** -- fill a struct directly from tags
 - **Builder API** -- register flags and commands programmatically
@@ -220,6 +225,8 @@ Every field maps to one option. Recognized tags:
 | `value-name` | placeholder shown in help, e.g. `value-name:"FILE"` |
 | `hidden` | `hidden:"true"` omits the option from the help message |
 | `base` | integer radix, e.g. `base:"16"`; `base:"0"` auto-detects `0x`/`0o`/`0b` |
+| `min` | inclusive lower bound for a numeric option, e.g. `min:"1"` |
+| `max` | inclusive upper bound for a numeric option, e.g. `max:"100"` |
 | `optional` | `optional:"true"` allows the option to appear without a value |
 | `optional-value` | value used when an optional option is given without one |
 
@@ -265,6 +272,89 @@ type Options struct {
 ```
 
 `time.Duration` values are parsed with `time.ParseDuration` (`--timeout=30s`).
+
+### Custom types via TextUnmarshaler
+
+Any type implementing [`encoding.TextUnmarshaler`](https://pkg.go.dev/encoding#TextUnmarshaler)
+parses itself, so standard library types such as `net/netip.AddrPort` and
+`net.IP`, as well as your own types, work as option destinations:
+
+```go
+type Options struct {
+	Listen netip.AddrPort `long:"listen" default:"0.0.0.0:8428"`
+}
+```
+
+```sh
+app --listen=127.0.0.1:9000
+```
+
+A `TextUnmarshaler` takes precedence over the primitive kinds, and it works for
+pointer, slice, and map-value destinations. An error returned by `UnmarshalText`
+fails parsing and is wrapped with the option name.
+
+### Byte sizes
+
+`ByteSize` is a built-in `uint64` type that parses an optional IEC unit suffix
+-- `B`, `KiB`, `MiB`, `GiB`, or `TiB`, each a power of 1024. A bare number is
+interpreted as bytes:
+
+```go
+type Options struct {
+	MaxRequest xflags.ByteSize `long:"max-request-size" default:"32MiB"`
+}
+```
+
+```sh
+app --max-request-size=64MiB
+```
+
+`ParseByteSize` exposes the parser directly, and the value renders back using
+the largest unit that divides it evenly (`ByteSize(32*1024*1024).String()` is
+`"32MiB"`).
+
+### Durations
+
+A plain `time.Duration` field is parsed with `time.ParseDuration`, which does
+not understand days or weeks. The built-in `Duration` type adds the `d` (24h)
+and `w` (7d) suffixes and interprets a bare number as seconds:
+
+```go
+type Options struct {
+	Retention xflags.Duration `long:"retention-period" default:"14d"`
+}
+```
+
+```sh
+app --retention-period=2w     # two weeks
+app --retention-period=30     # 30 seconds
+```
+
+It accepts every unit `time.ParseDuration` does (`ns`, `us`, `ms`, `s`, `m`,
+`h`) plus `d` and `w`, including fractional and compound values like `1.5h` or
+`1h30m`. `ParseDuration` exposes the parser directly, and the value renders back
+using `time.Duration`'s format.
+
+### Listen addresses
+
+`ListenAddr` wraps `net/netip.AddrPort` and accepts the `:port` shorthand in
+addition to a full `host:port` address. The shorthand binds the dual-stack
+wildcard `[::]:port`, so the listener serves both native IPv6 and IPv4-mapped
+clients:
+
+```go
+type Options struct {
+	HTTP xflags.ListenAddr `long:"http-listen-addr" default:":8428"`
+}
+```
+
+```sh
+app                                  # binds [::]:8428
+app --http-listen-addr=127.0.0.1:80  # binds a specific address
+```
+
+`ParseListenAddr` exposes the parser directly, and `AddrPort` returns the
+underlying `netip.AddrPort` for passing to `net.Listen` and friends.
 
 ## Bool vs Valued Options
 
@@ -380,6 +470,21 @@ p.Validate("port", func(v any) error {
 	return nil
 })
 ```
+
+## Numeric Bounds
+
+The `min` and `max` tags declare inclusive bounds for a numeric option, checking the resolved value without a callback. They apply to integer, unsigned, and float kinds, including `time.Duration`, `ByteSize`, and `Duration`; the bound values are parsed as the field's own type, so unit suffixes work:
+
+```go
+type Options struct {
+	Inserts  uint            `long:"max-concurrent-inserts" default:"0" max:"2147483647"`
+	Ratio    float64         `long:"ratio" min:"0" max:"1"`
+	Request  xflags.ByteSize `long:"max-request-size" min:"1KiB" max:"64MiB"`
+	Interval xflags.Duration `long:"flush-interval" min:"1s" max:"1h"`
+}
+```
+
+A value outside the bounds fails parsing with the option name. Defaults are checked too. Bounds that are unparseable, applied to a non-numeric type, or inverted (`min` greater than `max`) are reported at registration. For checks beyond a simple range, use `Validate` or a paired func field.
 
 ## Required Options
 

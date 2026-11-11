@@ -19,6 +19,8 @@
 //	value-name     placeholder shown in help, e.g. value-name:"FILE"
 //	hidden         hidden:"true" omits the option from the help message
 //	base           integer radix, e.g. base:"16"; base:"0" auto-detects prefixes
+//	min            inclusive lower bound for a numeric option, e.g. min:"1"
+//	max            inclusive upper bound for a numeric option, e.g. max:"100"
 //	optional       optional:"true" allows the option to appear without a value
 //	optional-value value used when an optional option is given without one
 //	command        on a struct field, declares a subcommand from that struct
@@ -33,7 +35,14 @@
 //
 // All primitive Go types are supported: bool, string, every sized int and uint,
 // float32, and float64, plus time.Duration (parsed with time.ParseDuration).
-// Pointers to these types are allocated as needed. Slice fields collect repeated
+// Any type implementing encoding.TextUnmarshaler parses itself, so standard
+// library types such as net/netip.AddrPort and net.IP, as well as custom types,
+// work as option destinations; a TextUnmarshaler takes precedence over the
+// primitive kinds. The built-in ByteSize type parses IEC unit suffixes such as
+// 32MiB or 1GiB, the built-in Duration type extends time.Duration with d and w
+// suffixes and a bare-number-as-seconds form, and the built-in ListenAddr type
+// accepts the ":port" shorthand and binds the dual-stack wildcard. Pointers to
+// these types are allocated as needed. Slice fields collect repeated
 // occurrences and map fields collect key=value pairs; map keys must be strings.
 //
 // # Short and long syntax

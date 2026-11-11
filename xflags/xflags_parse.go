@@ -340,6 +340,10 @@ func (opt *Option) resolve() error {
 		}
 	}
 
+	if err := opt.checkBounds(); err != nil {
+		return err
+	}
+
 	return opt.runValidate()
 }
 
