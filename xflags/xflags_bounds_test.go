@@ -153,6 +153,28 @@ func TestBoundsPointer(t *testing.T) {
 	})
 }
 
+func TestBoundsMergedFromValueField(t *testing.T) {
+	// A func field declared first registers the option; the value field sharing
+	// the same long name is merged in, carrying its min/max bounds.
+	var seen int
+	o := struct {
+		Fn func(int) error `long:"n"`
+		N  int             `long:"n" min:"1" max:"10"`
+	}{Fn: func(n int) error { seen = n; return nil }}
+	p := New("app")
+	require.NoError(t, p.AddGroup("", &o))
+
+	require.NoError(t, p.Parse([]string{"--n=5"}...))
+	assert.Equal(t, 5, o.N)
+	assert.Equal(t, 5, seen)
+
+	err := p.Parse([]string{"--n=0"}...)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "minimum")
+
+	require.Error(t, p.Parse([]string{"--n=11"}...))
+}
+
 func TestBoundsRegistrationErrors(t *testing.T) {
 	t.Run("non-numeric type", func(t *testing.T) {
 		var o struct {
